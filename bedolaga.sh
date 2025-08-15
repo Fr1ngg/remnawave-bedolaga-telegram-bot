@@ -97,7 +97,6 @@ create_project_structure() {
     log "Структура проекта создана в $BOT_DIR"
 }
 
-# Создание docker-compose.yml
 create_docker_compose() {
     log "Создание docker-compose.yml..."
     
@@ -107,8 +106,8 @@ create_docker_compose() {
     echo "3) Расширенная - с Redis и Nginx"
     
     while true; do
-        read -p "Ваш выбор (1-3): " choice
-        case $choice in
+        read -rp "Ваш выбор (1-3): " choice
+        case "$choice" in
             1)
                 create_standalone_compose
                 break
