@@ -13,6 +13,7 @@ from app.database.database import init_db
 from app.services.monitoring_service import monitoring_service
 from app.services.maintenance_service import maintenance_service
 from app.services.payment_service import PaymentService
+from app.services.version_service import version_service
 from app.external.webhook_server import WebhookServer
 from app.external.yookassa_webhook import start_yookassa_webhook_server
 from app.database.universal_migration import run_universal_migration
@@ -99,6 +100,9 @@ async def main():
         
         logger.info("📊 Запуск службы мониторинга...")
         monitoring_task = asyncio.create_task(monitoring_service.start_monitoring())
+        
+        logger.info("🔄 Запуск мониторинга версий...")
+        version_task = asyncio.create_task(version_service.start_version_monitoring())
         
         logger.info("🔧 Проверка службы техработ...")
         if not maintenance_service._check_task or maintenance_service._check_task.done():
