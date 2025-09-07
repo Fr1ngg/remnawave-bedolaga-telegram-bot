@@ -50,11 +50,18 @@ class VersionService:
     
     async def check_for_updates(self) -> bool:
         """Проверяет наличие обновлений"""
+        if not settings.VERSION_CHECK_ENABLED:
+            logger.info("Проверка обновлений отключена в настройках")
+            return False
+            
         try:
             # Проверяем GitHub API для получения последнего релиза
+            repo_url = f"https://api.github.com/repos/{settings.VERSION_CHECK_REPO}/releases/latest"
+            logger.info(f"Проверяем обновления в репозитории: {settings.VERSION_CHECK_REPO}")
+            
             async with aiohttp.ClientSession() as session:
                 async with session.get(
-                    "https://api.github.com/repos/fr1ngg/remnawave-bedolaga-telegram-bot/releases/latest",
+                    repo_url,
                     timeout=10
                 ) as response:
                     if response.status == 200:

@@ -130,7 +130,11 @@ class Settings(BaseSettings):
     
     APP_CONFIG_PATH: str = "app-config.json"
     ENABLE_DEEP_LINKS: bool = True
-    APP_CONFIG_CACHE_TTL: int = 3600 
+    APP_CONFIG_CACHE_TTL: int = 3600
+    
+    # Настройки версионирования
+    VERSION_CHECK_REPO: str = "fr1ngg/remnawave-bedolaga-telegram-bot"
+    VERSION_CHECK_ENABLED: bool = True 
     
     @field_validator('LOG_FILE', mode='before')
     @classmethod
