@@ -20,7 +20,23 @@ async def show_admin_panel(
 ):
     texts = get_texts(db_user.language)
     
-    admin_text = texts.ADMIN_PANEL
+    # Получаем статистику онлайн пользователей
+    try:
+        from app.services.remnawave_service import RemnaWaveService
+        remnawave_service = RemnaWaveService()
+        stats = await remnawave_service.get_system_statistics()
+        
+        if "error" not in stats:
+            users_online = stats.get("system", {}).get("users_online", 0)
+            admin_text = f"""⚙️ <b>Административная панель</b>
+- 🟢 Онлайн сейчас: {users_online}
+
+Выберите раздел для управления:"""
+        else:
+            admin_text = texts.ADMIN_PANEL
+    except Exception as e:
+        logger.error(f"Ошибка получения статистики онлайн пользователей: {e}")
+        admin_text = texts.ADMIN_PANEL
     
     await callback.message.edit_text(
         admin_text,
