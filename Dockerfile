@@ -45,7 +45,7 @@ ENV PYTHONPATH=/app \
     BUILD_DATE=${BUILD_DATE} \
     VCS_REF=${VCS_REF}
 
-EXPOSE 8081 8082
+EXPOSE 8081 8082 8083
 
 LABEL org.opencontainers.image.title="Bedolaga RemnaWave Bot" \
       org.opencontainers.image.description="Telegram bot for RemnaWave VPN service" \
