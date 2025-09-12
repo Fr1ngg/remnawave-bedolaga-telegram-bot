@@ -1,0 +1,47 @@
+name: Deploy via SSH
+
+on:
+  push:
+    branches: [ "prod" ]
+  workflow_dispatch: {}
+
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (meta)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Write SSH key
+        run: |
+          mkdir -p ~/.ssh
+          printf "%s" "${{ secrets.DEPLOY_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+
+      - name: Add host key (ssh-keyscan)
+        run: |
+          mkdir -p ~/.ssh
+          IFS=',' read -ra H <<< "${{ secrets.DEPLOY_HOST }}"
+          for host in "${H[@]}"; do
+            ssh-keyscan -H "$host" >> ~/.ssh/known_hosts
+          done
+          chmod 644 ~/.ssh/known_hosts
+
+      - name: Deploy (git pull && make up)
+        env:
+          HOSTS: ${{ secrets.DEPLOY_HOST }}   # ip1,ip2,host3
+          USER:  ${{ secrets.DEPLOY_USER }}   # root/deploy
+          DIR:   ${{ secrets.DEPLOY_DIR }}    # /opt/your-project
+        run: |
+          set -euo pipefail
+          IFS=',' read -ra arr <<< "$HOSTS"
+          for host in "${arr[@]}"; do
+            echo "==> $host"
+            ssh -i ~/.ssh/id_ed25519 "$USER@$host" "bash -lc 'set -euo pipefail; cd \"$DIR\"; git fetch --all --prune; git reset --hard origin/main; make pull || true; make up; docker image prune -f || true'"
+          done
