@@ -11,6 +11,7 @@ concurrency:
 
 jobs:
   deploy:
+    if: github.repository_owner == 'yazhog'   # не запускать в апстриме
     runs-on: ubuntu-latest
     steps:
       - name: Checkout (meta)
@@ -21,7 +22,10 @@ jobs:
       - name: Write SSH key
         run: |
           mkdir -p ~/.ssh
-          printf "%s" "${{ secrets.DEPLOY_KEY }}" > ~/.ssh/id_ed25519
+          # если ключ многострочный, безопаснее так:
+          cat > ~/.ssh/id_ed25519 << 'EOF'
+          ${{ secrets.DEPLOY_KEY }}
+          EOF
           chmod 600 ~/.ssh/id_ed25519
 
       - name: Add host key (ssh-keyscan)
@@ -38,10 +42,33 @@ jobs:
           HOSTS: ${{ secrets.DEPLOY_HOST }}   # ip1,ip2,host3
           USER:  ${{ secrets.DEPLOY_USER }}   # root/deploy
           DIR:   ${{ secrets.DEPLOY_DIR }}    # /opt/your-project
+          PORT:  ${{ secrets.DEPLOY_PORT }}   # 22 (опционально)
         run: |
           set -euo pipefail
           IFS=',' read -ra arr <<< "$HOSTS"
           for host in "${arr[@]}"; do
             echo "==> $host"
-            ssh -i ~/.ssh/id_ed25519 "$USER@$host" "bash -lc 'set -euo pipefail; cd \"$DIR\"; git fetch --all --prune; git reset --hard origin/main; make pull || true; make up; docker image prune -f || true'"
+            ssh \
+              -i ~/.ssh/id_ed25519 \
+              -o BatchMode=yes \
+              -o StrictHostKeyChecking=yes \
+              -o ConnectTimeout=15 \
+              ${PORT:+-p "$PORT"} \
+              "$USER@$host" \
+              "bash -lc 'set -euo pipefail;
+                LOCK=/tmp/remnawave-bot-deploy.lock;
+                exec 9>\"\$LOCK\"; flock -n 9 || { echo \"Another deploy is running\"; exit 0; };
+
+                cd \"$DIR\";
+                git config --global --add safe.directory \"$DIR\";
+                git fetch --all --prune;
+                git reset --hard origin/prod;   # << здесь prod
+                git submodule sync --recursive || true;
+                git submodule update --init --recursive --force || true;
+                
+                make up;
+
+                docker image prune -f || true;
+                docker compose ps
+              '"
           done
