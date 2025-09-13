@@ -18,6 +18,8 @@ from app.localization.texts import get_texts
 from app.services.referral_service import process_referral_registration
 from app.utils.user_utils import generate_unique_referral_code
 from app.database.crud.user_message import get_random_active_message
+from app.database.crud.promocode import get_promocode_by_code
+from app.services.promocode_service import PromoCodeService
 
 
 logger = logging.getLogger(__name__)
@@ -33,7 +35,6 @@ async def handle_potential_referral_code(
     
     if current_state not in [
         RegistrationStates.waiting_for_rules_accept.state,
-        RegistrationStates.waiting_for_referral_code.state,
         None 
     ]:
         return False
@@ -48,10 +49,31 @@ async def handle_potential_referral_code(
     
     referrer = await get_user_by_referral_code(db, potential_code)
     if not referrer:
+        # Если не нашли реферала — попробуем распознать как промокод
+        promo = await get_promocode_by_code(db, potential_code)
+        if promo:
+            data = await state.get_data() or {}
+            data['pending_promocode'] = potential_code
+            await state.set_data(data)
+            logger.info(f"✅ Промокод {potential_code} сохранён до завершения регистрации для пользователя {message.from_user.id}")
+
+            if current_state != RegistrationStates.waiting_for_referral_code.state:
+                language = data.get('language', 'ru')
+                texts = get_texts(language)
+                await message.answer(
+                    texts.RULES_TEXT,
+                    reply_markup=get_rules_keyboard(language)
+                )
+                await state.set_state(RegistrationStates.waiting_for_rules_accept)
+                logger.info("📋 Правила отправлены после ввода промокода")
+            else:
+                await complete_registration(message, state, db)
+            return True
+        
         await message.answer(
-            "❌ Неверный реферальный код.\n\n"
-            "💡 Если у вас есть реферальный код, убедитесь что он введен правильно.\n"
-            "⏭️ Для продолжения регистрации без реферального кода используйте команду /start"
+            "❌ Неверный код.\n\n"
+            "💡 Если у вас есть реферальный код или промокод, убедитесь, что он введён правильно.\n"
+            "⏭️ Для продолжения регистрации без кода используйте команду /start"
         )
         return True 
     
@@ -238,7 +260,7 @@ async def cmd_start(message: types.Message, state: FSMContext, db: AsyncSession,
         else:
             try:
                 await message.answer(
-                    "У вас есть реферальный код? Введите его или нажмите 'Пропустить'",
+                    "У вас есть реферальный код/промо код? Введите его или нажмите 'Пропустить'",
                     reply_markup=get_referral_code_keyboard(language)
                 )
                 await state.set_state(RegistrationStates.waiting_for_referral_code)
@@ -312,7 +334,7 @@ async def process_rules_accept(
                 else:
                     try:
                         await callback.message.answer(
-                            "У вас есть реферальный код? Введите его или нажмите 'Пропустить'",
+                            "У вас есть реферальный код/промо код? Введите его или нажмите 'Пропустить'",
                             reply_markup=get_referral_code_keyboard(language)
                         )
                         await state.set_state(RegistrationStates.waiting_for_referral_code)
@@ -368,20 +390,28 @@ async def process_referral_code_input(
     language = data.get('language', 'ru')
     texts = get_texts(language)
     
-    referral_code = message.text.strip()
+    referral_or_promo_code = message.text.strip()
     
-    referrer = await get_user_by_referral_code(db, referral_code)
+    referrer = await get_user_by_referral_code(db, referral_or_promo_code)
     if referrer:
         data['referrer_id'] = referrer.id
         await state.set_data(data)
-        await message.answer("✅ Реферальный код применен!")
-        logger.info(f"✅ Реферальный код применен")
-    else:
-        await message.answer("❌ Неверный реферальный код")
-        logger.info(f"❌ Неверный реферальный код")
+        await message.answer("✅ Реферальный код применён!")
+        logger.info(f"✅ Реферальный код применён")
+        await complete_registration(message, state, db)
         return
     
-    await complete_registration(message, state, db)
+    promo = await get_promocode_by_code(db, referral_or_promo_code)
+    if promo:
+        data['pending_promocode'] = referral_or_promo_code
+        await state.set_data(data)
+        logger.info(f"✅ Промокод принят и сохранён до завершения регистрации")
+        await complete_registration(message, state, db)
+        return
+    
+    await message.answer("❌ Неверный код")
+    logger.info(f"❌ Неверный код")
+    return
 
 
 async def process_referral_code_skip(
@@ -529,10 +559,36 @@ async def complete_registration_from_callback(
         except Exception as e:
             logger.error(f"Ошибка при обработке реферальной регистрации: {e}")
     
+    # Активируем сохранённый промокод, если он есть
+    pending_promocode = data.get('pending_promocode') if data else None
+    promo_ack_sent = data.get('promo_ack_sent') if data else None
+    if pending_promocode:
+        try:
+            promo_service = PromoCodeService()
+            result = await promo_service.activate_promocode(db, user.id, pending_promocode)
+            if result.get("success") and not promo_ack_sent:
+                await callback.message.answer(texts.PROMOCODE_SUCCESS.format(description=result["description"]))
+            else:
+                error_messages = {
+                    "not_found": texts.PROMOCODE_INVALID,
+                    "expired": texts.PROMOCODE_EXPIRED,
+                    "used": texts.PROMOCODE_USED,
+                    "already_used_by_user": texts.PROMOCODE_USED,
+                    "server_error": getattr(texts, 'ERROR', '❌ Ошибка сервера')
+                }
+                if result.get("error"):
+                    await callback.message.answer(error_messages.get(result.get("error"), texts.PROMOCODE_INVALID))
+        except Exception as e:
+            logger.error(f"Ошибка активации промокода после регистрации: {e}")
+    
     await state.clear()
 
-    from app.database.crud.welcome_text import get_welcome_text_for_user
-    offer_text = await get_welcome_text_for_user(db, callback.from_user)
+    offer_text = None
+    try:
+        from app.database.crud.welcome_text import get_welcome_text_for_user
+        offer_text = await get_welcome_text_for_user(db, callback.from_user)
+    except Exception as e:
+        logger.error(f"Ошибка получения приветственного сообщения: {e}")
 
     if offer_text:
         try:
@@ -546,6 +602,11 @@ async def complete_registration_from_callback(
     else:
         logger.info(f"ℹ️ Приветственные сообщения отключены, показываем главное меню для пользователя {user.telegram_id}")
         
+        try:
+            await db.refresh(user, ['subscription'])
+        except Exception as e:
+            logger.warning(f"Не удалось обновить подписку пользователя перед показом меню (callback): {e}")
+
         has_active_subscription = user.subscription is not None
         subscription_is_active = False
         
@@ -692,10 +753,34 @@ async def complete_registration(
         except Exception as e:
             logger.error(f"Ошибка при обработке реферальной регистрации: {e}")
     
+    # Активируем сохранённый промокод, если он есть
+    pending_promocode = data.get('pending_promocode') if data else None
+    if pending_promocode:
+        try:
+            promo_service = PromoCodeService()
+            result = await promo_service.activate_promocode(db, user.id, pending_promocode)
+            if result.get("success"):
+                await message.answer(texts.PROMOCODE_SUCCESS.format(description=result["description"]))
+            else:
+                error_messages = {
+                    "not_found": texts.PROMOCODE_INVALID,
+                    "expired": texts.PROMOCODE_EXPIRED,
+                    "used": texts.PROMOCODE_USED,
+                    "already_used_by_user": texts.PROMOCODE_USED,
+                    "server_error": getattr(texts, 'ERROR', '❌ Ошибка сервера')
+                }
+                await message.answer(error_messages.get(result.get("error"), texts.PROMOCODE_INVALID))
+        except Exception as e:
+            logger.error(f"Ошибка активации промокода после регистрации: {e}")
+    
     await state.clear()
 
-    from app.database.crud.welcome_text import get_welcome_text_for_user
-    offer_text = await get_welcome_text_for_user(db, message.from_user)
+    offer_text = None
+    try:
+        from app.database.crud.welcome_text import get_welcome_text_for_user
+        offer_text = await get_welcome_text_for_user(db, message.from_user)
+    except Exception as e:
+        logger.error(f"Ошибка получения приветственного сообщения: {e}")
 
     if offer_text:
         try:
@@ -709,6 +794,11 @@ async def complete_registration(
     else:
         logger.info(f"ℹ️ Приветственные сообщения отключены, показываем главное меню для пользователя {user.telegram_id}")
         
+        try:
+            await db.refresh(user, ['subscription'])
+        except Exception as e:
+            logger.warning(f"Не удалось обновить подписку пользователя перед показом меню (message): {e}")
+
         has_active_subscription = user.subscription is not None
         subscription_is_active = False
         
@@ -876,10 +966,7 @@ def register_handlers(dp: Dispatcher):
     
     dp.message.register(
         handle_potential_referral_code,
-        StateFilter(
-            RegistrationStates.waiting_for_rules_accept,
-            RegistrationStates.waiting_for_referral_code
-        )
+        StateFilter(RegistrationStates.waiting_for_rules_accept)
     )
     logger.info("✅ Зарегистрирован handle_potential_referral_code")
     
