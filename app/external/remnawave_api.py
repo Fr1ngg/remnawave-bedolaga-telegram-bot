@@ -1,6 +1,7 @@
 import asyncio
 import json
 import ssl
+import base64 
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Union, Any
 from urllib.parse import urlparse
@@ -103,12 +104,15 @@ class RemnaWaveAPIError(Exception):
 
 class RemnaWaveAPI:
     
-    def __init__(self, base_url: str, api_key: str, secret_key: Optional[str] = None):
+    def __init__(self, base_url: str, api_key: str, secret_key: Optional[str] = None, 
+                 username: Optional[str] = None, password: Optional[str] = None):
         self.base_url = base_url.rstrip('/')
         self.api_key = api_key
-        self.secret_key = secret_key 
+        self.secret_key = secret_key
+        self.username = username
+        self.password = password
         self.session: Optional[aiohttp.ClientSession] = None
-        self.authenticated = False 
+        self.authenticated = False
         
     def _detect_connection_type(self) -> str:
         parsed = urlparse(self.base_url)
@@ -129,20 +133,36 @@ class RemnaWaveAPI:
                 return "local"
         
         return "external"
-        
-    async def __aenter__(self):
-        conn_type = self._detect_connection_type()
-        
-        logger.info(f"Подключение к Remnawave: {self.base_url} (тип: {conn_type})")
-            
+
+    def _prepare_auth_headers(self) -> Dict[str, str]:
         headers = {
-            'Authorization': f'Bearer {self.api_key}',
             'Content-Type': 'application/json',
             'Accept': 'application/json',
             'X-Forwarded-Proto': 'https',
             'X-Forwarded-For': '127.0.0.1',
             'X-Real-IP': '127.0.0.1'
         }
+        
+        if self.username and self.password:
+            import base64
+            credentials = f"{self.username}:{self.password}"
+            encoded_credentials = base64.b64encode(credentials.encode()).decode()
+            headers['X-Api-Key'] = f"Basic {encoded_credentials}"
+            logger.debug("Используем Basic Auth в X-Api-Key заголовке")
+        else:
+            headers['X-Api-Key'] = self.api_key
+            logger.debug("Используем API ключ в X-Api-Key заголовке")
+        
+        headers['Authorization'] = f'Bearer {self.api_key}'
+        
+        return headers
+        
+    async def __aenter__(self):
+        conn_type = self._detect_connection_type()
+        
+        logger.info(f"Подключение к Remnawave: {self.base_url} (тип: {conn_type})")
+            
+        headers = self._prepare_auth_headers() 
         
         cookies = None
         if self.secret_key:

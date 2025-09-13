@@ -264,7 +264,14 @@ class MaintenanceService:
             self._is_checking = True
             self._status.last_check = datetime.utcnow()
             
-            api = RemnaWaveAPI(settings.REMNAWAVE_API_URL, settings.REMNAWAVE_API_KEY)
+            auth_params = settings.get_remnawave_auth_params()
+            api = RemnaWaveAPI(
+                base_url=auth_params["base_url"],
+                api_key=auth_params["api_key"],
+                secret_key=auth_params["secret_key"],
+                username=auth_params["username"],
+                password=auth_params["password"]
+            )
             
             async with api:
                 is_connected = await test_api_connection(api)

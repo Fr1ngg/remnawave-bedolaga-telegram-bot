@@ -23,6 +23,71 @@ from app.utils.decorators import admin_required, error_handler
 logger = logging.getLogger(__name__)
 
 
+def get_message_buttons_selector_keyboard(language: str = "ru") -> types.InlineKeyboardMarkup:
+    return types.InlineKeyboardMarkup(inline_keyboard=[
+        [
+            types.InlineKeyboardButton(text="💰 Пополнить баланс", callback_data="btn_balance"),
+            types.InlineKeyboardButton(text="🤝 Рефералы", callback_data="btn_referrals")
+        ],
+        [
+            types.InlineKeyboardButton(text="🎫 Промокод", callback_data="btn_promocode")
+        ],
+        [
+            types.InlineKeyboardButton(text="✅ Продолжить", callback_data="buttons_confirm")
+        ],
+        [
+            types.InlineKeyboardButton(text="❌ Отмена", callback_data="admin_messages")
+        ]
+    ])
+
+
+def get_updated_message_buttons_selector_keyboard(selected_buttons: list, language: str = "ru") -> types.InlineKeyboardMarkup:
+    balance_text = "✅ Пополнить баланс" if "balance" in selected_buttons else "💰 Пополнить баланс"
+    referrals_text = "✅ Рефералы" if "referrals" in selected_buttons else "🤝 Рефералы"
+    promocode_text = "✅ Промокод" if "promocode" in selected_buttons else "🎫 Промокод"
+    
+    return types.InlineKeyboardMarkup(inline_keyboard=[
+        [
+            types.InlineKeyboardButton(text=balance_text, callback_data="btn_balance"),
+            types.InlineKeyboardButton(text=referrals_text, callback_data="btn_referrals")
+        ],
+        [
+            types.InlineKeyboardButton(text=promocode_text, callback_data="btn_promocode")
+        ],
+        [
+            types.InlineKeyboardButton(text="✅ Продолжить", callback_data="buttons_confirm")
+        ],
+        [
+            types.InlineKeyboardButton(text="❌ Отмена", callback_data="admin_messages")
+        ]
+    ])
+
+
+def create_broadcast_keyboard(selected_buttons: list) -> types.InlineKeyboardMarkup:
+    keyboard = []
+    
+    button_row = []
+    if "balance" in selected_buttons:
+        button_row.append(types.InlineKeyboardButton(text="💰 Пополнить баланс", callback_data="balance_topup"))
+    
+    if "referrals" in selected_buttons:
+        button_row.append(types.InlineKeyboardButton(text="🤝 Рефералы", callback_data="menu_referrals"))
+        
+    if "promocode" in selected_buttons:
+        button_row.append(types.InlineKeyboardButton(text="🎫 Промокод", callback_data="menu_promocode"))
+    
+    if len(button_row) > 2:
+        keyboard.append(button_row[:2])
+        if len(button_row) > 2:
+            keyboard.append(button_row[2:])
+    elif button_row:
+        keyboard.append(button_row)
+    
+    keyboard.append([types.InlineKeyboardButton(text="🏠 На главную", callback_data="back_to_menu")])
+    
+    return types.InlineKeyboardMarkup(inline_keyboard=keyboard)
+
+
 @admin_required
 @error_handler
 async def show_messages_menu(
@@ -260,14 +325,97 @@ async def process_broadcast_message(
         await message.answer("❌ Сообщение слишком длинное (максимум 4000 символов)")
         return
     
-    data = await state.get_data()
-    target = data.get('broadcast_target')
-    
-    user_count = await get_target_users_count(db, target) if not target.startswith('custom_') else await get_custom_users_count(db, target.replace('custom_', ''))
-    
     await state.update_data(broadcast_message=broadcast_text)
     
+    await show_button_selector(message, db_user, state)
+
+
+@admin_required
+@error_handler
+async def show_button_selector(
+    message: types.Message,
+    db_user: User,
+    state: FSMContext
+):
+    text = """
+📘 <b>Выбор дополнительных кнопок</b>
+
+Выберите кнопки, которые будут добавлены к сообщению рассылки:
+
+💰 <b>Пополнить баланс</b> - откроет методы пополнения
+🤝 <b>Рефералы</b> - откроет реферальную программу
+🎫 <b>Промокод</b> - откроет форму ввода промокода
+
+Кнопка "🏠 На главную" добавляется автоматически внизу.
+
+Выберите нужные кнопки и нажмите "Продолжить":
+"""
+    
+    data = await state.get_data()
+    if 'selected_buttons' not in data:
+        data['selected_buttons'] = []
+        await state.set_data(data)
+    
+    await message.answer(
+        text,
+        reply_markup=get_message_buttons_selector_keyboard(db_user.language),
+        parse_mode="HTML"
+    )
+
+
+@admin_required
+@error_handler
+async def toggle_button_selection(
+    callback: types.CallbackQuery,
+    db_user: User,
+    state: FSMContext
+):
+    button_type = callback.data.replace('btn_', '')
+    data = await state.get_data()
+    selected_buttons = data.get('selected_buttons', [])
+    
+    if button_type in selected_buttons:
+        selected_buttons.remove(button_type)
+    else:
+        selected_buttons.append(button_type)
+    
+    data['selected_buttons'] = selected_buttons
+    await state.set_data(data)
+    
+    keyboard = get_updated_message_buttons_selector_keyboard(selected_buttons, db_user.language)
+    
+    await callback.message.edit_reply_markup(reply_markup=keyboard)
+    await callback.answer()
+
+
+@admin_required
+@error_handler
+async def confirm_button_selection(
+    callback: types.CallbackQuery,
+    db_user: User,
+    state: FSMContext,
+    db: AsyncSession
+):
+    data = await state.get_data()
+    target = data.get('broadcast_target')
+    message_text = data.get('broadcast_message')
+    selected_buttons = data.get('selected_buttons', [])
+    
+    user_count = await get_target_users_count(db, target) if not target.startswith('custom_') else await get_custom_users_count(db, target.replace('custom_', ''))
     target_display = get_target_display_name(target)
+    
+    buttons_info = ""
+    if selected_buttons:
+        buttons_list = []
+        if "balance" in selected_buttons:
+            buttons_list.append("💰 Пополнить баланс")
+        if "referrals" in selected_buttons:
+            buttons_list.append("🤝 Рефералы")
+        if "promocode" in selected_buttons:
+            buttons_list.append("🎫 Промокод")
+        buttons_info = f"\n📘 <b>Дополнительные кнопки:</b> {', '.join(buttons_list)}"
+    
+    buttons_info += "\n🏠 <b>Основная кнопка:</b> На главную"
     
     preview_text = f"""
 📨 <b>Предварительный просмотр рассылки</b>
@@ -276,7 +424,9 @@ async def process_broadcast_message(
 👥 <b>Получателей:</b> {user_count}
 
 📝 <b>Сообщение:</b>
-{broadcast_text}
+{message_text}
+
+{buttons_info}
 
 Подтвердить отправку?
 """
@@ -284,16 +434,53 @@ async def process_broadcast_message(
     keyboard = [
         [
             types.InlineKeyboardButton(text="✅ Отправить", callback_data="admin_confirm_broadcast"),
+            types.InlineKeyboardButton(text="📘 Изменить кнопки", callback_data="edit_buttons")
+        ],
+        [
             types.InlineKeyboardButton(text="❌ Отмена", callback_data="admin_messages")
         ]
     ]
     
-    await message.answer(
+    await callback.message.edit_text(
         preview_text,
         reply_markup=types.InlineKeyboardMarkup(inline_keyboard=keyboard),
-        parse_mode="HTML"  
+        parse_mode="HTML"
     )
-    await state.set_state(AdminStates.confirming_broadcast)
+    await callback.answer()
+
+
+@admin_required
+@error_handler
+async def show_button_selector_callback(
+    callback: types.CallbackQuery,
+    db_user: User,
+    state: FSMContext
+):
+    text = """
+📘 <b>Выбор дополнительных кнопок</b>
+
+Выберите кнопки, которые будут добавлены к сообщению рассылки:
+
+💰 <b>Пополнить баланс</b> - откроет методы пополнения
+🤝 <b>Рефералы</b> - откроет реферальную программу
+🎫 <b>Промокод</b> - откроет форму ввода промокода
+
+Кнопка "🏠 На главную" добавляется автоматически внизу.
+
+Выберите нужные кнопки и нажмите "Продолжить":
+"""
+    
+    data = await state.get_data()
+    selected_buttons = data.get('selected_buttons', [])
+    
+    keyboard = get_updated_message_buttons_selector_keyboard(selected_buttons, db_user.language)
+    
+    await callback.message.edit_text(
+        text,
+        reply_markup=keyboard,
+        parse_mode="HTML"
+    )
+    await callback.answer()
 
 
 @admin_required
@@ -307,6 +494,7 @@ async def confirm_broadcast(
     data = await state.get_data()
     target = data.get('broadcast_target')
     message_text = data.get('broadcast_message')
+    selected_buttons = data.get('selected_buttons', [])
     
     await callback.message.edit_text(
         "📨 Начинаю рассылку...\n\n"
@@ -337,12 +525,15 @@ async def confirm_broadcast(
     sent_count = 0
     failed_count = 0
     
+    broadcast_keyboard = create_broadcast_keyboard(selected_buttons) if selected_buttons else None
+    
     for user in users:
         try:
             await callback.bot.send_message(
                 chat_id=user.telegram_id,
                 text=message_text,
-                parse_mode="HTML"
+                parse_mode="HTML",
+                reply_markup=broadcast_keyboard
             )
             sent_count += 1
             
@@ -413,7 +604,6 @@ async def get_custom_users_count(db: AsyncSession, criteria: str) -> int:
 
 
 async def get_custom_users(db: AsyncSession, criteria: str) -> list:
-    """Получение пользователей по настраиваемым критериям"""
     now = datetime.utcnow()
     today = now.replace(hour=0, minute=0, second=0, microsecond=0)
     week_ago = now - timedelta(days=7)
@@ -462,7 +652,6 @@ async def get_custom_users(db: AsyncSession, criteria: str) -> list:
 
 
 async def get_users_statistics(db: AsyncSession) -> dict:
-    """Получение статистики пользователей для отображения"""
     now = datetime.utcnow()
     today = now.replace(hour=0, minute=0, second=0, microsecond=0)
     week_ago = now - timedelta(days=7)
@@ -556,5 +745,9 @@ def register_handlers(dp: Dispatcher):
     dp.callback_query.register(show_messages_history, F.data.startswith("admin_msg_history"))
     dp.callback_query.register(show_custom_broadcast, F.data == "admin_msg_custom")
     dp.callback_query.register(select_custom_criteria, F.data.startswith("criteria_"))
+    
+    dp.callback_query.register(toggle_button_selection, F.data.startswith("btn_"))
+    dp.callback_query.register(confirm_button_selection, F.data == "buttons_confirm")
+    dp.callback_query.register(show_button_selector_callback, F.data == "edit_buttons")
     
     dp.message.register(process_broadcast_message, AdminStates.waiting_for_broadcast_message)

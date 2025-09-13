@@ -55,6 +55,17 @@
 - 🛡️ **Защита панели** - поддержка [remnawave-reverse-proxy](https://github.com/eGamesAPI/remnawave-reverse-proxy)
 - 🗄️ **Бекапы/Восстановление** - автобекапы и восстановление бд прямо в боте с уведомления в топики
 
+### 📚 Поддерживаемые методы авторизации
+
+Метод | Заголовок | Описание
+-- | -- | --
+API Key | X-Api-Key: your_api_key | Стандартный API ключ
+Bearer Token | Authorization: Bearer token | Классический Bearer token
+Basic Auth | X-Api-Key: Basic base64(user:pass) | Basic Authentication
+eGames Cookies | Cookies в формате key:value | Для панелей eGames
+
+
+
 ---
 
 ## 🚀 Быстрый старт
@@ -246,9 +257,17 @@ REDIS_URL=redis://redis:6379/0
 
 # ===== REMNAWAVE API =====
 REMNAWAVE_API_URL=https://panel.example.com
-REMNAWAVE_API_KEY=
-# Для панелей установленных скриптом eGames прописывать ключ в формате XXXXXXX:DDDDDDDD - https://panel.example.com/auth/login?XXXXXXX=DDDDDDDD
-REMNAWAVE_SECRET_KEY=your_secret_key_here
+REMNAWAVE_API_KEY=your_api_key_here
+
+# Тип авторизации: "api_key", "basic_auth"
+REMNAWAVE_AUTH_TYPE=api_key
+
+# Для панелей с Basic Auth (опционально)
+REMNAWAVE_USERNAME=
+REMNAWAVE_PASSWORD=
+
+# Для панелей установленных скриптом eGames прописывать ключ в формате XXXXXXX:DDDDDDDD
+REMNAWAVE_SECRET_KEY=
 
 # ========= ПОДПИСКИ =========
 # ===== ТРИАЛ ПОДПИСКА =====
@@ -395,22 +414,34 @@ CRYPTOBOT_WEBHOOK_SECRET=your_webhook_secret_here
 CRYPTOBOT_BASE_URL=https://pay.crypt.bot
 CRYPTOBOT_TESTNET=false
 CRYPTOBOT_WEBHOOK_PATH=/cryptobot-webhook
-CRYPTOBOT_WEBHOOK_PORT=8083
+CRYPTOBOT_WEBHOOK_PORT=8081
 CRYPTOBOT_DEFAULT_ASSET=USDT
 CRYPTOBOT_ASSETS=USDT,TON,BTC,ETH,LTC,BNB,TRX,USDC
 CRYPTOBOT_INVOICE_EXPIRES_HOURS=24
 
 # ===== ИНТЕРФЕЙС И UX =====
 
+# Включить логотип для всех сообщений (true - с изображением, false - только текст)
+ENABLE_LOGO_MODE=true
+LOGO_FILE=vpn_logo.png
+
+# Скрыть блок с ссылкой подключения в разделе с информацией о подписке
+HIDE_SUBSCRIPTION_LINK=false
+
 # Режим работы кнопки "Подключиться"
 # guide - открывает гайд подключения (режим 1)
 # miniapp_subscription - открывает ссылку подписки в мини-приложении (режим 2)
 # miniapp_custom - открывает заданную ссылку в мини-приложении (режим 3)
-# link - открывает ссылку подписки напрямую (режим 4)
+# link - Открывает ссылку напрямую в браузере (режим 4)
 CONNECT_BUTTON_MODE=guide
 
 # URL для режима miniapp_custom (обязателен при CONNECT_BUTTON_MODE=miniapp_custom)
 MINIAPP_CUSTOM_URL=
+
+# Пропустить принятие правил использования бота
+SKIP_RULES_ACCEPT=false
+# Пропустить запрос реферального кода
+SKIP_REFERRAL_CODE=false
 
 # ===== МОНИТОРИНГ И УВЕДОМЛЕНИЯ =====
 MONITORING_INTERVAL=60
@@ -448,6 +479,12 @@ BACKUP_COMPRESSION=true
 BACKUP_INCLUDE_LOGS=false
 BACKUP_LOCATION=/app/data/backups
 
+# Отправка бэкапов в телеграм
+BACKUP_SEND_ENABLED=true
+BACKUP_SEND_CHAT_ID=-100123456789   # Замени на ID твоего канала (-100) - ПРЕФИКС ЗАКРЫТОГО КАНАЛА!
+# ВСТАВИТЬ СВОЙ ID СРАЗУ ПОСЛЕ (-100) БЕЗ ПРОБЕЛОВ!
+BACKUP_SEND_TOPIC_ID=123             # Опционально: ID топика
+
 # ===== ПРОВЕРКА ОБНОВЛЕНИЙ БОТА =====
 VERSION_CHECK_ENABLED=true
 VERSION_CHECK_REPO=fr1ngg/remnawave-bedolaga-telegram-bot
@@ -459,8 +496,9 @@ LOG_FILE=logs/bot.log
 
 # ===== РАЗРАБОТКА =====
 DEBUG=false
-WEBHOOK_URL=
+WEBHOOK_URL=  # Укажите домен вебхука
 WEBHOOK_PATH=/webhook
+
 ```
 
 </details>
@@ -585,7 +623,7 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-remnawave_bot}
       POSTGRES_USER: ${POSTGRES_USER:-remnawave_user}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-secure_password_123}
-      POSTGRES_INITDB_ARGS: "--encoding=UTF8"
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     networks:
@@ -601,7 +639,7 @@ services:
     image: redis:7-alpine
     container_name: remnawave_bot_redis
     restart: unless-stopped
-    command: redis-server --appendonly yes
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
     volumes:
       - redis_data:/data
     networks:
@@ -624,22 +662,46 @@ services:
     env_file:
       - .env
     environment:
-      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-remnawave_user}:${POSTGRES_PASSWORD:-secure_password_123}@postgres:5432/${POSTGRES_DB:-remnawave_bot}
-      REDIS_URL: redis://redis:6379/0
+      DOCKER_ENV: "true"
+      DATABASE_MODE: "auto"
+      POSTGRES_HOST: "postgres"
+      POSTGRES_PORT: "5432"
+      POSTGRES_DB: "${POSTGRES_DB:-remnawave_bot}"
+      POSTGRES_USER: "${POSTGRES_USER:-remnawave_user}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:-secure_password_123}"
+      
+      REDIS_URL: "redis://redis:6379/0"
+      
+      TZ: "Europe/Moscow"
     volumes:
+      # Логи
       - ./logs:/app/logs:rw
+      # Данные приложения (для SQLite в случае переключения)
       - ./data:/app/data:rw
+      # Конфигурация приложения
+      # - ./app-config.json:/app/app-config.json:ro
+      # Timezone
       - /etc/timezone:/etc/timezone:ro
       - /etc/localtime:/etc/localtime:ro
+      # Логотип для сообщений
+      - ./vpn_logo.png:/app/vpn_logo.png:ro
     ports:
       - "${TRIBUTE_WEBHOOK_PORT:-8081}:8081"
       - "${YOOKASSA_WEBHOOK_PORT:-8082}:8082"
     networks:
       - bot_network
+    healthcheck:
+      test: ["CMD-SHELL", "python -c 'import requests; requests.get(\"http://localhost:8081/health\", timeout=5)' || exit 1"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
 
 volumes:
   postgres_data:
+    driver: local
   redis_data:
+    driver: local
 
 networks:
   bot_network:
@@ -647,6 +709,7 @@ networks:
     ipam:
       config:
         - subnet: 172.20.0.0/16
+          gateway: 172.20.0.1
 ```
 
 ### 🚀 Команды управления
@@ -829,6 +892,7 @@ bedolaga_bot/
 │   │   ├── ✅ subscription_utils.py  # Проверка подписок
 │   │   ├── 📄 pagination.py          # Пагинация
 │   │   ├── 📄 pricing_utils.py       # Цены
+│   │   ├── ‼️ global_error.py        # Обработка ошибок
 │   │   ├── 👤 user_utils.py          # Утилиты для пользователей
 │   │   ├── 🫰 currency_converter.py  # Курсы для CryptoBota
 │   │   └── ⚡ cache.py                # Кеширование
@@ -1085,6 +1149,13 @@ REMNAWAVE_SECRET_KEY=XXXXXXX:DDDDDDDD
 <tr>
 <td>5</td>
 <td><strong>@edward_forix</strong></td>
+<td>₽1,000</td>
+<td>За поддержку и доверие</td>
+</tr>
+
+<tr>
+<td>5</td>
+<td><strong>@Nav1_0</strong></td>
 <td>₽1,000</td>
 <td>За поддержку и доверие</td>
 </tr>

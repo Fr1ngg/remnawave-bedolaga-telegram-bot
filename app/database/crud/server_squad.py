@@ -1,10 +1,10 @@
 import logging
 from typing import List, Optional, Tuple
-from sqlalchemy import select, and_, func, update, delete
+from sqlalchemy import select, and_, func, update, delete, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.database.models import ServerSquad, SubscriptionServer
+from app.database.models import ServerSquad, SubscriptionServer, Subscription
 
 logger = logging.getLogger(__name__)
 
@@ -137,7 +137,7 @@ async def delete_server_squad(db: AsyncSession, server_id: int) -> bool:
     connections_count = connections_result.scalar()
     
     if connections_count > 0:
-        logger.warning(f"❌ Нельзя удалить сервер {server_id}: есть активные подключения ({connections_count})")
+        logger.warning(f"⚠ Нельзя удалить сервер {server_id}: есть активные подключения ({connections_count})")
         return False
     
     await db.execute(
@@ -244,10 +244,23 @@ async def get_server_statistics(db: AsyncSession) -> dict:
     )
     available_servers = available_result.scalar()
     
-    with_connections_result = await db.execute(
-        select(func.count(func.distinct(SubscriptionServer.server_squad_id)))
-    )
-    servers_with_connections = with_connections_result.scalar()
+    servers_with_connections = 0
+    all_servers_result = await db.execute(select(ServerSquad.squad_uuid))
+    all_server_uuids = [row[0] for row in all_servers_result.fetchall()]
+    
+    for squad_uuid in all_server_uuids:
+        count_result = await db.execute(
+            text("""
+                SELECT COUNT(s.id) 
+                FROM subscriptions s 
+                WHERE s.status IN ('active', 'trial') 
+                AND s.connected_squads::text LIKE :uuid_pattern
+            """),
+            {"uuid_pattern": f'%"{squad_uuid}"%'}
+        )
+        user_count = count_result.scalar() or 0
+        if user_count > 0:
+            servers_with_connections += 1
     
     revenue_result = await db.execute(
         select(func.coalesce(func.sum(SubscriptionServer.paid_price_kopeks), 0))
@@ -324,20 +337,26 @@ async def get_server_ids_by_uuids(
 async def sync_server_user_counts(db: AsyncSession) -> int:
     
     try:
-        result = await db.execute(
-            select(
-                ServerSquad.id,
-                ServerSquad.squad_uuid,
-                func.count(SubscriptionServer.id).label('actual_users')
-            )
-            .outerjoin(SubscriptionServer, ServerSquad.id == SubscriptionServer.server_squad_id)
-            .join(Subscription, SubscriptionServer.subscription_id == Subscription.id)
-            .where(Subscription.status == 'active')
-            .group_by(ServerSquad.id, ServerSquad.squad_uuid)
-        )
+        all_servers_result = await db.execute(select(ServerSquad.id, ServerSquad.squad_uuid))
+        all_servers = all_servers_result.fetchall()
+        
+        logger.info(f"🔍 Найдено серверов для синхронизации: {len(all_servers)}")
         
         updated_count = 0
-        for server_id, squad_uuid, actual_users in result.fetchall():
+        for server_id, squad_uuid in all_servers:
+            count_result = await db.execute(
+                text("""
+                    SELECT COUNT(s.id) 
+                    FROM subscriptions s 
+                    WHERE s.status IN ('active', 'trial') 
+                    AND s.connected_squads::text LIKE :uuid_pattern
+                """),
+                {"uuid_pattern": f'%"{squad_uuid}"%'}
+            )
+            actual_users = count_result.scalar() or 0
+            
+            logger.info(f"📊 Сервер {server_id} ({squad_uuid[:8]}): {actual_users} пользователей")
+            
             await db.execute(
                 update(ServerSquad)
                 .where(ServerSquad.id == server_id)

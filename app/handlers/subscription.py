@@ -185,7 +185,7 @@ async def show_subscription_info(
         message += "</blockquote>"
     
     if hasattr(subscription, 'subscription_url') and subscription.subscription_url:
-        if actual_status in ['trial_active', 'paid_active']:
+        if actual_status in ['trial_active', 'paid_active'] and not settings.HIDE_SUBSCRIPTION_LINK:
             message += f"\n\n🔗 <b>Ссылка для подключения:</b>\n<code>{subscription.subscription_url}</code>"
             message += f"\n\n📱 Скопируйте ссылку и добавьте в ваше VPN приложение"
     

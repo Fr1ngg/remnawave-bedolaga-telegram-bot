@@ -5,6 +5,7 @@ from aiogram.fsm.storage.memory import MemoryStorage
 import redis.asyncio as redis
 
 from app.config import settings
+from app.middlewares.global_error import GlobalErrorMiddleware 
 from app.middlewares.auth import AuthMiddleware
 from app.middlewares.logging import LoggingMiddleware
 from app.middlewares.throttling import ThrottlingMiddleware
@@ -75,6 +76,9 @@ async def setup_bot() -> tuple[Bot, Dispatcher]:
     
     dp = Dispatcher(storage=storage)
     
+    dp.message.middleware(GlobalErrorMiddleware())
+    dp.callback_query.middleware(GlobalErrorMiddleware())
+    dp.pre_checkout_query.middleware(GlobalErrorMiddleware())
     dp.message.middleware(LoggingMiddleware())
     dp.callback_query.middleware(LoggingMiddleware())
     dp.message.middleware(AuthMiddleware())
@@ -86,7 +90,6 @@ async def setup_bot() -> tuple[Bot, Dispatcher]:
     dp.callback_query.middleware(ThrottlingMiddleware())
     dp.message.middleware(SubscriptionStatusMiddleware())
     dp.callback_query.middleware(SubscriptionStatusMiddleware())
-    
     start.register_handlers(dp)
     menu.register_handlers(dp)
     subscription.register_handlers(dp)
@@ -94,7 +97,6 @@ async def setup_bot() -> tuple[Bot, Dispatcher]:
     promocode.register_handlers(dp)
     referral.register_handlers(dp)
     support.register_handlers(dp)
-    
     admin_main.register_handlers(dp)
     admin_users.register_handlers(dp)
     admin_subscriptions.register_handlers(dp)
@@ -111,9 +113,7 @@ async def setup_bot() -> tuple[Bot, Dispatcher]:
     admin_updates.register_handlers(dp)
     admin_backup.register_handlers(dp)
     admin_welcome_text.register_welcome_text_handlers(dp)
-
     common.register_handlers(dp)
-    
     register_stars_handlers(dp)
     logger.info("⭐ Зарегистрированы обработчики Telegram Stars платежей")
     
@@ -123,6 +123,7 @@ async def setup_bot() -> tuple[Bot, Dispatcher]:
     except Exception as e:
         logger.error(f"Ошибка запуска мониторинга техработ: {e}")
     
+    logger.info("🛡️ GlobalErrorMiddleware активирован - бот защищен от устаревших callback queries")
     logger.info("Бот успешно настроен")
     
     return bot, dp

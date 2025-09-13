@@ -32,6 +32,10 @@ class Settings(BaseSettings):
     REMNAWAVE_API_URL: str
     REMNAWAVE_API_KEY: str
     REMNAWAVE_SECRET_KEY: Optional[str] = None
+
+    REMNAWAVE_USERNAME: Optional[str] = None
+    REMNAWAVE_PASSWORD: Optional[str] = None
+    REMNAWAVE_AUTH_TYPE: str = "api_key"
     
     TRIAL_DURATION_DAYS: int = 3
     TRIAL_TRAFFIC_LIMIT_GB: int = 10
@@ -138,6 +142,7 @@ class Settings(BaseSettings):
 
     CONNECT_BUTTON_MODE: str = "guide"
     MINIAPP_CUSTOM_URL: str = ""
+    HIDE_SUBSCRIPTION_LINK: bool = False
     ENABLE_LOGO_MODE: bool = True
     LOGO_FILE: str = "vpn_logo.png"
     SKIP_RULES_ACCEPT: bool = False
@@ -237,6 +242,16 @@ class Settings(BaseSettings):
             
         except (ValueError, AttributeError):
             return []
+
+    def get_remnawave_auth_params(self) -> Dict[str, Optional[str]]:
+        return {
+            "base_url": self.REMNAWAVE_API_URL,
+            "api_key": self.REMNAWAVE_API_KEY,
+            "secret_key": self.REMNAWAVE_SECRET_KEY,
+            "username": self.REMNAWAVE_USERNAME,
+            "password": self.REMNAWAVE_PASSWORD,
+            "auth_type": self.REMNAWAVE_AUTH_TYPE
+        }
     
     def get_autopay_warning_days(self) -> List[int]:
         try:

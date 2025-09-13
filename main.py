@@ -86,7 +86,7 @@ async def main():
         admin_notification_service = AdminNotificationService(bot)
         version_service.bot = bot
         version_service.set_notification_service(admin_notification_service)
-        logger.info(f"🔄 Сервис версий настроен для репозитория: {version_service.repo}")
+        logger.info(f"📄 Сервис версий настроен для репозитория: {version_service.repo}")
         logger.info(f"📦 Текущая версия: {version_service.current_version}")
         
         logger.info("🔗 Бот подключен к сервисам мониторинга и техработ")
@@ -95,7 +95,6 @@ async def main():
         try:
             backup_service.bot = bot
             
-            # Запускаем автобекапы если они включены
             settings_obj = await backup_service.get_backup_settings()
             if settings_obj.auto_backup_enabled:
                 await backup_service.start_auto_backup()
@@ -107,12 +106,20 @@ async def main():
         
         payment_service = PaymentService(bot)
         
-        if settings.TRIBUTE_ENABLED:
-            logger.info("🌐 Запуск Tribute webhook сервера...")
+        webhook_needed = settings.TRIBUTE_ENABLED or settings.is_cryptobot_enabled()
+        
+        if webhook_needed:
+            enabled_services = []
+            if settings.TRIBUTE_ENABLED:
+                enabled_services.append("Tribute")
+            if settings.is_cryptobot_enabled():
+                enabled_services.append("CryptoBot")
+            
+            logger.info(f"🌐 Запуск webhook сервера для: {', '.join(enabled_services)}...")
             webhook_server = WebhookServer(bot)
             await webhook_server.start()
         else:
-            logger.info("ℹ️ Tribute отключен, webhook сервер не запускается")
+            logger.info("ℹ️ Tribute и CryptoBot отключены, webhook сервер не запускается")
         
         if settings.is_yookassa_enabled():
             logger.info("💳 Запуск YooKassa webhook сервера...")
@@ -134,7 +141,7 @@ async def main():
             maintenance_task = None
         
         if settings.is_version_check_enabled():
-            logger.info("🔄 Запуск сервиса проверки версий...")
+            logger.info("📄 Запуск сервиса проверки версий...")
             version_check_task = asyncio.create_task(version_service.start_periodic_check())
         else:
             logger.info("ℹ️ Проверка версий отключена")
@@ -144,11 +151,14 @@ async def main():
         
         logger.info("=" * 50)
         logger.info("🎯 Активные webhook endpoints:")
-        if settings.TRIBUTE_ENABLED:
-            logger.info(f"   Tribute: {settings.WEBHOOK_URL}:{settings.TRIBUTE_WEBHOOK_PORT}{settings.TRIBUTE_WEBHOOK_PATH}")
+        if webhook_needed:
+            if settings.TRIBUTE_ENABLED:
+                logger.info(f"   Tribute: {settings.WEBHOOK_URL}:{settings.TRIBUTE_WEBHOOK_PORT}{settings.TRIBUTE_WEBHOOK_PATH}")
+            if settings.is_cryptobot_enabled():
+                logger.info(f"   CryptoBot: {settings.WEBHOOK_URL}:{settings.TRIBUTE_WEBHOOK_PORT}{settings.CRYPTOBOT_WEBHOOK_PATH}")
         if settings.is_yookassa_enabled():
             logger.info(f"   YooKassa: {settings.WEBHOOK_URL}:{settings.YOOKASSA_WEBHOOK_PORT}{settings.YOOKASSA_WEBHOOK_PATH}")
-        logger.info("🔄 Активные фоновые сервисы:")
+        logger.info("📄 Активные фоновые сервисы:")
         logger.info(f"   Мониторинг: {'Включен' if monitoring_task else 'Отключен'}")
         logger.info(f"   Техработы: {'Включен' if maintenance_task else 'Отключен'}")
         logger.info(f"   Проверка версий: {'Включен' if version_check_task else 'Отключен'}")
@@ -252,7 +262,7 @@ async def main():
                 pass
         
         if webhook_server:
-            logger.info("ℹ️ Остановка Tribute webhook сервера...")
+            logger.info("ℹ️ Остановка webhook сервера...")
             await webhook_server.stop()
         
         if 'bot' in locals():

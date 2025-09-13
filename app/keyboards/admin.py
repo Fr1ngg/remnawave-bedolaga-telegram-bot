@@ -9,36 +9,98 @@ def get_admin_main_keyboard(language: str = "ru") -> InlineKeyboardMarkup:
     
     return InlineKeyboardMarkup(inline_keyboard=[
         [
-            InlineKeyboardButton(text=texts.ADMIN_USERS, callback_data="admin_users"),
-            InlineKeyboardButton(text=texts.ADMIN_SUBSCRIPTIONS, callback_data="admin_subscriptions")
+            InlineKeyboardButton(text="👥 Юзеры и Подписки", callback_data="admin_submenu_users"),
+            InlineKeyboardButton(text="💰 Промокоды и статистика", callback_data="admin_submenu_promo")
         ],
         [
-            InlineKeyboardButton(text=texts.ADMIN_PROMOCODES, callback_data="admin_promocodes"),
-            InlineKeyboardButton(text=texts.ADMIN_MESSAGES, callback_data="admin_messages")
+            InlineKeyboardButton(text="📨 Коммуникации", callback_data="admin_submenu_communications"),
+            InlineKeyboardButton(text="⚙️ Настройки", callback_data="admin_submenu_settings")
         ],
         [
-            InlineKeyboardButton(text=texts.ADMIN_MONITORING, callback_data="admin_monitoring"),
-            InlineKeyboardButton(text=texts.ADMIN_REFERRALS, callback_data="admin_referrals")
-        ],
-        [
-            InlineKeyboardButton(text=texts.ADMIN_RULES, callback_data="admin_rules"),
-            InlineKeyboardButton(text=texts.ADMIN_REMNAWAVE, callback_data="admin_remnawave")
-        ],
-        [
-            InlineKeyboardButton(text=texts.ADMIN_STATISTICS, callback_data="admin_statistics"),
-            InlineKeyboardButton(text="🔧 Техработы", callback_data="maintenance_panel")
-        ],
-        [
-            InlineKeyboardButton(text="📢 Сообщения в меню", callback_data="user_messages_panel"),
-            InlineKeyboardButton(text="👋 Приветственный текст", callback_data="welcome_text_panel")
-            
-        ],
-        [
-            InlineKeyboardButton(text="🔄 Обновления", callback_data="admin_updates"),
-            InlineKeyboardButton(text="🗄️ Бекапы", callback_data="backup_panel")
+            InlineKeyboardButton(text="🛠️ Системные функции", callback_data="admin_submenu_system")
         ],
         [
             InlineKeyboardButton(text=texts.BACK, callback_data="back_to_menu")
+        ]
+    ])
+
+
+def get_admin_users_submenu_keyboard(language: str = "ru") -> InlineKeyboardMarkup:
+    texts = get_texts(language)
+    
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(text=texts.ADMIN_USERS, callback_data="admin_users"),
+            InlineKeyboardButton(text=texts.ADMIN_REFERRALS, callback_data="admin_referrals")
+        ],
+        [
+            InlineKeyboardButton(text=texts.ADMIN_SUBSCRIPTIONS, callback_data="admin_subscriptions")
+        ],
+        [
+            InlineKeyboardButton(text="⬅️ Назад", callback_data="admin_panel")
+        ]
+    ])
+
+
+def get_admin_promo_submenu_keyboard(language: str = "ru") -> InlineKeyboardMarkup:
+    texts = get_texts(language)
+    
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(text=texts.ADMIN_PROMOCODES, callback_data="admin_promocodes"),
+            InlineKeyboardButton(text=texts.ADMIN_STATISTICS, callback_data="admin_statistics")
+        ],
+        [
+            InlineKeyboardButton(text="⬅️ Назад", callback_data="admin_panel")
+        ]
+    ])
+
+
+def get_admin_communications_submenu_keyboard(language: str = "ru") -> InlineKeyboardMarkup:
+    texts = get_texts(language)
+    
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(text=texts.ADMIN_MESSAGES, callback_data="admin_messages")
+        ],
+        [
+            InlineKeyboardButton(text="👋 Приветственный текст", callback_data="welcome_text_panel"),
+            InlineKeyboardButton(text="📢 Сообщения в меню", callback_data="user_messages_panel")
+        ],
+        [
+            InlineKeyboardButton(text="⬅️ Назад", callback_data="admin_panel")
+        ]
+    ])
+
+
+def get_admin_settings_submenu_keyboard(language: str = "ru") -> InlineKeyboardMarkup:
+    texts = get_texts(language)
+    
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(text=texts.ADMIN_REMNAWAVE, callback_data="admin_remnawave"),
+            InlineKeyboardButton(text=texts.ADMIN_MONITORING, callback_data="admin_monitoring")
+        ],
+        [
+            InlineKeyboardButton(text=texts.ADMIN_RULES, callback_data="admin_rules"),
+            InlineKeyboardButton(text="🔧 Техработы", callback_data="maintenance_panel")
+        ],
+        [
+            InlineKeyboardButton(text="⬅️ Назад", callback_data="admin_panel")
+        ]
+    ])
+
+
+def get_admin_system_submenu_keyboard(language: str = "ru") -> InlineKeyboardMarkup:
+    texts = get_texts(language)
+    
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(text="📄 Обновления", callback_data="admin_updates"),
+            InlineKeyboardButton(text="🗄️ Бекапы", callback_data="backup_panel")
+        ],
+        [
+            InlineKeyboardButton(text="⬅️ Назад", callback_data="admin_panel")
         ]
     ])
 
@@ -54,7 +116,7 @@ def get_admin_users_keyboard(language: str = "ru") -> InlineKeyboardMarkup:
             InlineKeyboardButton(text="🗑️ Неактивные", callback_data="admin_users_inactive")
         ],
         [
-            InlineKeyboardButton(text="⬅️ Назад", callback_data="admin_panel")
+            InlineKeyboardButton(text="⬅️ Назад", callback_data="admin_submenu_users")
         ]
     ])
 
@@ -73,7 +135,7 @@ def get_admin_subscriptions_keyboard(language: str = "ru") -> InlineKeyboardMark
             InlineKeyboardButton(text="📊 Статистика", callback_data="admin_subs_stats")
         ],
         [
-            InlineKeyboardButton(text="⬅️ Назад", callback_data="admin_panel")
+            InlineKeyboardButton(text="⬅️ Назад", callback_data="admin_submenu_users")
         ]
     ])
 
@@ -88,7 +150,7 @@ def get_admin_promocodes_keyboard(language: str = "ru") -> InlineKeyboardMarkup:
             InlineKeyboardButton(text="📊 Общая статистика", callback_data="admin_promo_general_stats")
         ],
         [
-            InlineKeyboardButton(text="⬅️ Назад", callback_data="admin_panel")
+            InlineKeyboardButton(text="⬅️ Назад", callback_data="admin_submenu_promo")
         ]
     ])
 
@@ -120,7 +182,7 @@ def get_admin_messages_keyboard(language: str = "ru") -> InlineKeyboardMarkup:
             InlineKeyboardButton(text="📋 История", callback_data="admin_msg_history")
         ],
         [
-            InlineKeyboardButton(text="⬅️ Назад", callback_data="admin_panel")
+            InlineKeyboardButton(text="⬅️ Назад", callback_data="admin_submenu_communications")
         ]
     ])
 
@@ -139,7 +201,7 @@ def get_admin_monitoring_keyboard(language: str = "ru") -> InlineKeyboardMarkup:
             InlineKeyboardButton(text="⚙️ Настройки", callback_data="admin_mon_settings")
         ],
         [
-            InlineKeyboardButton(text="⬅️ Назад", callback_data="admin_panel")
+            InlineKeyboardButton(text="⬅️ Назад", callback_data="admin_submenu_settings")
         ]
     ])
 
@@ -152,13 +214,13 @@ def get_admin_remnawave_keyboard(language: str = "ru") -> InlineKeyboardMarkup:
         ],
         [
             InlineKeyboardButton(text="🔄 Синхронизация", callback_data="admin_rw_sync"),
-            InlineKeyboardButton(text="🌍 Управление сквадами", callback_data="admin_rw_squads")
+            InlineKeyboardButton(text="🌐 Управление сквадами", callback_data="admin_rw_squads")
         ],
         [
             InlineKeyboardButton(text="📈 Трафик", callback_data="admin_rw_traffic")
         ],
         [
-            InlineKeyboardButton(text="⬅️ Назад", callback_data="admin_panel")
+            InlineKeyboardButton(text="⬅️ Назад", callback_data="admin_submenu_settings")
         ]
     ])
 
@@ -177,7 +239,7 @@ def get_admin_statistics_keyboard(language: str = "ru") -> InlineKeyboardMarkup:
             InlineKeyboardButton(text="📊 Общая сводка", callback_data="admin_stats_summary")
         ],
         [
-            InlineKeyboardButton(text="⬅️ Назад", callback_data="admin_panel")
+            InlineKeyboardButton(text="⬅️ Назад", callback_data="admin_submenu_promo")
         ]
     ])
 
@@ -320,8 +382,8 @@ def get_custom_criteria_keyboard(language: str = "ru") -> InlineKeyboardMarkup:
             InlineKeyboardButton(text="⚡ Активные сегодня", callback_data="criteria_active_today")
         ],
         [
-            InlineKeyboardButton(text="👤 Неактивные 7+ дней", callback_data="criteria_inactive_week"),
-            InlineKeyboardButton(text="👤 Неактивные 30+ дней", callback_data="criteria_inactive_month")
+            InlineKeyboardButton(text="💤 Неактивные 7+ дней", callback_data="criteria_inactive_week"),
+            InlineKeyboardButton(text="💤 Неактивные 30+ дней", callback_data="criteria_inactive_month")
         ],
         [
             InlineKeyboardButton(text="🤝 Через рефералов", callback_data="criteria_referrals"),
@@ -651,8 +713,8 @@ def get_maintenance_keyboard(
             callback_data="maintenance_panel"
         ),
         InlineKeyboardButton(
-            text="◀️ Назад", 
-            callback_data="admin_panel"
+            text="⬅️ Назад", 
+            callback_data="admin_submenu_settings"
         )
     ])
     
@@ -689,9 +751,25 @@ def get_welcome_text_keyboard(language: str = "ru", is_enabled: bool = True) -> 
             InlineKeyboardButton(text="💡 Плейсхолдеры", callback_data="show_placeholders_help")
         ],
         [
-            InlineKeyboardButton(text="⬅️ Назад", callback_data="admin_panel")
+            InlineKeyboardButton(text="⬅️ Назад", callback_data="admin_submenu_communications")
         ]
     ]
     
     return InlineKeyboardMarkup(inline_keyboard=keyboard)
 
+def get_message_buttons_selector_keyboard(language: str = "ru") -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(text="💰 Пополнить баланс", callback_data="btn_balance"),
+            InlineKeyboardButton(text="🤝 Рефералы", callback_data="btn_referrals")
+        ],
+        [
+            InlineKeyboardButton(text="🎫 Промокод", callback_data="btn_promocode")
+        ],
+        [
+            InlineKeyboardButton(text="✅ Продолжить", callback_data="buttons_confirm")
+        ],
+        [
+            InlineKeyboardButton(text="❌ Отмена", callback_data="admin_messages")
+        ]
+    ])

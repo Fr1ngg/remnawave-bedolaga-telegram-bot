@@ -1,5 +1,5 @@
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 from aiogram import Dispatcher, types, F
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.fsm.context import FSMContext
@@ -78,25 +78,51 @@ async def show_users_list(
         return
     
     text = f"👥 <b>Список пользователей</b> (стр. {page}/{users_data['total_pages']})\n\n"
-    
-    for user in users_data["users"]:
-        status_emoji = "✅" if user.status == UserStatus.ACTIVE.value else "❌"
-        subscription_info = ""
-        
-        if user.subscription:
-            if user.subscription.is_trial:
-                subscription_info = "🎁"
-            elif user.subscription.is_active:
-                subscription_info = "💎"
-            else:
-                subscription_info = "⏰"
-        
-        text += f"{status_emoji} {subscription_info} <b>{user.full_name}</b>\n"
-        text += f"🆔 <code>{user.telegram_id}</code>\n"
-        text += f"💰 {settings.format_price(user.balance_kopeks)}\n"
-        text += f"📅 {format_time_ago(user.created_at)}\n\n"
+    text += "Нажмите на пользователя для управления:"
     
     keyboard = []
+    
+    for user in users_data["users"]:
+        if user.status == UserStatus.ACTIVE.value:
+            status_emoji = "✅"
+        elif user.status == UserStatus.BLOCKED.value:
+            status_emoji = "🚫"
+        else:
+            status_emoji = "🗑️"
+        
+        subscription_emoji = ""
+        if user.subscription:
+            if user.subscription.is_trial:
+                subscription_emoji = "🎁"
+            elif user.subscription.is_active:
+                subscription_emoji = "💎"
+            else:
+                subscription_emoji = "⏰"
+        else:
+            subscription_emoji = "❌"
+        
+        button_text = f"{status_emoji} {subscription_emoji} {user.full_name}"
+        
+        if user.balance_kopeks > 0:
+            button_text += f" | 💰 {settings.format_price(user.balance_kopeks)}"
+        
+        button_text += f" | 📅 {format_time_ago(user.created_at)}"
+        
+        if len(button_text) > 60:
+            short_name = user.full_name
+            if len(short_name) > 20:
+                short_name = short_name[:17] + "..."
+            
+            button_text = f"{status_emoji} {subscription_emoji} {short_name}"
+            if user.balance_kopeks > 0:
+                button_text += f" | 💰 {settings.format_price(user.balance_kopeks)}"
+        
+        keyboard.append([
+            types.InlineKeyboardButton(
+                text=button_text,
+                callback_data=f"admin_user_manage_{user.id}"
+            )
+        ])
     
     if users_data["total_pages"] > 1:
         pagination_row = get_admin_pagination_keyboard(
@@ -474,27 +500,45 @@ async def process_user_search(
         return
     
     text = f"🔍 <b>Результаты поиска:</b> '{query}'\n\n"
+    text += "Выберите пользователя:"
+    
     keyboard = []
     
     for user in search_results["users"]:
-        status_emoji = "✅" if user.status == UserStatus.ACTIVE.value else "❌"
-        subscription_info = ""
+        if user.status == UserStatus.ACTIVE.value:
+            status_emoji = "✅"
+        elif user.status == UserStatus.BLOCKED.value:
+            status_emoji = "🚫"
+        else:
+            status_emoji = "🗑️"
         
+        subscription_emoji = ""
         if user.subscription:
             if user.subscription.is_trial:
-                subscription_info = "🎁"
+                subscription_emoji = "🎁"
             elif user.subscription.is_active:
-                subscription_info = "💎"
+                subscription_emoji = "💎"
             else:
-                subscription_info = "⏰"
+                subscription_emoji = "⏰"
+        else:
+            subscription_emoji = "❌"
         
-        text += f"{status_emoji} {subscription_info} <b>{user.full_name}</b>\n"
-        text += f"🆔 <code>{user.telegram_id}</code>\n"
-        text += f"💰 {settings.format_price(user.balance_kopeks)}\n\n"
+        button_text = f"{status_emoji} {subscription_emoji} {user.full_name}"
+        
+        button_text += f" | 🆔 {user.telegram_id}"
+        
+        if user.balance_kopeks > 0:
+            button_text += f" | 💰 {settings.format_price(user.balance_kopeks)}"
+        
+        if len(button_text) > 60:
+            short_name = user.full_name
+            if len(short_name) > 15:
+                short_name = short_name[:12] + "..."
+            button_text = f"{status_emoji} {subscription_emoji} {short_name} | 🆔 {user.telegram_id}"
         
         keyboard.append([
             types.InlineKeyboardButton(
-                text=f"👤 {user.full_name}",
+                text=button_text,
                 callback_data=f"admin_user_manage_{user.id}"
             )
         ])

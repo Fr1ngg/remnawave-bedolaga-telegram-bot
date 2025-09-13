@@ -52,13 +52,13 @@ jobs:
             VERSION=${GITHUB_REF#refs/tags/}
             echo "🏷️ Собираем релизную версию: $VERSION"
           elif [[ $GITHUB_REF == refs/heads/main ]]; then
-            VERSION="v2.2.9"
+            VERSION="v2.3.1"
             echo "🚀 Собираем версию из main: $VERSION"
           elif [[ $GITHUB_REF == refs/heads/dev ]]; then
-            VERSION="v2.2.9-dev-$(git rev-parse --short HEAD)"
+            VERSION="v2.3.1-dev-$(git rev-parse --short HEAD)"
             echo "🧪 Собираем dev версию: $VERSION"
           else
-            VERSION="v2.2.9-pr-$(git rev-parse --short HEAD)"
+            VERSION="v2.3.1-pr-$(git rev-parse --short HEAD)"
             echo "🔀 Собираем PR версию: $VERSION"
           fi
           echo "version=$VERSION" >> $GITHUB_OUTPUT

@@ -23,9 +23,13 @@ logger = logging.getLogger(__name__)
 class SubscriptionService:
     
     def __init__(self):
+        auth_params = settings.get_remnawave_auth_params()
         self.api = RemnaWaveAPI(
-            base_url=settings.REMNAWAVE_API_URL,
-            api_key=settings.REMNAWAVE_API_KEY
+            base_url=auth_params["base_url"],
+            api_key=auth_params["api_key"],
+            secret_key=auth_params["secret_key"],
+            username=auth_params["username"],
+            password=auth_params["password"]
         )
     
     async def create_remnawave_user(

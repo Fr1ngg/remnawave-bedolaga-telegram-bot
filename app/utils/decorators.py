@@ -3,6 +3,7 @@ import functools
 from typing import Callable, Any
 from aiogram import types
 from aiogram.fsm.context import FSMContext
+from aiogram.exceptions import TelegramBadRequest
 
 from app.config import settings
 from app.localization.texts import get_texts
@@ -25,10 +26,16 @@ def admin_required(func: Callable) -> Callable:
         if not user or not settings.is_admin(user.id):
             texts = get_texts()
             
-            if isinstance(event, types.Message):
-                await event.answer(texts.ACCESS_DENIED)
-            elif isinstance(event, types.CallbackQuery):
-                await event.answer(texts.ACCESS_DENIED, show_alert=True)
+            try:
+                if isinstance(event, types.Message):
+                    await event.answer(texts.ACCESS_DENIED)
+                elif isinstance(event, types.CallbackQuery):
+                    await event.answer(texts.ACCESS_DENIED, show_alert=True)
+            except TelegramBadRequest as e:
+                if "query is too old" in str(e).lower():
+                    logger.warning(f"Попытка ответить на устаревший callback query от {user.id if user else 'Unknown'}")
+                else:
+                    raise
             
             logger.warning(f"Попытка доступа к админской функции от {user.id if user else 'Unknown'}")
             return
@@ -44,26 +51,69 @@ def error_handler(func: Callable) -> Callable:
     async def wrapper(*args, **kwargs) -> Any:
         try:
             return await func(*args, **kwargs)
+        except TelegramBadRequest as e:
+            error_message = str(e).lower()
+            
+            if "query is too old" in error_message or "query id is invalid" in error_message:
+                event = _extract_event(args)
+                if event and isinstance(event, types.CallbackQuery):
+                    user_info = f"@{event.from_user.username}" if event.from_user.username else f"ID:{event.from_user.id}"
+                    logger.warning(f"🕐 Игнорируем устаревший callback '{event.data}' от {user_info} в {func.__name__}")
+                else:
+                    logger.warning(f"🕐 Игнорируем устаревший запрос в {func.__name__}: {e}")
+                return None
+                
+            elif "message is not modified" in error_message:
+                logger.debug(f"📝 Сообщение не изменено в {func.__name__}")
+                event = _extract_event(args)
+                if event and isinstance(event, types.CallbackQuery):
+                    try:
+                        await event.answer()
+                    except TelegramBadRequest as answer_error:
+                        if "query is too old" not in str(answer_error).lower():
+                            logger.error(f"Ошибка при ответе на callback: {answer_error}")
+                return None
+                
+            else:
+                logger.error(f"Telegram API error в {func.__name__}: {e}")
+                await _send_error_message(args, kwargs, e)
+                
         except Exception as e:
             logger.error(f"Ошибка в {func.__name__}: {e}", exc_info=True)
-            
-            event = None
-            db_user = kwargs.get('db_user')
-            
-            for arg in args:
-                if isinstance(arg, (types.Message, types.CallbackQuery)):
-                    event = arg
-                    break
-            
-            if event:
-                texts = get_texts(db_user.language if db_user else 'ru')
-                
-                if isinstance(event, types.Message):
-                    await event.answer(texts.ERROR)
-                elif isinstance(event, types.CallbackQuery):
-                    await event.answer(texts.ERROR, show_alert=True)
+            await _send_error_message(args, kwargs, e)
     
     return wrapper
+
+
+def _extract_event(args) -> types.TelegramObject:
+    for arg in args:
+        if isinstance(arg, (types.Message, types.CallbackQuery)):
+            return arg
+    return None
+
+
+async def _send_error_message(args, kwargs, original_error):
+    try:
+        event = _extract_event(args)
+        db_user = kwargs.get('db_user')
+        
+        if not event:
+            return
+            
+        texts = get_texts(db_user.language if db_user else 'ru')
+        
+        if isinstance(event, types.Message):
+            await event.answer(texts.ERROR)
+        elif isinstance(event, types.CallbackQuery):
+            await event.answer(texts.ERROR, show_alert=True)
+                
+    except TelegramBadRequest as e:
+        if "query is too old" in str(e).lower():
+            logger.warning("Не удалось отправить сообщение об ошибке - callback query устарел")
+        else:
+            logger.error(f"Ошибка при отправке сообщения об ошибке: {e}")
+    except Exception as e:
+        logger.error(f"Критическая ошибка при отправке сообщения об ошибке: {e}")
 
 
 def state_cleanup(func: Callable) -> Callable:
@@ -91,10 +141,13 @@ def typing_action(func: Callable) -> Callable:
         **kwargs
     ) -> Any:
         if isinstance(event, types.Message):
-            await event.bot.send_chat_action(
-                chat_id=event.chat.id,
-                action="typing"
-            )
+            try:
+                await event.bot.send_chat_action(
+                    chat_id=event.chat.id,
+                    action="typing"
+                )
+            except Exception as e:
+                logger.warning(f"Не удалось отправить typing action: {e}")
         
         return await func(event, *args, **kwargs)
     
