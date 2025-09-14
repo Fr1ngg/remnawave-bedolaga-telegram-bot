@@ -1,5 +1,5 @@
 import logging
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 from datetime import datetime
 from aiogram import Bot
 from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError
@@ -707,4 +707,97 @@ class AdminNotificationService:
             logger.error(f"Ошибка отправки уведомления о статусе панели Remnawave: {e}")
             return False
 
+    async def send_subscription_update_notification(
+        self,
+        db: AsyncSession,
+        user: User,
+        subscription: Subscription,
+        update_type: str,
+        old_value: Any,
+        new_value: Any,
+        price_paid: int = 0
+    ) -> bool:
+        if not self._is_enabled():
+            return False
+        
+        try:
+            referrer_info = await self._get_referrer_info(db, user.referred_by_id)
+            
+            update_types = {
+                "traffic": ("📊 ИЗМЕНЕНИЕ ТРАФИКА", "трафик"),
+                "devices": ("📱 ИЗМЕНЕНИЕ УСТРОЙСТВ", "количество устройств"), 
+                "servers": ("🌐 ИЗМЕНЕНИЕ СЕРВЕРОВ", "серверы")
+            }
+            
+            title, param_name = update_types.get(update_type, ("⚙️ ИЗМЕНЕНИЕ ПОДПИСКИ", "параметры"))
+            
+            message = f"""{title}
+
+    👤 <b>Пользователь:</b> {user.full_name}
+    🆔 <b>Telegram ID:</b> <code>{user.telegram_id}</code>
+    📱 <b>Username:</b> @{user.username or 'отсутствует'}
+
+    🔧 <b>Изменение:</b>
+    📋 Параметр: {param_name}"""
+
+            if update_type == "servers":
+                old_servers_info = await self._format_servers_detailed(old_value)
+                new_servers_info = await self._format_servers_detailed(new_value)
+                
+                message += f"""
+    📉 Было: {old_servers_info}
+    📈 Стало: {new_servers_info}"""
+            else:
+                message += f"""
+    📉 Было: {self._format_update_value(old_value, update_type)}
+    📈 Стало: {self._format_update_value(new_value, update_type)}"""
+
+            if price_paid > 0:
+                message += f"\n💰 Доплачено: {settings.format_price(price_paid)}"
+            else:
+                message += f"\n💸 Бесплатно"
+
+            message += f"""
+
+    📅 <b>Подписка действует до:</b> {subscription.end_date.strftime('%d.%m.%Y %H:%M')}
+    💰 <b>Баланс после операции:</b> {settings.format_price(user.balance_kopeks)}
+    🔗 <b>Рефер:</b> {referrer_info}
+
+    ⏰ <i>{datetime.now().strftime('%d.%m.%Y %H:%M:%S')}</i>"""
+            
+            return await self._send_message(message)
+            
+        except Exception as e:
+            logger.error(f"Ошибка отправки уведомления об изменении подписки: {e}")
+            return False
+
+    async def _format_servers_detailed(self, server_uuids: List[str]) -> str:
+        if not server_uuids:
+            return "Нет серверов"
+        
+        try:
+            from app.handlers.subscription import get_servers_display_names
+            servers_names = await get_servers_display_names(server_uuids)
+            
+            if servers_names and servers_names != "Нет серверов":
+                return f"{len(server_uuids)} серверов ({servers_names})"
+            else:
+                return f"{len(server_uuids)} серверов"
+                
+        except Exception as e:
+            logger.warning(f"Ошибка получения названий серверов для уведомления: {e}")
+            return f"{len(server_uuids)} серверов"
+
+    def _format_update_value(self, value: Any, update_type: str) -> str:
+        if update_type == "traffic":
+            if value == 0:
+                return "♾ Безлимитный"
+            return f"{value} ГБ"
+        elif update_type == "devices":
+            return f"{value} устройств"
+        elif update_type == "servers":
+            if isinstance(value, list):
+                return f"{len(value)} серверов"
+            return str(value)
+        return str(value)
 

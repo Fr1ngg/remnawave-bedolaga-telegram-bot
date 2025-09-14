@@ -626,7 +626,7 @@ async def apply_countries_changes(
 ):
     from app.utils.pricing_utils import get_remaining_months, calculate_prorated_price
     
-    logger.info(f"🔍 Применение изменений стран")
+    logger.info(f"🔧 Применение изменений стран")
     
     data = await state.get_data()
     texts = get_texts(db_user.language)
@@ -642,7 +642,7 @@ async def apply_countries_changes(
         await callback.answer("⚠️ Изменения не обнаружены", show_alert=True)
         return
     
-    logger.info(f"🔍 Добавлено: {added}, Удалено: {removed}")
+    logger.info(f"🔧 Добавлено: {added}, Удалено: {removed}")
     
     countries = await _get_available_countries()
     
@@ -674,7 +674,7 @@ async def apply_countries_changes(
     
     if total_cost > 0 and db_user.balance_kopeks < total_cost:
         await callback.answer(
-            f"⚠ Недостаточно средств!\nТребуется: {texts.format_price(total_cost)} (за {charged_months} мес)\nУ вас: {texts.format_price(db_user.balance_kopeks)}", 
+            f"⚠️ Недостаточно средств!\nТребуется: {texts.format_price(total_cost)} (за {charged_months} мес)\nУ вас: {texts.format_price(db_user.balance_kopeks)}", 
             show_alert=True
         )
         return
@@ -686,7 +686,7 @@ async def apply_countries_changes(
                 f"Добавление стран: {', '.join(added_names)} на {charged_months} мес"
             )
             if not success:
-                await callback.answer("⚠ Ошибка списания средств", show_alert=True)
+                await callback.answer("⚠️ Ошибка списания средств", show_alert=True)
                 return
             
             await create_transaction(
@@ -718,6 +718,15 @@ async def apply_countries_changes(
         
         await db.refresh(subscription)
         
+        try:
+            from app.services.admin_notification_service import AdminNotificationService
+            notification_service = AdminNotificationService(callback.bot)
+            await notification_service.send_subscription_update_notification(
+                db, db_user, subscription, "servers", current_countries, selected_countries, total_cost
+            )
+        except Exception as e:
+            logger.error(f"Ошибка отправки уведомления об изменении серверов: {e}")
+        
         success_text = "✅ <b>Страны успешно обновлены!</b>\n\n"
         
         if added_names:
@@ -732,7 +741,7 @@ async def apply_countries_changes(
             success_text += "\n".join(f"• {name}" for name in removed_names)
             success_text += "\nℹ️ Повторное подключение будет платным\n"
         
-        success_text += f"\n🌍 <b>Активных стран:</b> {len(selected_countries)}"
+        success_text += f"\n🌐 <b>Активных стран:</b> {len(selected_countries)}"
         
         await callback.message.edit_text(
             success_text,
@@ -744,7 +753,7 @@ async def apply_countries_changes(
         logger.info(f"✅ Пользователь {db_user.telegram_id} обновил страны. Добавлено: {len(added)}, удалено: {len(removed)}, заплатил: {total_cost/100}₽")
         
     except Exception as e:
-        logger.error(f"⚠ Ошибка применения изменений: {e}")
+        logger.error(f"⚠️ Ошибка применения изменений: {e}")
         await callback.message.edit_text(
             texts.ERROR,
             reply_markup=get_back_keyboard(db_user.language)
@@ -929,6 +938,15 @@ async def execute_change_devices(
         
         await db.refresh(db_user)
         await db.refresh(subscription)
+        
+        try:
+            from app.services.admin_notification_service import AdminNotificationService
+            notification_service = AdminNotificationService(callback.bot)
+            await notification_service.send_subscription_update_notification(
+                db, db_user, subscription, "devices", current_devices, new_devices_count, price
+            )
+        except Exception as e:
+            logger.error(f"Ошибка отправки уведомления об изменении устройств: {e}")
         
         if new_devices_count > current_devices:
             success_text = f"✅ Количество устройств увеличено!\n\n"
@@ -3454,6 +3472,15 @@ async def execute_switch_traffic(
         
         await db.refresh(db_user)
         await db.refresh(subscription)
+        
+        try:
+            from app.services.admin_notification_service import AdminNotificationService
+            notification_service = AdminNotificationService(callback.bot)
+            await notification_service.send_subscription_update_notification(
+                db, db_user, subscription, "traffic", current_traffic, new_traffic_gb, price_difference
+            )
+        except Exception as e:
+            logger.error(f"Ошибка отправки уведомления об изменении трафика: {e}")
         
         if new_traffic_gb > current_traffic:
             success_text = f"✅ Лимит трафика увеличен!\n\n"

@@ -43,6 +43,7 @@ class AdminStates(StatesGroup):
     setting_promocode_expiry = State()
     
     waiting_for_broadcast_message = State()
+    waiting_for_broadcast_media = State()
     confirming_broadcast = State()
     
     editing_squad_price = State()

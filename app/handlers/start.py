@@ -147,7 +147,8 @@ async def cmd_start(message: types.Message, state: FSMContext, db: AsyncSession,
                 has_had_paid_subscription=user.has_had_paid_subscription,
                 has_active_subscription=has_active_subscription,
                 subscription_is_active=subscription_is_active,
-                balance_kopeks=user.balance_kopeks 
+                balance_kopeks=user.balance_kopeks,
+                subscription=user.subscription
             ),
             parse_mode="HTML"
         )
@@ -448,7 +449,8 @@ async def complete_registration_from_callback(
                     has_had_paid_subscription=existing_user.has_had_paid_subscription,
                     has_active_subscription=has_active_subscription,
                     subscription_is_active=subscription_is_active,
-                    balance_kopeks=existing_user.balance_kopeks
+                    balance_kopeks=existing_user.balance_kopeks,
+                    subscription=existing_user.subscription
                 ),
                 parse_mode="HTML"
             )
@@ -563,7 +565,8 @@ async def complete_registration_from_callback(
                     has_had_paid_subscription=user.has_had_paid_subscription,
                     has_active_subscription=has_active_subscription,
                     subscription_is_active=subscription_is_active,
-                    balance_kopeks=user.balance_kopeks
+                    balance_kopeks=user.balance_kopeks,
+                    subscription=user.subscription
                 ),
                 parse_mode="HTML"
             )
@@ -611,7 +614,8 @@ async def complete_registration(
                     has_had_paid_subscription=existing_user.has_had_paid_subscription,
                     has_active_subscription=has_active_subscription,
                     subscription_is_active=subscription_is_active,
-                    balance_kopeks=existing_user.balance_kopeks
+                    balance_kopeks=existing_user.balance_kopeks,
+                    subscription=existing_user.subscription
                 ),
                 parse_mode="HTML"
             )
@@ -726,7 +730,8 @@ async def complete_registration(
                     has_had_paid_subscription=user.has_had_paid_subscription,
                     has_active_subscription=has_active_subscription,
                     subscription_is_active=subscription_is_active,
-                    balance_kopeks=user.balance_kopeks
+                    balance_kopeks=user.balance_kopeks,
+                    subscription=user.subscription
                 ),
                 parse_mode="HTML"
             )

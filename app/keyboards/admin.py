@@ -8,20 +8,12 @@ def get_admin_main_keyboard(language: str = "ru") -> InlineKeyboardMarkup:
     texts = get_texts(language)
     
     return InlineKeyboardMarkup(inline_keyboard=[
-        [
-            InlineKeyboardButton(text="👥 Юзеры и Подписки", callback_data="admin_submenu_users"),
-            InlineKeyboardButton(text="💰 Промокоды и статистика", callback_data="admin_submenu_promo")
-        ],
-        [
-            InlineKeyboardButton(text="📨 Коммуникации", callback_data="admin_submenu_communications"),
-            InlineKeyboardButton(text="⚙️ Настройки", callback_data="admin_submenu_settings")
-        ],
-        [
-            InlineKeyboardButton(text="🛠️ Системные функции", callback_data="admin_submenu_system")
-        ],
-        [
-            InlineKeyboardButton(text=texts.BACK, callback_data="back_to_menu")
-        ]
+        [InlineKeyboardButton(text="👥 Юзеры/Подписки", callback_data="admin_submenu_users")],
+        [InlineKeyboardButton(text="💰 Промокоды/Статистика", callback_data="admin_submenu_promo")],
+        [InlineKeyboardButton(text="📨 Сообщения", callback_data="admin_submenu_communications")],
+        [InlineKeyboardButton(text="⚙️ Настройки", callback_data="admin_submenu_settings")],
+        [InlineKeyboardButton(text="🛠️ Система", callback_data="admin_submenu_system")],
+        [InlineKeyboardButton(text=texts.BACK, callback_data="back_to_menu")]
     ])
 
 
@@ -548,7 +540,7 @@ def get_monitoring_keyboard() -> InlineKeyboardMarkup:
         ],
         [
             InlineKeyboardButton(text="🔄 Принудительная проверка", callback_data="admin_mon_force_check"),
-            InlineKeyboardButton(text="📝 Логи", callback_data="admin_mon_logs")
+            InlineKeyboardButton(text="📋 Логи", callback_data="admin_mon_logs")
         ],
         [
             InlineKeyboardButton(text="🧪 Тест уведомлений", callback_data="admin_mon_test_notifications"),
@@ -566,6 +558,170 @@ def get_monitoring_logs_keyboard() -> InlineKeyboardMarkup:
             InlineKeyboardButton(text="🗑️ Очистить старые", callback_data="admin_mon_clear_logs")
         ],
         [
+            InlineKeyboardButton(text="⬅️ Назад", callback_data="admin_monitoring")
+        ]
+    ])
+
+def get_monitoring_logs_navigation_keyboard(
+    current_page: int, 
+    total_pages: int,
+    has_logs: bool = True
+) -> InlineKeyboardMarkup:
+    keyboard = []
+    
+    if total_pages > 1:
+        nav_row = []
+        
+        if current_page > 1:
+            nav_row.append(InlineKeyboardButton(
+                text="⬅️", 
+                callback_data=f"admin_mon_logs_page_{current_page - 1}"
+            ))
+        
+        nav_row.append(InlineKeyboardButton(
+            text=f"{current_page}/{total_pages}", 
+            callback_data="current_page_info"
+        ))
+        
+        if current_page < total_pages:
+            nav_row.append(InlineKeyboardButton(
+                text="➡️", 
+                callback_data=f"admin_mon_logs_page_{current_page + 1}"
+            ))
+        
+        keyboard.append(nav_row)
+    
+    management_row = []
+    
+    if has_logs:
+        management_row.extend([
+            InlineKeyboardButton(text="🔄 Обновить", callback_data="admin_mon_logs"),
+            InlineKeyboardButton(text="🗑️ Очистить", callback_data="admin_mon_clear_logs")
+        ])
+    else:
+        management_row.append(
+            InlineKeyboardButton(text="🔄 Обновить", callback_data="admin_mon_logs")
+        )
+    
+    keyboard.append(management_row)
+    
+    keyboard.append([
+        InlineKeyboardButton(text="⬅️ Назад к мониторингу", callback_data="admin_monitoring")
+    ])
+    
+    return InlineKeyboardMarkup(inline_keyboard=keyboard)
+
+def get_log_detail_keyboard(log_id: int, current_page: int = 1) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(
+                text="🗑️ Удалить этот лог", 
+                callback_data=f"admin_mon_delete_log_{log_id}"
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                text="⬅️ К списку логов", 
+                callback_data=f"admin_mon_logs_page_{current_page}"
+            )
+        ]
+    ])
+
+
+def get_monitoring_clear_confirm_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(text="✅ Да, очистить", callback_data="admin_mon_clear_logs_confirm"),
+            InlineKeyboardButton(text="❌ Отмена", callback_data="admin_mon_logs")
+        ],
+        [
+            InlineKeyboardButton(text="🗑️ Очистить ВСЕ логи", callback_data="admin_mon_clear_all_logs")
+        ]
+    ])
+
+def get_monitoring_status_keyboard(
+    is_running: bool,
+    last_check_ago_minutes: int = 0
+) -> InlineKeyboardMarkup:
+    keyboard = []
+    
+    control_row = []
+    if is_running:
+        control_row.extend([
+            InlineKeyboardButton(text="⏹️ Остановить", callback_data="admin_mon_stop"),
+            InlineKeyboardButton(text="🔄 Перезапустить", callback_data="admin_mon_restart")
+        ])
+    else:
+        control_row.append(
+            InlineKeyboardButton(text="▶️ Запустить", callback_data="admin_mon_start")
+        )
+    
+    keyboard.append(control_row)
+    
+    monitoring_row = []
+    
+    if not is_running or last_check_ago_minutes > 10:
+        monitoring_row.append(
+            InlineKeyboardButton(
+                text="⚡ Срочная проверка", 
+                callback_data="admin_mon_force_check"
+            )
+        )
+    else:
+        monitoring_row.append(
+            InlineKeyboardButton(
+                text="🔄 Проверить сейчас", 
+                callback_data="admin_mon_force_check"
+            )
+        )
+    
+    keyboard.append(monitoring_row)
+    
+    info_row = [
+        InlineKeyboardButton(text="📋 Логи", callback_data="admin_mon_logs"),
+        InlineKeyboardButton(text="📊 Статистика", callback_data="admin_mon_statistics")
+    ]
+    keyboard.append(info_row)
+    
+    test_row = [
+        InlineKeyboardButton(text="🧪 Тест уведомлений", callback_data="admin_mon_test_notifications")
+    ]
+    keyboard.append(test_row)
+    
+    keyboard.append([
+        InlineKeyboardButton(text="⬅️ Назад", callback_data="admin_submenu_settings")
+    ])
+    
+    return InlineKeyboardMarkup(inline_keyboard=keyboard)
+
+def get_monitoring_settings_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(text="⏱️ Интервал проверки", callback_data="admin_mon_set_interval"),
+            InlineKeyboardButton(text="🔔 Уведомления", callback_data="admin_mon_toggle_notifications")
+        ],
+        [
+            InlineKeyboardButton(text="💳 Настройки автооплаты", callback_data="admin_mon_autopay_settings"),
+            InlineKeyboardButton(text="🧹 Автоочистка логов", callback_data="admin_mon_auto_cleanup")
+        ],
+        [
+            InlineKeyboardButton(text="⬅️ К мониторингу", callback_data="admin_monitoring")
+        ]
+    ])
+
+
+def get_log_type_filter_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(text="✅ Успешные", callback_data="admin_mon_logs_filter_success"),
+            InlineKeyboardButton(text="❌ Ошибки", callback_data="admin_mon_logs_filter_error")
+        ],
+        [
+            InlineKeyboardButton(text="🔄 Циклы мониторинга", callback_data="admin_mon_logs_filter_cycle"),
+            InlineKeyboardButton(text="💳 Автооплаты", callback_data="admin_mon_logs_filter_autopay")
+        ],
+        [
+            InlineKeyboardButton(text="📋 Все логи", callback_data="admin_mon_logs"),
             InlineKeyboardButton(text="⬅️ Назад", callback_data="admin_monitoring")
         ]
     ])
@@ -773,3 +929,61 @@ def get_message_buttons_selector_keyboard(language: str = "ru") -> InlineKeyboar
             InlineKeyboardButton(text="❌ Отмена", callback_data="admin_messages")
         ]
     ])
+
+def get_broadcast_media_keyboard(language: str = "ru") -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(text="📷 Добавить фото", callback_data="add_media_photo"),
+            InlineKeyboardButton(text="🎥 Добавить видео", callback_data="add_media_video")
+        ],
+        [
+            InlineKeyboardButton(text="📄 Добавить документ", callback_data="add_media_document"),
+            InlineKeyboardButton(text="⏭️ Пропустить медиа", callback_data="skip_media")
+        ],
+        [
+            InlineKeyboardButton(text="❌ Отмена", callback_data="admin_messages")
+        ]
+    ])
+
+def get_media_confirm_keyboard(language: str = "ru") -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(text="✅ Использовать это медиа", callback_data="confirm_media"),
+            InlineKeyboardButton(text="🔄 Заменить медиа", callback_data="replace_media")
+        ],
+        [
+            InlineKeyboardButton(text="⏭️ Без медиа", callback_data="skip_media"),
+            InlineKeyboardButton(text="❌ Отмена", callback_data="admin_messages")
+        ]
+    ])
+
+def get_updated_message_buttons_selector_keyboard_with_media(selected_buttons: list, has_media: bool = False, language: str = "ru") -> InlineKeyboardMarkup:
+    balance_text = "✅ Пополнить баланс" if "balance" in selected_buttons else "💰 Пополнить баланс"
+    referrals_text = "✅ Рефералы" if "referrals" in selected_buttons else "🤝 Рефералы"
+    promocode_text = "✅ Промокод" if "promocode" in selected_buttons else "🎫 Промокод"
+    
+    keyboard = [
+        [
+            InlineKeyboardButton(text=balance_text, callback_data="btn_balance"),
+            InlineKeyboardButton(text=referrals_text, callback_data="btn_referrals")
+        ],
+        [
+            InlineKeyboardButton(text=promocode_text, callback_data="btn_promocode")
+        ]
+    ]
+    
+    if has_media:
+        keyboard.append([
+            InlineKeyboardButton(text="🖼️ Изменить медиа", callback_data="change_media")
+        ])
+    
+    keyboard.extend([
+        [
+            InlineKeyboardButton(text="✅ Продолжить", callback_data="buttons_confirm")
+        ],
+        [
+            InlineKeyboardButton(text="❌ Отмена", callback_data="admin_messages")
+        ]
+    ])
+    
+    return InlineKeyboardMarkup(inline_keyboard=keyboard)

@@ -361,6 +361,49 @@ async def create_welcome_texts_table():
         logger.error(f"Ошибка создания таблицы welcome_texts: {e}")
         return False
 
+async def add_media_fields_to_broadcast_history():
+    logger.info("=== ДОБАВЛЕНИЕ ПОЛЕЙ МЕДИА В BROADCAST_HISTORY ===")
+    
+    media_fields = {
+        'has_media': 'BOOLEAN DEFAULT FALSE',
+        'media_type': 'VARCHAR(20)',
+        'media_file_id': 'VARCHAR(255)', 
+        'media_caption': 'TEXT'
+    }
+    
+    try:
+        async with engine.begin() as conn:
+            db_type = await get_database_type()
+            
+            for field_name, field_type in media_fields.items():
+                field_exists = await check_column_exists('broadcast_history', field_name)
+                
+                if not field_exists:
+                    logger.info(f"Добавление поля {field_name} в таблицу broadcast_history")
+                    
+                    if db_type == 'sqlite':
+                        if 'BOOLEAN' in field_type:
+                            field_type = field_type.replace('BOOLEAN DEFAULT FALSE', 'BOOLEAN DEFAULT 0')
+                    elif db_type == 'postgresql':
+                        if 'BOOLEAN' in field_type:
+                            field_type = field_type.replace('BOOLEAN DEFAULT FALSE', 'BOOLEAN DEFAULT FALSE')
+                    elif db_type == 'mysql':
+                        if 'BOOLEAN' in field_type:
+                            field_type = field_type.replace('BOOLEAN DEFAULT FALSE', 'BOOLEAN DEFAULT FALSE')
+                    
+                    alter_sql = f"ALTER TABLE broadcast_history ADD COLUMN {field_name} {field_type}"
+                    await conn.execute(text(alter_sql))
+                    logger.info(f"✅ Поле {field_name} успешно добавлено")
+                else:
+                    logger.info(f"Поле {field_name} уже существует в broadcast_history")
+            
+            logger.info("✅ Все поля медиа в broadcast_history готовы")
+            return True
+            
+    except Exception as e:
+        logger.error(f"Ошибка при добавлении полей медиа в broadcast_history: {e}")
+        return False
+
 async def fix_foreign_keys_for_user_deletion():
     try:
         async with engine.begin() as conn:
@@ -639,6 +682,13 @@ async def run_universal_migration():
         else:
             logger.warning("⚠️ Проблемы с таблицей welcome_texts")
         
+        logger.info("=== ДОБАВЛЕНИЕ МЕДИА ПОЛЕЙ В BROADCAST_HISTORY ===")
+        media_fields_added = await add_media_fields_to_broadcast_history()
+        if media_fields_added:
+            logger.info("✅ Медиа поля в broadcast_history готовы")
+        else:
+            logger.warning("⚠️ Проблемы с добавлением медиа полей")
+        
         logger.info("=== ОБНОВЛЕНИЕ ВНЕШНИХ КЛЮЧЕЙ ===")
         fk_updated = await fix_foreign_keys_for_user_deletion()
         if fk_updated:
@@ -689,6 +739,7 @@ async def run_universal_migration():
                 logger.info("✅ CryptoBot таблица готова")
                 logger.info("✅ Таблица конверсий подписок создана")
                 logger.info("✅ Таблица welcome_texts с полем is_enabled готова")
+                logger.info("✅ Медиа поля в broadcast_history добавлены")
                 logger.info("✅ Дубликаты подписок исправлены")
                 return True
                 
@@ -706,6 +757,7 @@ async def check_migration_status():
             "user_messages_table": False,
             "welcome_texts_table": False,
             "welcome_texts_is_enabled_column": False,  
+            "broadcast_history_media_fields": False, 
             "subscription_duplicates": False,
             "subscription_conversions_table": False
         }
@@ -718,6 +770,14 @@ async def check_migration_status():
         status["subscription_conversions_table"] = await check_table_exists('subscription_conversions')
         
         status["welcome_texts_is_enabled_column"] = await check_column_exists('welcome_texts', 'is_enabled')
+        
+        media_fields_exist = (
+            await check_column_exists('broadcast_history', 'has_media') and
+            await check_column_exists('broadcast_history', 'media_type') and
+            await check_column_exists('broadcast_history', 'media_file_id') and
+            await check_column_exists('broadcast_history', 'media_caption')
+        )
+        status["broadcast_history_media_fields"] = media_fields_exist
         
         async with engine.begin() as conn:
             duplicates_check = await conn.execute(text("""
@@ -737,6 +797,7 @@ async def check_migration_status():
             "user_messages_table": "Таблица пользовательских сообщений",
             "welcome_texts_table": "Таблица приветственных текстов",
             "welcome_texts_is_enabled_column": "Поле is_enabled в welcome_texts",
+            "broadcast_history_media_fields": "Медиа поля в broadcast_history", 
             "subscription_conversions_table": "Таблица конверсий подписок",
             "subscription_duplicates": "Отсутствие дубликатов подписок"
         }
@@ -755,12 +816,14 @@ async def check_migration_status():
                     conversions_count = await conn.execute(text("SELECT COUNT(*) FROM subscription_conversions"))
                     users_count = await conn.execute(text("SELECT COUNT(*) FROM users"))
                     welcome_texts_count = await conn.execute(text("SELECT COUNT(*) FROM welcome_texts"))
+                    broadcasts_count = await conn.execute(text("SELECT COUNT(*) FROM broadcast_history"))
                     
                     conv_count = conversions_count.fetchone()[0]
                     usr_count = users_count.fetchone()[0]
                     welcome_count = welcome_texts_count.fetchone()[0]
+                    broadcast_count = broadcasts_count.fetchone()[0]
                     
-                    logger.info(f"📊 Статистика: {usr_count} пользователей, {conv_count} конверсий, {welcome_count} приветственных текстов")
+                    logger.info(f"📊 Статистика: {usr_count} пользователей, {conv_count} конверсий, {welcome_count} приветственных текстов, {broadcast_count} рассылок")
             except Exception as stats_error:
                 logger.debug(f"Не удалось получить дополнительную статистику: {stats_error}")
                 

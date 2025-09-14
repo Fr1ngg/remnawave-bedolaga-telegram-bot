@@ -13,7 +13,8 @@ from app.database.models import User, UserStatus, Subscription, BroadcastHistory
 from app.keyboards.admin import (
     get_admin_messages_keyboard, get_broadcast_target_keyboard,
     get_custom_criteria_keyboard, get_broadcast_history_keyboard,
-    get_admin_pagination_keyboard
+    get_admin_pagination_keyboard, get_broadcast_media_keyboard,
+    get_media_confirm_keyboard, get_updated_message_buttons_selector_keyboard_with_media
 )
 from app.localization.texts import get_texts
 from app.database.crud.user import get_users_list
@@ -327,7 +328,187 @@ async def process_broadcast_message(
     
     await state.update_data(broadcast_message=broadcast_text)
     
-    await show_button_selector(message, db_user, state)
+    await message.answer(
+        "🖼️ <b>Добавление медиафайла</b>\n\n"
+        "Вы можете добавить к сообщению фото, видео или документ.\n"
+        "Или пропустить этот шаг.\n\n"
+        "Выберите тип медиа:",
+        reply_markup=get_broadcast_media_keyboard(db_user.language),
+        parse_mode="HTML"
+    )
+
+@admin_required
+@error_handler
+async def handle_media_selection(
+    callback: types.CallbackQuery,
+    db_user: User,
+    state: FSMContext
+):
+    media_type = callback.data.replace('add_media_', '')
+    
+    if media_type == "skip":
+        await state.update_data(has_media=False)
+        await show_button_selector_callback(callback, db_user, state)
+        return
+    
+    media_instructions = {
+        "photo": "📷 Отправьте фотографию для рассылки:",
+        "video": "🎥 Отправьте видео для рассылки:",
+        "document": "📄 Отправьте документ для рассылки:"
+    }
+    
+    await state.update_data(
+        media_type=media_type,
+        waiting_for_media=True
+    )
+    
+    await callback.message.edit_text(
+        f"{media_instructions.get(media_type, 'Отправьте медиафайл:')}\n\n"
+        f"<i>Размер файла не должен превышать 50 МБ</i>",
+        reply_markup=types.InlineKeyboardMarkup(inline_keyboard=[
+            [types.InlineKeyboardButton(text="❌ Отмена", callback_data="admin_messages")]
+        ]),
+        parse_mode="HTML"
+    )
+    
+    await state.set_state(AdminStates.waiting_for_broadcast_media)
+    await callback.answer()
+
+@admin_required
+@error_handler
+async def process_broadcast_media(
+    message: types.Message,
+    db_user: User,
+    state: FSMContext
+):
+    data = await state.get_data()
+    expected_type = data.get('media_type')
+    
+    media_file_id = None
+    media_type = None
+    
+    if message.photo and expected_type == "photo":
+        media_file_id = message.photo[-1].file_id
+        media_type = "photo"
+    elif message.video and expected_type == "video":
+        media_file_id = message.video.file_id
+        media_type = "video"
+    elif message.document and expected_type == "document":
+        media_file_id = message.document.file_id
+        media_type = "document"
+    else:
+        await message.answer(
+            f"❌ Пожалуйста, отправьте {expected_type} как указано в инструкции."
+        )
+        return
+    
+    await state.update_data(
+        has_media=True,
+        media_file_id=media_file_id,
+        media_type=media_type,
+        media_caption=message.caption
+    )
+    
+    await show_media_preview(message, db_user, state)
+
+async def show_media_preview(
+    message: types.Message,
+    db_user: User,
+    state: FSMContext
+):
+    data = await state.get_data()
+    media_type = data.get('media_type')
+    
+    preview_text = f"🖼️ <b>Медиафайл добавлен</b>\n\n" \
+                   f"📎 <b>Тип:</b> {media_type}\n" \
+                   f"✅ Файл сохранен и готов к отправке\n\n" \
+                   f"Что делать дальше?"
+    
+    await message.answer(
+        preview_text,
+        reply_markup=get_media_confirm_keyboard(db_user.language),
+        parse_mode="HTML"
+    )
+
+@admin_required
+@error_handler
+async def handle_media_confirmation(
+    callback: types.CallbackQuery,
+    db_user: User,
+    state: FSMContext
+):
+    action = callback.data
+    
+    if action == "confirm_media":
+        await show_button_selector_callback(callback, db_user, state)
+    elif action == "replace_media":
+        data = await state.get_data()
+        media_type = data.get('media_type', 'photo')
+        await handle_media_selection(callback, db_user, state)
+    elif action == "skip_media":
+        await state.update_data(
+            has_media=False,
+            media_file_id=None,
+            media_type=None,
+            media_caption=None
+        )
+        await show_button_selector_callback(callback, db_user, state)
+
+@admin_required
+@error_handler
+async def handle_change_media(
+    callback: types.CallbackQuery,
+    db_user: User,
+    state: FSMContext
+):
+    await callback.message.edit_text(
+        "🖼️ <b>Изменение медиафайла</b>\n\n"
+        "Выберите новый тип медиа:",
+        reply_markup=get_broadcast_media_keyboard(db_user.language),
+        parse_mode="HTML"
+    )
+    await callback.answer()
+
+@admin_required
+@error_handler
+async def show_button_selector_callback(
+    callback: types.CallbackQuery,
+    db_user: User,
+    state: FSMContext
+):
+    data = await state.get_data()
+    has_media = data.get('has_media', False)
+    selected_buttons = data.get('selected_buttons', [])
+    
+    media_info = ""
+    if has_media:
+        media_type = data.get('media_type', 'файл')
+        media_info = f"\n🖼️ <b>Медиафайл:</b> {media_type} добавлен"
+    
+    text = f"""
+📘 <b>Выбор дополнительных кнопок</b>
+
+Выберите кнопки, которые будут добавлены к сообщению рассылки:
+
+💰 <b>Пополнить баланс</b> - откроет методы пополнения
+🤝 <b>Рефералы</b> - откроет реферальную программу
+🎫 <b>Промокод</b> - откроет форму ввода промокода
+
+Кнопка "🏠 На главную" добавляется автоматически внизу.{media_info}
+
+Выберите нужные кнопки и нажмите "Продолжить":
+"""
+    
+    keyboard = get_updated_message_buttons_selector_keyboard_with_media(
+        selected_buttons, has_media, db_user.language
+    )
+    
+    await callback.message.edit_text(
+        text,
+        reply_markup=keyboard,
+        parse_mode="HTML"
+    )
+    await callback.answer()
 
 
 @admin_required
@@ -400,9 +581,20 @@ async def confirm_button_selection(
     target = data.get('broadcast_target')
     message_text = data.get('broadcast_message')
     selected_buttons = data.get('selected_buttons', [])
+    has_media = data.get('has_media', False)
+    media_type = data.get('media_type')
     
     user_count = await get_target_users_count(db, target) if not target.startswith('custom_') else await get_custom_users_count(db, target.replace('custom_', ''))
     target_display = get_target_display_name(target)
+    
+    media_info = ""
+    if has_media:
+        media_type_names = {
+            "photo": "Фотография",
+            "video": "Видео",
+            "document": "Документ"
+        }
+        media_info = f"\n🖼️ <b>Медиафайл:</b> {media_type_names.get(media_type, media_type)}"
     
     buttons_info = ""
     if selected_buttons:
@@ -424,7 +616,7 @@ async def confirm_button_selection(
 👥 <b>Получателей:</b> {user_count}
 
 📝 <b>Сообщение:</b>
-{message_text}
+{message_text}{media_info}
 
 {buttons_info}
 
@@ -435,11 +627,17 @@ async def confirm_button_selection(
         [
             types.InlineKeyboardButton(text="✅ Отправить", callback_data="admin_confirm_broadcast"),
             types.InlineKeyboardButton(text="📘 Изменить кнопки", callback_data="edit_buttons")
-        ],
-        [
-            types.InlineKeyboardButton(text="❌ Отмена", callback_data="admin_messages")
         ]
     ]
+    
+    if has_media:
+        keyboard.append([
+            types.InlineKeyboardButton(text="🖼️ Изменить медиа", callback_data="change_media")
+        ])
+    
+    keyboard.append([
+        types.InlineKeyboardButton(text="❌ Отмена", callback_data="admin_messages")
+    ])
     
     await callback.message.edit_text(
         preview_text,
@@ -495,6 +693,10 @@ async def confirm_broadcast(
     target = data.get('broadcast_target')
     message_text = data.get('broadcast_message')
     selected_buttons = data.get('selected_buttons', [])
+    has_media = data.get('has_media', False)
+    media_type = data.get('media_type')
+    media_file_id = data.get('media_file_id')
+    media_caption = data.get('media_caption')
     
     await callback.message.edit_text(
         "📨 Начинаю рассылку...\n\n"
@@ -511,6 +713,10 @@ async def confirm_broadcast(
     broadcast_history = BroadcastHistory(
         target_type=target,
         message_text=message_text,
+        has_media=has_media,
+        media_type=media_type,
+        media_file_id=media_file_id,
+        media_caption=media_caption,
         total_count=len(users),
         sent_count=0,
         failed_count=0,
@@ -529,12 +735,38 @@ async def confirm_broadcast(
     
     for user in users:
         try:
-            await callback.bot.send_message(
-                chat_id=user.telegram_id,
-                text=message_text,
-                parse_mode="HTML",
-                reply_markup=broadcast_keyboard
-            )
+            if has_media and media_file_id:
+                if media_type == "photo":
+                    await callback.bot.send_photo(
+                        chat_id=user.telegram_id,
+                        photo=media_file_id,
+                        caption=message_text,
+                        parse_mode="HTML",
+                        reply_markup=broadcast_keyboard
+                    )
+                elif media_type == "video":
+                    await callback.bot.send_video(
+                        chat_id=user.telegram_id,
+                        video=media_file_id,
+                        caption=message_text,
+                        parse_mode="HTML",
+                        reply_markup=broadcast_keyboard
+                    )
+                elif media_type == "document":
+                    await callback.bot.send_document(
+                        chat_id=user.telegram_id,
+                        document=media_file_id,
+                        caption=message_text,
+                        parse_mode="HTML",
+                        reply_markup=broadcast_keyboard
+                    )
+            else:
+                await callback.bot.send_message(
+                    chat_id=user.telegram_id,
+                    text=message_text,
+                    parse_mode="HTML",
+                    reply_markup=broadcast_keyboard
+                )
             sent_count += 1
             
             if sent_count % 20 == 0:
@@ -550,6 +782,10 @@ async def confirm_broadcast(
     broadcast_history.completed_at = datetime.utcnow()
     await db.commit()
     
+    media_info = ""
+    if has_media:
+        media_info = f"\n🖼️ <b>Медиафайл:</b> {media_type}"
+    
     result_text = f"""
 ✅ <b>Рассылка завершена!</b>
 
@@ -557,7 +793,7 @@ async def confirm_broadcast(
 - Отправлено: {sent_count}
 - Не доставлено: {failed_count}
 - Всего пользователей: {len(users)}
-- Успешность: {round(sent_count / len(users) * 100, 1) if users else 0}%
+- Успешность: {round(sent_count / len(users) * 100, 1) if users else 0}%{media_info}
 
 <b>Администратор:</b> {db_user.full_name}
 """
@@ -571,7 +807,7 @@ async def confirm_broadcast(
     )
     
     await state.clear()
-    logger.info(f"Рассылка выполнена админом {db_user.telegram_id}: {sent_count}/{len(users)}")
+    logger.info(f"Рассылка выполнена админом {db_user.telegram_id}: {sent_count}/{len(users)} (медиа: {has_media})")
 
 
 async def get_target_users_count(db: AsyncSession, target: str) -> int:
@@ -749,5 +985,8 @@ def register_handlers(dp: Dispatcher):
     dp.callback_query.register(toggle_button_selection, F.data.startswith("btn_"))
     dp.callback_query.register(confirm_button_selection, F.data == "buttons_confirm")
     dp.callback_query.register(show_button_selector_callback, F.data == "edit_buttons")
-    
+    dp.callback_query.register(handle_media_selection, F.data.startswith("add_media_") | F.data.in_(["skip_media"]))
+    dp.callback_query.register(handle_media_confirmation, F.data.in_(["confirm_media", "replace_media"]))
+    dp.callback_query.register(handle_change_media, F.data == "change_media")
     dp.message.register(process_broadcast_message, AdminStates.waiting_for_broadcast_message)
+    dp.message.register(process_broadcast_media, AdminStates.waiting_for_broadcast_media)

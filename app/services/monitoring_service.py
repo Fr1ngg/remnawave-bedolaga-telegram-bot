@@ -693,7 +693,9 @@ class MonitoringService:
         self,
         db: AsyncSession,
         limit: int = 50,
-        event_type: Optional[str] = None
+        event_type: Optional[str] = None,
+        page: int = 1,
+        per_page: int = 20
     ) -> List[Dict[str, Any]]:
         try:
             from sqlalchemy import select, desc
@@ -703,7 +705,11 @@ class MonitoringService:
             if event_type:
                 query = query.where(MonitoringLog.event_type == event_type)
             
-            query = query.limit(limit)
+            if page > 1 or per_page != 20:
+                offset = (page - 1) * per_page
+                query = query.offset(offset).limit(per_page)
+            else:
+                query = query.limit(limit)
             
             result = await db.execute(query)
             logs = result.scalars().all()
@@ -723,25 +729,54 @@ class MonitoringService:
         except Exception as e:
             logger.error(f"Ошибка получения логов мониторинга: {e}")
             return []
+
+    async def get_monitoring_logs_count(
+        self, 
+        db: AsyncSession,
+        event_type: Optional[str] = None
+    ) -> int:
+        try:
+            from sqlalchemy import select, func
+            
+            query = select(func.count(MonitoringLog.id))
+            
+            if event_type:
+                query = query.where(MonitoringLog.event_type == event_type)
+            
+            result = await db.execute(query)
+            count = result.scalar()
+            
+            return count or 0
+            
+        except Exception as e:
+            logger.error(f"Ошибка получения количества логов: {e}")
+            return 0
     
     async def cleanup_old_logs(self, db: AsyncSession, days: int = 30) -> int:
         try:
-            from sqlalchemy import delete
+            from sqlalchemy import delete, select
             
-            cutoff_date = datetime.utcnow() - timedelta(days=days)
-            
-            result = await db.execute(
-                delete(MonitoringLog).where(MonitoringLog.created_at < cutoff_date)
-            )
+            if days == 0:
+                result = await db.execute(delete(MonitoringLog))
+            else:
+                cutoff_date = datetime.utcnow() - timedelta(days=days)
+                result = await db.execute(
+                    delete(MonitoringLog).where(MonitoringLog.created_at < cutoff_date)
+                )
             
             deleted_count = result.rowcount
             await db.commit()
             
-            logger.info(f"Удалено {deleted_count} старых записей логов")
+            if days == 0:
+                logger.info(f"🗑️ Удалены все логи мониторинга ({deleted_count} записей)")
+            else:
+                logger.info(f"🗑️ Удалено {deleted_count} старых записей логов (старше {days} дней)")
+                
             return deleted_count
             
         except Exception as e:
             logger.error(f"Ошибка очистки логов: {e}")
+            await db.rollback()
             return 0
 
 

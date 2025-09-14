@@ -15,6 +15,7 @@ from app.database.crud.transaction import (
 )
 from app.database.crud.user import get_user_by_telegram_id, add_user_balance
 from app.external.tribute import TributeService as TributeAPI
+from app.localization.texts import get_texts
 
 logger = logging.getLogger(__name__)
 
@@ -218,7 +219,40 @@ class TributeService:
         
         try:
             amount_rubles = amount_kopeks / 100
-            
+
+            async for session in get_db():
+                user = await get_user_by_telegram_id(session, user_id)
+                break
+
+            user_language = user.language if user else "ru"
+            texts = get_texts(user_language)
+
+            has_active_subscription = (
+                user
+                and user.subscription
+                and not user.subscription.is_trial
+                and user.subscription.is_active
+            )
+
+            first_button = InlineKeyboardButton(
+                text=(
+                    texts.MENU_EXTEND_SUBSCRIPTION
+                    if has_active_subscription
+                    else texts.MENU_BUY_SUBSCRIPTION
+                ),
+                callback_data=(
+                    "subscription_extend" if has_active_subscription else "menu_buy"
+                )
+            )
+
+            keyboard = InlineKeyboardMarkup(
+                inline_keyboard=[
+                    [first_button],
+                    [InlineKeyboardButton(text="💰 Мой баланс", callback_data="menu_balance")],
+                    [InlineKeyboardButton(text="🏠 Главное меню", callback_data="back_to_menu")]
+                ]
+            )
+
             text = (
                 f"✅ **Платеж успешно получен!**\n\n"
                 f"💰 Сумма: {int(amount_rubles)} ₽\n"
@@ -226,12 +260,7 @@ class TributeService:
                 f"🎉 Средства зачислены на баланс!\n\n"
                 f"Спасибо за оплату! 🙏"
             )
-            
-            keyboard = InlineKeyboardMarkup(inline_keyboard=[
-                [InlineKeyboardButton(text="💰 Мой баланс", callback_data="menu_balance")],
-                [InlineKeyboardButton(text="🏠 Главное меню", callback_data="back_to_menu")]
-            ])
-            
+
             await self.bot.send_message(
                 user_id,
                 text,

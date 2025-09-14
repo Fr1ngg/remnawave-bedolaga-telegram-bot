@@ -39,7 +39,8 @@ def get_main_menu_keyboard(
     has_had_paid_subscription: bool = False,
     has_active_subscription: bool = False,
     subscription_is_active: bool = False,
-    balance_kopeks: int = 0
+    balance_kopeks: int = 0,
+    subscription=None
 ) -> InlineKeyboardMarkup:
     texts = get_texts(language)
     
@@ -51,15 +52,46 @@ def get_main_menu_keyboard(
     else:
         balance_button_text = f"💰 Баланс: {texts.format_price(balance_kopeks)}"
     
-    keyboard = [
-        [
-            InlineKeyboardButton(text=balance_button_text, callback_data="menu_balance")
-        ]
-    ]
-    
+    keyboard = []
+
     if has_active_subscription and subscription_is_active:
+        connect_mode = settings.CONNECT_BUTTON_MODE
+        if connect_mode == "miniapp_subscription":
+            keyboard.append([
+                InlineKeyboardButton(
+                    text="🔗 Подключиться",
+                    web_app=types.WebAppInfo(url=subscription.subscription_url)
+                )
+            ])
+        elif connect_mode == "miniapp_custom":
+            keyboard.append([
+                InlineKeyboardButton(
+                    text="🔗 Подключиться",
+                    web_app=types.WebAppInfo(url=settings.MINIAPP_CUSTOM_URL)
+                )
+            ])
+        elif connect_mode == "link":
+            keyboard.append([
+                InlineKeyboardButton(
+                    text="🔗 Подключиться",
+                    url=subscription.subscription_url
+                )
+            ])
+        else:
+            keyboard.append([
+                InlineKeyboardButton(
+                    text="🔗 Подключиться",
+                    callback_data="subscription_connect"
+                )
+            ])
+
         keyboard.append([
+            InlineKeyboardButton(text=balance_button_text, callback_data="menu_balance"),
             InlineKeyboardButton(text=texts.MENU_SUBSCRIPTION, callback_data="menu_subscription")
+        ])
+    else:
+        keyboard.append([
+            InlineKeyboardButton(text=balance_button_text, callback_data="menu_balance")
         ])
     
     show_trial = not has_had_paid_subscription and not has_active_subscription

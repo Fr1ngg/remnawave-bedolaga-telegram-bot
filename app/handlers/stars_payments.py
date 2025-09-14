@@ -1,11 +1,13 @@
 import logging
 from aiogram import Dispatcher, types, F
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database.models import User
 from app.services.payment_service import PaymentService
 from app.external.telegram_stars import TelegramStarsService
 from app.database.crud.user import get_user_by_telegram_id
+from app.localization.texts import get_texts
 
 logger = logging.getLogger(__name__)
 
@@ -88,16 +90,45 @@ async def handle_successful_payment(
         
         if success:
             rubles_amount = TelegramStarsService.calculate_rubles_from_stars(payment.total_amount)
-            
+
+            user_language = user.language if user else "ru"
+            texts = get_texts(user_language)
+            has_active_subscription = (
+                user
+                and user.subscription
+                and not user.subscription.is_trial
+                and user.subscription.is_active
+            )
+
+            first_button = InlineKeyboardButton(
+                text=(
+                    texts.MENU_EXTEND_SUBSCRIPTION
+                    if has_active_subscription
+                    else texts.MENU_BUY_SUBSCRIPTION
+                ),
+                callback_data=(
+                    "subscription_extend" if has_active_subscription else "menu_buy"
+                ),
+            )
+
+            keyboard = InlineKeyboardMarkup(
+                inline_keyboard=[
+                    [first_button],
+                    [InlineKeyboardButton(text="💰 Мой баланс", callback_data="menu_balance")],
+                    [InlineKeyboardButton(text="🏠 Главное меню", callback_data="back_to_menu")],
+                ]
+            )
+
             await message.answer(
                 f"🎉 <b>Платеж успешно обработан!</b>\n\n"
                 f"⭐ Потрачено звезд: {payment.total_amount}\n"
                 f"💰 Зачислено на баланс: {int(rubles_amount)} ₽\n"
                 f"🆔 ID транзакции: {payment.telegram_payment_charge_id[:8]}...\n\n"
                 f"Спасибо за пополнение! 🚀",
-                parse_mode="HTML"
+                parse_mode="HTML",
+                reply_markup=keyboard,
             )
-            
+
             logger.info(
                 f"✅ Stars платеж успешно обработан: "
                 f"пользователь {user.id}, {payment.total_amount} звезд → {int(rubles_amount)}₽"

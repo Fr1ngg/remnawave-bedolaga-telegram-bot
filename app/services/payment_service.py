@@ -4,7 +4,7 @@ import hmac
 from typing import Optional, Dict, Any
 from datetime import datetime
 from aiogram import Bot
-from aiogram.types import LabeledPrice
+from aiogram.types import LabeledPrice, InlineKeyboardMarkup, InlineKeyboardButton
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
@@ -12,10 +12,16 @@ from app.services.yookassa_service import YooKassaService
 from app.external.telegram_stars import TelegramStarsService
 from app.database.crud.yookassa import create_yookassa_payment, link_yookassa_payment_to_transaction
 from app.database.crud.transaction import create_transaction
-from app.database.crud.user import add_user_balance, get_user_by_id
+from app.database.crud.user import (
+    add_user_balance,
+    get_user_by_id,
+    get_user_by_telegram_id,
+)
 from app.database.models import TransactionType, PaymentMethod
 from app.external.cryptobot import CryptoBotService
 from app.utils.currency_converter import currency_converter
+from app.database.database import get_db
+from app.localization.texts import get_texts
 
 logger = logging.getLogger(__name__)
 
@@ -118,6 +124,34 @@ class PaymentService:
                 
                 if self.bot:
                     try:
+                        user_language = user.language if user else "ru"
+                        texts = get_texts(user_language)
+                        has_active_subscription = (
+                            user
+                            and user.subscription
+                            and not user.subscription.is_trial
+                            and user.subscription.is_active
+                        )
+
+                        first_button = InlineKeyboardButton(
+                            text=(
+                                texts.MENU_EXTEND_SUBSCRIPTION
+                                if has_active_subscription
+                                else texts.MENU_BUY_SUBSCRIPTION
+                            ),
+                            callback_data=(
+                                "subscription_extend" if has_active_subscription else "menu_buy"
+                            ),
+                        )
+
+                        keyboard = InlineKeyboardMarkup(
+                            inline_keyboard=[
+                                [first_button],
+                                [InlineKeyboardButton(text="💰 Мой баланс", callback_data="menu_balance")],
+                                [InlineKeyboardButton(text="🏠 Главное меню", callback_data="back_to_menu")],
+                            ]
+                        )
+
                         await self.bot.send_message(
                             user.telegram_id,
                             f"✅ <b>Пополнение успешно!</b>\n\n"
@@ -126,7 +160,8 @@ class PaymentService:
                             f"🦊 Способ: Telegram Stars\n"
                             f"🆔 Транзакция: {telegram_payment_charge_id[:8]}...\n\n"
                             f"Баланс пополнен автоматически!",
-                            parse_mode="HTML"
+                            parse_mode="HTML",
+                            reply_markup=keyboard,
                         )
                         logger.info(
                             f"✅ Отправлено уведомление пользователю {user.telegram_id} о пополнении на {int(rubles_amount)}₽"
@@ -309,6 +344,34 @@ class PaymentService:
                     
                     if self.bot:
                         try:
+                            user_language = user.language if user else "ru"
+                            texts = get_texts(user_language)
+                            has_active_subscription = (
+                                user
+                                and user.subscription
+                                and not user.subscription.is_trial
+                                and user.subscription.is_active
+                            )
+
+                            first_button = InlineKeyboardButton(
+                                text=(
+                                    texts.MENU_EXTEND_SUBSCRIPTION
+                                    if has_active_subscription
+                                    else texts.MENU_BUY_SUBSCRIPTION
+                                ),
+                                callback_data=(
+                                    "subscription_extend" if has_active_subscription else "menu_buy"
+                                ),
+                            )
+
+                            keyboard = InlineKeyboardMarkup(
+                                inline_keyboard=[
+                                    [first_button],
+                                    [InlineKeyboardButton(text="💰 Мой баланс", callback_data="menu_balance")],
+                                    [InlineKeyboardButton(text="🏠 Главное меню", callback_data="back_to_menu")],
+                                ]
+                            )
+
                             await self.bot.send_message(
                                 user.telegram_id,
                                 f"✅ <b>Пополнение успешно!</b>\n\n"
@@ -316,9 +379,12 @@ class PaymentService:
                                 f"🦊 Способ: Банковская карта\n"
                                 f"🆔 Транзакция: {yookassa_payment_id[:8]}...\n\n"
                                 f"Баланс пополнен автоматически!",
-                                parse_mode="HTML"
+                                parse_mode="HTML",
+                                reply_markup=keyboard,
                             )
-                            logger.info(f"✅ Отправлено уведомление пользователю {user.telegram_id} о пополнении на {updated_payment.amount_kopeks//100}₽")
+                            logger.info(
+                                f"✅ Отправлено уведомление пользователю {user.telegram_id} о пополнении на {updated_payment.amount_kopeks//100}₽"
+                            )
                         except Exception as e:
                             logger.error(f"Ошибка отправки уведомления о пополнении: {e}")
                 else:
@@ -382,20 +448,55 @@ class PaymentService:
         telegram_id: int,
         amount_kopeks: int
     ) -> None:
-        
+
         if not self.bot:
             return
-        
+
         try:
-            message = (f"✅ <b>Платеж успешно завершен!</b>\n\n"
-                      f"💰 Сумма: {settings.format_price(amount_kopeks)}\n"
-                      f"💳 Способ: Банковская карта (YooKassa)\n\n"
-                      f"Средства зачислены на ваш баланс!")
-            
+            async for db in get_db():
+                user = await get_user_by_telegram_id(db, telegram_id)
+                break
+
+            user_language = user.language if user else "ru"
+            texts = get_texts(user_language)
+            has_active_subscription = (
+                user
+                and user.subscription
+                and not user.subscription.is_trial
+                and user.subscription.is_active
+            )
+
+            first_button = InlineKeyboardButton(
+                text=(
+                    texts.MENU_EXTEND_SUBSCRIPTION
+                    if has_active_subscription
+                    else texts.MENU_BUY_SUBSCRIPTION
+                ),
+                callback_data=(
+                    "subscription_extend" if has_active_subscription else "menu_buy"
+                ),
+            )
+
+            keyboard = InlineKeyboardMarkup(
+                inline_keyboard=[
+                    [first_button],
+                    [InlineKeyboardButton(text="💰 Мой баланс", callback_data="menu_balance")],
+                    [InlineKeyboardButton(text="🏠 Главное меню", callback_data="back_to_menu")],
+                ]
+            )
+
+            message = (
+                f"✅ <b>Платеж успешно завершен!</b>\n\n"
+                f"💰 Сумма: {settings.format_price(amount_kopeks)}\n"
+                f"💳 Способ: Банковская карта (YooKassa)\n\n"
+                f"Средства зачислены на ваш баланс!"
+            )
+
             await self.bot.send_message(
                 chat_id=telegram_id,
                 text=message,
-                parse_mode="HTML"
+                parse_mode="HTML",
+                reply_markup=keyboard,
             )
         except Exception as e:
             logger.error(f"Ошибка отправки уведомления пользователю {telegram_id}: {e}")
@@ -641,6 +742,34 @@ class PaymentService:
                     
                     if self.bot:
                         try:
+                            user_language = user.language if user else "ru"
+                            texts = get_texts(user_language)
+                            has_active_subscription = (
+                                user
+                                and user.subscription
+                                and not user.subscription.is_trial
+                                and user.subscription.is_active
+                            )
+
+                            first_button = InlineKeyboardButton(
+                                text=(
+                                    texts.MENU_EXTEND_SUBSCRIPTION
+                                    if has_active_subscription
+                                    else texts.MENU_BUY_SUBSCRIPTION
+                                ),
+                                callback_data=(
+                                    "subscription_extend" if has_active_subscription else "menu_buy"
+                                ),
+                            )
+
+                            keyboard = InlineKeyboardMarkup(
+                                inline_keyboard=[
+                                    [first_button],
+                                    [InlineKeyboardButton(text="💰 Мой баланс", callback_data="menu_balance")],
+                                    [InlineKeyboardButton(text="🏠 Главное меню", callback_data="back_to_menu")],
+                                ]
+                            )
+
                             await self.bot.send_message(
                                 user.telegram_id,
                                 f"✅ <b>Пополнение успешно!</b>\n\n"
@@ -649,7 +778,8 @@ class PaymentService:
                                 f"💱 Курс: 1 USD = {conversion_rate:.2f}₽\n"
                                 f"🆔 Транзакция: {invoice_id[:8]}...\n\n"
                                 f"Баланс пополнен автоматически!",
-                                parse_mode="HTML"
+                                parse_mode="HTML",
+                                reply_markup=keyboard,
                             )
                             logger.info(f"✅ Отправлено уведомление пользователю {user.telegram_id} о пополнении на {amount_rubles:.2f}₽ ({updated_payment.asset})")
                         except Exception as e:

@@ -575,6 +575,10 @@ class BroadcastHistory(Base):
     id = Column(Integer, primary_key=True, index=True)
     target_type = Column(String(100), nullable=False)  
     message_text = Column(Text, nullable=False)  
+    has_media = Column(Boolean, default=False)
+    media_type = Column(String(20), nullable=True) 
+    media_file_id = Column(String(255), nullable=True)
+    media_caption = Column(Text, nullable=True)
     total_count = Column(Integer, default=0) 
     sent_count = Column(Integer, default=0)  
     failed_count = Column(Integer, default=0) 
@@ -583,7 +587,6 @@ class BroadcastHistory(Base):
     admin_name = Column(String(255)) 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     completed_at = Column(DateTime(timezone=True), nullable=True)
-    
     admin = relationship("User", back_populates="broadcasts")
 
 class ServerSquad(Base):

@@ -42,9 +42,10 @@ async def show_main_menu(
             has_had_paid_subscription=db_user.has_had_paid_subscription,
             has_active_subscription=has_active_subscription,
             subscription_is_active=subscription_is_active,
-            balance_kopeks=db_user.balance_kopeks 
+            balance_kopeks=db_user.balance_kopeks,
+            subscription=db_user.subscription,
         ),
-        parse_mode="HTML" 
+        parse_mode="HTML"
     )
     await callback.answer()
 
@@ -119,7 +120,8 @@ async def handle_back_to_menu(
             has_had_paid_subscription=db_user.has_had_paid_subscription,
             has_active_subscription=has_active_subscription,
             subscription_is_active=subscription_is_active,
-            balance_kopeks=db_user.balance_kopeks
+            balance_kopeks=db_user.balance_kopeks,
+            subscription=db_user.subscription
         ),
         parse_mode="HTML"
     )
