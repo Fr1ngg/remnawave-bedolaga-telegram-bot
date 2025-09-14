@@ -344,12 +344,12 @@ async def handle_media_selection(
     db_user: User,
     state: FSMContext
 ):
-    media_type = callback.data.replace('add_media_', '')
-    
-    if media_type == "skip":
+    if callback.data == "skip_media":
         await state.update_data(has_media=False)
         await show_button_selector_callback(callback, db_user, state)
         return
+    
+    media_type = callback.data.replace('add_media_', '')
     
     media_instructions = {
         "photo": "📷 Отправьте фотографию для рассылки:",
@@ -985,7 +985,8 @@ def register_handlers(dp: Dispatcher):
     dp.callback_query.register(toggle_button_selection, F.data.startswith("btn_"))
     dp.callback_query.register(confirm_button_selection, F.data == "buttons_confirm")
     dp.callback_query.register(show_button_selector_callback, F.data == "edit_buttons")
-    dp.callback_query.register(handle_media_selection, F.data.startswith("add_media_") | F.data.in_(["skip_media"]))
+    dp.callback_query.register(handle_media_selection, F.data.startswith("add_media_"))
+    dp.callback_query.register(handle_media_selection, F.data == "skip_media")
     dp.callback_query.register(handle_media_confirmation, F.data.in_(["confirm_media", "replace_media"]))
     dp.callback_query.register(handle_change_media, F.data == "change_media")
     dp.message.register(process_broadcast_message, AdminStates.waiting_for_broadcast_message)
