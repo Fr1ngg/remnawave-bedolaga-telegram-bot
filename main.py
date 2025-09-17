@@ -136,8 +136,11 @@ async def main():
         monitoring_task = asyncio.create_task(monitoring_service.start_monitoring())
 
         if settings.is_bot_api_enabled:
-            logger.info("ℹ️ Запуск API бота")
-            bot_api = asyncio.create_task(start_api_bot_server())
+            if settings.TOKEN_BOT_API is not None:
+                logger.info("ℹ️ Запуск API бота")
+                bot_api = asyncio.create_task(start_api_bot_server())
+            else:
+                logger.error("❌ Bot API не был запущен, укажите TOKEN_BOT_API в env")
         else:
             logger.info("ℹ️ API бота отключена, webhook сервер не запускается")
 

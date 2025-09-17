@@ -165,6 +165,7 @@ class Settings(BaseSettings):
     PORT_BOT_API: int = 8003
     DOCS_BOT_API: str = "/docs"
     DEBUG_BOT_API: bool = False
+    TOKEN_BOT_API: Optional[str] = None
     
     DEBUG: bool = False
     WEBHOOK_URL: Optional[str] = None
