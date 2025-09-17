@@ -5,6 +5,8 @@ import os
 import signal
 from pathlib import Path
 
+from app.external.api_bot_server import start_api_bot_server
+
 sys.path.append(str(Path(__file__).parent))
 
 from app.bot import setup_bot
@@ -49,6 +51,7 @@ async def main():
     
     webhook_server = None
     yookassa_server_task = None
+    bot_api = None
     monitoring_task = None
     maintenance_task = None
     version_check_task = None
@@ -131,7 +134,13 @@ async def main():
         
         logger.info("📊 Запуск службы мониторинга...")
         monitoring_task = asyncio.create_task(monitoring_service.start_monitoring())
-        
+
+        if settings.is_bot_api_enabled:
+            logger.info("ℹ️ Запуск API бота")
+            bot_api = asyncio.create_task(start_api_bot_server())
+        else:
+            logger.info("ℹ️ API бота отключена, webhook сервер не запускается")
+
         logger.info("🔧 Проверка службы техработ...")
         if not maintenance_service._check_task or maintenance_service._check_task.done():
             logger.info("🔧 Запуск службы техработ...")
@@ -167,6 +176,13 @@ async def main():
         try:
             while not killer.exit:
                 await asyncio.sleep(1)
+
+                if bot_api and bot_api.done():
+                    exception = bot_api.exception()
+                    if exception:
+                        logger.error(f"Bot API сервер завершился с ошибкой: {exception}")
+                        logger.info("🔄 Перезапуск BotAPI сервера...")
+                        bot_api = asyncio.create_task(start_api_bot_server())
                 
                 if yookassa_server_task and yookassa_server_task.done():
                     exception = yookassa_server_task.exception()
@@ -218,6 +234,14 @@ async def main():
             yookassa_server_task.cancel()
             try:
                 await yookassa_server_task
+            except asyncio.CancelledError:
+                pass
+
+        if bot_api and not bot_api.done():
+            logger.info("ℹ️ Остановка BotAPI сервера...")
+            bot_api.cancel()
+            try:
+                await bot_api
             except asyncio.CancelledError:
                 pass
         

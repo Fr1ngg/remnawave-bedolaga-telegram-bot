@@ -160,6 +160,11 @@ class Settings(BaseSettings):
     
     LOG_LEVEL: str = "INFO"
     LOG_FILE: str = "logs/bot.log"
+
+    ENABLE_BOT_API: bool = False
+    PORT_BOT_API: int = 8003
+    DOCS_BOT_API: str = "/docs"
+    DEBUG_BOT_API: bool = False
     
     DEBUG: bool = False
     WEBHOOK_URL: Optional[str] = None
@@ -351,6 +356,10 @@ class Settings(BaseSettings):
         return (self.YOOKASSA_ENABLED and 
                 self.YOOKASSA_SHOP_ID is not None and 
                 self.YOOKASSA_SECRET_KEY is not None)
+
+    @property
+    def is_bot_api_enabled(self) -> bool:
+        return self.ENABLE_BOT_API
     
     def get_yookassa_return_url(self) -> str:
         if self.YOOKASSA_RETURN_URL:

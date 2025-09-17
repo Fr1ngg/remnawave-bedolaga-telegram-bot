@@ -5,6 +5,8 @@ import hashlib
 import hmac
 import base64
 from typing import Optional, Dict, Any
+
+import uvicorn
 from aiohttp import web
 from sqlalchemy.ext.asyncio import AsyncSession
 
