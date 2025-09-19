@@ -31,6 +31,7 @@ class Settings(BaseSettings):
     POSTGRES_PASSWORD: str = "secure_password_123"
     
     SQLITE_PATH: str = "./data/bot.db"
+    LOCALES_PATH: str = "./locales"
     
     DATABASE_MODE: str = "auto"
     

@@ -11,7 +11,8 @@ from app.database.models import User, UserStatus, Subscription, SubscriptionStat
 from app.database.crud.user import get_user_by_id 
 from app.keyboards.admin import (
     get_admin_users_keyboard, get_user_management_keyboard,
-    get_admin_pagination_keyboard, get_confirmation_keyboard
+    get_admin_pagination_keyboard, get_confirmation_keyboard,
+    get_admin_users_filters_keyboard
 )
 from app.localization.texts import get_texts
 from app.services.user_service import UserService
@@ -60,12 +61,33 @@ async def show_users_menu(
 
 @admin_required
 @error_handler
+async def show_users_filters(
+    callback: types.CallbackQuery,
+    db_user: User,
+    state: FSMContext
+):
+    
+    text = "⚙️ <b>Фильтры пользователей</b>\n\nВыберите фильтр для отображения пользователей:"
+    
+    await callback.message.edit_text(
+        text,
+        reply_markup=get_admin_users_filters_keyboard(db_user.language)
+    )
+    await callback.answer()
+
+
+@admin_required
+@error_handler
 async def show_users_list(
     callback: types.CallbackQuery,
     db_user: User,
     db: AsyncSession,
+    state: FSMContext,
     page: int = 1
 ):
+    
+    # Сбрасываем состояние, так как мы в обычном списке
+    await state.set_state(None)
     
     user_service = UserService()
     users_data = await user_service.get_users_page(db, page=page, limit=10)
@@ -154,18 +176,137 @@ async def show_users_list(
 
 @admin_required
 @error_handler
+async def show_users_list_by_balance(
+    callback: types.CallbackQuery,
+    db_user: User,
+    db: AsyncSession,
+    state: FSMContext,
+    page: int = 1
+):
+    
+    # Устанавливаем состояние, чтобы отслеживать, откуда пришел пользователь
+    await state.set_state(AdminStates.viewing_user_from_balance_list)
+    
+    user_service = UserService()
+    users_data = await user_service.get_users_page(db, page=page, limit=10, order_by_balance=True)
+    
+    if not users_data["users"]:
+        await callback.message.edit_text(
+            "👥 Пользователи не найдены",
+            reply_markup=get_admin_users_keyboard(db_user.language)
+        )
+        await callback.answer()
+        return
+    
+    text = f"👥 <b>Список пользователей по балансу</b> (стр. {page}/{users_data['total_pages']})\n\n"
+    text += "Нажмите на пользователя для управления:"
+    
+    keyboard = []
+    
+    for user in users_data["users"]:
+        if user.status == UserStatus.ACTIVE.value:
+            status_emoji = "✅"
+        elif user.status == UserStatus.BLOCKED.value:
+            status_emoji = "🚫"
+        else:
+            status_emoji = "🗑️"
+        
+        subscription_emoji = ""
+        if user.subscription:
+            if user.subscription.is_trial:
+                subscription_emoji = "🎁"
+            elif user.subscription.is_active:
+                subscription_emoji = "💎"
+            else:
+                subscription_emoji = "⏰"
+        else:
+            subscription_emoji = "❌"
+        
+        button_text = f"{status_emoji} {subscription_emoji} {user.full_name}"
+        
+        if user.balance_kopeks > 0:
+            button_text += f" | 💰 {settings.format_price(user.balance_kopeks)}"
+        
+        # Добавляем дату окончания подписки, если есть подписка
+        if user.subscription and user.subscription.end_date:
+            days_left = (user.subscription.end_date - datetime.utcnow()).days
+            button_text += f" | 📅 {days_left}д"
+        
+        if len(button_text) > 60:
+            short_name = user.full_name
+            if len(short_name) > 20:
+                short_name = short_name[:17] + "..."
+            
+            button_text = f"{status_emoji} {subscription_emoji} {short_name}"
+            if user.balance_kopeks > 0:
+                button_text += f" | 💰 {settings.format_price(user.balance_kopeks)}"
+        
+        keyboard.append([
+            types.InlineKeyboardButton(
+                text=button_text,
+                callback_data=f"admin_user_manage_{user.id}"
+            )
+        ])
+    
+    if users_data["total_pages"] > 1:
+        pagination_row = get_admin_pagination_keyboard(
+            users_data["current_page"],
+            users_data["total_pages"],
+            "admin_users_balance_list",
+            "admin_users",
+            db_user.language
+        ).inline_keyboard[0]
+        keyboard.append(pagination_row)
+    
+    keyboard.extend([
+        [
+            types.InlineKeyboardButton(text="🔍 Поиск", callback_data="admin_users_search"),
+            types.InlineKeyboardButton(text="📊 Статистика", callback_data="admin_users_stats")
+        ],
+        [
+            types.InlineKeyboardButton(text="⬅️ Назад", callback_data="admin_users")
+        ]
+    ])
+    
+    await callback.message.edit_text(
+        text,
+        reply_markup=types.InlineKeyboardMarkup(inline_keyboard=keyboard)
+    )
+    await callback.answer()
+
+
+@admin_required
+@error_handler
 async def handle_users_list_pagination_fixed(
     callback: types.CallbackQuery,
     db_user: User,
-    db: AsyncSession
+    db: AsyncSession,
+    state: FSMContext
 ):
     try:
         callback_parts = callback.data.split('_')
         page = int(callback_parts[-1]) 
-        await show_users_list(callback, db_user, db, page)
+        await show_users_list(callback, db_user, db, state, page)
     except (ValueError, IndexError) as e:
         logger.error(f"Ошибка парсинга номера страницы: {e}")
-        await show_users_list(callback, db_user, db, 1)
+        await show_users_list(callback, db_user, db, state, 1)
+
+
+@admin_required
+@error_handler
+async def handle_users_balance_list_pagination(
+    callback: types.CallbackQuery,
+    db_user: User,
+    db: AsyncSession,
+    state: FSMContext
+):
+    try:
+        callback_parts = callback.data.split('_')
+        page = int(callback_parts[-1]) 
+        await show_users_list_by_balance(callback, db_user, db, state, page)
+    except (ValueError, IndexError) as e:
+        logger.error(f"Ошибка парсинга номера страницы: {e}")
+        await show_users_list_by_balance(callback, db_user, db, state, 1)
 
 
 @admin_required
@@ -271,6 +412,148 @@ async def show_users_statistics(
     await callback.answer()
 
 
+async def _render_user_subscription_overview(
+    callback: types.CallbackQuery,
+    db: AsyncSession,
+    user_id: int
+) -> bool:
+    user_service = UserService()
+    profile = await user_service.get_user_profile(db, user_id)
+
+    if not profile:
+        await callback.answer("❌ Пользователь не найден", show_alert=True)
+        return False
+
+    user = profile["user"]
+    subscription = profile["subscription"]
+
+    text = "📱 <b>Подписка и настройки пользователя</b>\n\n"
+    text += f"👤 {user.full_name} (ID: <code>{user.telegram_id}</code>)\n\n"
+
+    keyboard = []
+
+    if subscription:
+        status_emoji = "✅" if subscription.is_active else "❌"
+        type_emoji = "🎁" if subscription.is_trial else "💎"
+
+        traffic_display = f"{subscription.traffic_used_gb:.1f}/"
+        if subscription.traffic_limit_gb == 0:
+            traffic_display += "♾️ ГБ"
+        else:
+            traffic_display += f"{subscription.traffic_limit_gb} ГБ"
+
+        text += f"<b>Статус:</b> {status_emoji} {'Активна' if subscription.is_active else 'Неактивна'}\n"
+        text += f"<b>Тип:</b> {type_emoji} {'Триал' if subscription.is_trial else 'Платная'}\n"
+        text += f"<b>Начало:</b> {format_datetime(subscription.start_date)}\n"
+        text += f"<b>Окончание:</b> {format_datetime(subscription.end_date)}\n"
+        text += f"<b>Трафик:</b> {traffic_display}\n"
+        text += f"<b>Устройства:</b> {subscription.device_limit}\n"
+
+        if subscription.is_active:
+            days_left = (subscription.end_date - datetime.utcnow()).days
+            text += f"<b>Осталось дней:</b> {days_left}\n"
+
+        current_squads = subscription.connected_squads or []
+        if current_squads:
+            text += "\n<b>Подключенные серверы:</b>\n"
+            for squad_uuid in current_squads:
+                try:
+                    server = await get_server_squad_by_uuid(db, squad_uuid)
+                    if server:
+                        text += f"• {server.display_name}\n"
+                    else:
+                        text += f"• {squad_uuid[:8]}... (неизвестный)\n"
+                except Exception as e:
+                    logger.error(f"Ошибка получения сервера {squad_uuid}: {e}")
+                    text += f"• {squad_uuid[:8]}... (ошибка загрузки)\n"
+        else:
+            text += "\n<b>Подключенные серверы:</b> отсутствуют\n"
+
+        keyboard = [
+            [
+                types.InlineKeyboardButton(
+                    text="⏰ Продлить",
+                    callback_data=f"admin_sub_extend_{user_id}"
+                ),
+                types.InlineKeyboardButton(
+                    text="💳 Купить подписку",
+                    callback_data=f"admin_sub_buy_{user_id}"
+                )
+            ],
+            [
+                types.InlineKeyboardButton(
+                    text="🔄 Тип подписки",
+                    callback_data=f"admin_sub_change_type_{user_id}"
+                ),
+                types.InlineKeyboardButton(
+                    text="📊 Добавить трафик",
+                    callback_data=f"admin_sub_traffic_{user_id}"
+                )
+            ],
+            [
+                types.InlineKeyboardButton(
+                    text="🌍 Сменить сервер",
+                    callback_data=f"admin_user_change_server_{user_id}"
+                ),
+                types.InlineKeyboardButton(
+                    text="📱 Устройства",
+                    callback_data=f"admin_user_devices_{user_id}"
+                )
+            ],
+            [
+                types.InlineKeyboardButton(
+                    text="🛠️ Лимит трафика",
+                    callback_data=f"admin_user_traffic_{user_id}"
+                ),
+                types.InlineKeyboardButton(
+                    text="🔄 Сбросить устройства",
+                    callback_data=f"admin_user_reset_devices_{user_id}"
+                )
+            ]
+        ]
+
+        if subscription.is_active:
+            keyboard.append([
+                types.InlineKeyboardButton(
+                    text="🚫 Деактивировать",
+                    callback_data=f"admin_sub_deactivate_{user_id}"
+                )
+            ])
+        else:
+            keyboard.append([
+                types.InlineKeyboardButton(
+                    text="✅ Активировать",
+                    callback_data=f"admin_sub_activate_{user_id}"
+                )
+            ])
+    else:
+        text += "❌ <b>Подписка отсутствует</b>\n\n"
+        text += "Пользователь еще не активировал подписку."
+
+        keyboard = [
+            [
+                types.InlineKeyboardButton(
+                    text="🎁 Выдать триал",
+                    callback_data=f"admin_sub_grant_trial_{user_id}"
+                ),
+                types.InlineKeyboardButton(
+                    text="💎 Выдать подписку",
+                    callback_data=f"admin_sub_grant_{user_id}"
+                )
+            ]
+        ]
+
+    keyboard.append([
+        types.InlineKeyboardButton(text="⬅️ К пользователю", callback_data=f"admin_user_manage_{user_id}")
+    ])
+
+    await callback.message.edit_text(
+        text,
+        reply_markup=types.InlineKeyboardMarkup(inline_keyboard=keyboard)
+    )
+    return True
+
+
 @admin_required
 @error_handler
 async def show_user_subscription(
@@ -278,101 +561,11 @@ async def show_user_subscription(
     db_user: User,
     db: AsyncSession
 ):
-    
+
     user_id = int(callback.data.split('_')[-1])
-    
-    user_service = UserService()
-    profile = await user_service.get_user_profile(db, user_id)
-    
-    if not profile:
-        await callback.answer("❌ Пользователь не найден", show_alert=True)
-        return
-    
-    user = profile["user"]
-    subscription = profile["subscription"]
-    
-    text = f"📱 <b>Подписка пользователя</b>\n\n"
-    text += f"👤 {user.full_name} (ID: <code>{user.telegram_id}</code>)\n\n"
-    
-    if subscription:
-        status_emoji = "✅" if subscription.is_active else "❌"
-        type_emoji = "🎁" if subscription.is_trial else "💎"
-        
-        text += f"<b>Статус:</b> {status_emoji} {'Активна' if subscription.is_active else 'Неактивна'}\n"
-        text += f"<b>Тип:</b> {type_emoji} {'Триал' if subscription.is_trial else 'Платная'}\n"
-        text += f"<b>Начало:</b> {format_datetime(subscription.start_date)}\n"
-        text += f"<b>Окончание:</b> {format_datetime(subscription.end_date)}\n"
-        text += f"<b>Трафик:</b> {subscription.traffic_used_gb:.1f}/{subscription.traffic_limit_gb} ГБ\n"
-        text += f"<b>Устройства:</b> {subscription.device_limit}\n"
-        text += f"<b>Подключенных устройств:</b> {subscription.device_limit}\n"
-        
-        if subscription.is_active:
-            days_left = (subscription.end_date - datetime.utcnow()).days
-            text += f"<b>Осталось дней:</b> {days_left}\n"
-        
-        keyboard = [
-            [
-                types.InlineKeyboardButton(
-                    text="⏰ Продлить", 
-                    callback_data=f"admin_sub_extend_{user_id}"
-                ),
-                types.InlineKeyboardButton(
-                    text="📊 Трафик", 
-                    callback_data=f"admin_sub_traffic_{user_id}"
-                )
-            ],
-            [
-                types.InlineKeyboardButton(
-                    text="🔄 Тип подписки", 
-                    callback_data=f"admin_sub_change_type_{user_id}"
-                ),
-                types.InlineKeyboardButton(
-                    text="💳 Купить подписку", 
-                    callback_data=f"admin_sub_buy_{user_id}"
-                )
-            ]
-        ]
-        
-        if subscription.is_active:
-            keyboard.append([
-                types.InlineKeyboardButton(
-                    text="🚫 Деактивировать", 
-                    callback_data=f"admin_sub_deactivate_{user_id}"
-                )
-            ])
-        else:
-            keyboard.append([
-                types.InlineKeyboardButton(
-                    text="✅ Активировать", 
-                    callback_data=f"admin_sub_activate_{user_id}"
-                )
-            ])
-    else:
-        text += "❌ <b>Подписка отсутствует</b>\n\n"
-        text += "Пользователь еще не активировал подписку."
-        
-        keyboard = [
-            [
-                types.InlineKeyboardButton(
-                    text="🎁 Выдать триал", 
-                    callback_data=f"admin_sub_grant_trial_{user_id}"
-                ),
-                types.InlineKeyboardButton(
-                    text="💎 Выдать подписку", 
-                    callback_data=f"admin_sub_grant_{user_id}"
-                )
-            ]
-        ]
-    
-    keyboard.append([
-        types.InlineKeyboardButton(text="⬅️ К пользователю", callback_data=f"admin_user_manage_{user_id}")
-    ])
-    
-    await callback.message.edit_text(
-        text,
-        reply_markup=types.InlineKeyboardMarkup(inline_keyboard=keyboard)
-    )
-    await callback.answer()
+
+    if await _render_user_subscription_overview(callback, db, user_id):
+        await callback.answer()
 
 
 @admin_required
@@ -564,10 +757,17 @@ async def process_user_search(
 async def show_user_management(
     callback: types.CallbackQuery,
     db_user: User,
-    db: AsyncSession
+    db: AsyncSession,
+    state: FSMContext
 ):
     
     user_id = int(callback.data.split('_')[-1])
+    
+    # Проверяем, откуда пришел пользователь
+    back_callback = "admin_users_list"
+    
+    # Если callback_data содержит информацию о том, что мы пришли из списка по балансу
+    # В реальности это сложно определить, поэтому будем использовать состояние
     
     user_service = UserService()
     profile = await user_service.get_user_profile(db, user_id)
@@ -621,11 +821,17 @@ async def show_user_management(
     else:
         text += "\n<b>Подписка:</b> Отсутствует"
     
+    # Проверяем состояние, чтобы определить, откуда пришел пользователь
+    current_state = await state.get_state()
+    if current_state == AdminStates.viewing_user_from_balance_list:
+        back_callback = "admin_users_balance_filter"
+    
     await callback.message.edit_text(
         text,
-        reply_markup=get_user_management_keyboard(user.id, user.status, db_user.language)
+        reply_markup=get_user_management_keyboard(user.id, user.status, db_user.language, back_callback)
     )
     await callback.answer()
+
 
 
 @admin_required
@@ -1455,68 +1661,9 @@ async def show_user_servers_management(
     db: AsyncSession
 ):
     user_id = int(callback.data.split('_')[-1])
-    
-    user_service = UserService()
-    profile = await user_service.get_user_profile(db, user_id)
-    
-    if not profile:
-        await callback.answer("❌ Пользователь не найден", show_alert=True)
-        return
-    
-    user = profile["user"]
-    subscription = profile["subscription"]
-    
-    text = f"🌍 <b>Управление серверами пользователя</b>\n\n"
-    text += f"👤 {user.full_name} (ID: <code>{user.telegram_id}</code>)\n\n"
-    
-    if subscription:
-        current_squads = subscription.connected_squads or []
-        
-        if current_squads:
-            text += f"<b>Текущие серверы ({len(current_squads)}):</b>\n"
-            
-            for squad_uuid in current_squads:
-                try:
-                    server = await get_server_squad_by_uuid(db, squad_uuid)
-                    if server:
-                        text += f"• {server.display_name}\n"
-                    else:
-                        text += f"• {squad_uuid[:8]}... (неизвестный)\n"
-                except Exception as e:
-                    logger.error(f"Ошибка получения сервера {squad_uuid}: {e}")
-                    text += f"• {squad_uuid[:8]}... (ошибка загрузки)\n"
-        else:
-            text += "<b>Серверы:</b> Не подключены\n"
-        
-        text += f"\n<b>Устройства:</b> {subscription.device_limit}\n"
-        traffic_display = f"{subscription.traffic_used_gb:.1f}/"
-        if subscription.traffic_limit_gb == 0:
-            traffic_display += "∞ ГБ"
-        else:
-            traffic_display += f"{subscription.traffic_limit_gb} ГБ"
-        text += f"<b>Трафик:</b> {traffic_display}\n"
-    else:
-        text += "❌ <b>Подписка отсутствует</b>"
-    
-    keyboard = [
-        [
-            types.InlineKeyboardButton(text="🌍 Сменить сервер", callback_data=f"admin_user_change_server_{user_id}"),
-            types.InlineKeyboardButton(text="📱 Устройства", callback_data=f"admin_user_devices_{user_id}")
-        ],
-        [
-            types.InlineKeyboardButton(text="📊 Трафик", callback_data=f"admin_user_traffic_{user_id}"),
-            types.InlineKeyboardButton(text="🔄 Сбросить устройства", callback_data=f"admin_user_reset_devices_{user_id}")
-        ],
-        [
-            types.InlineKeyboardButton(text="⬅️ К пользователю", callback_data=f"admin_user_manage_{user_id}")
-        ]
-    ]
-    
-    await callback.message.edit_text(
-        text,
-        reply_markup=types.InlineKeyboardMarkup(inline_keyboard=keyboard)
-    )
-    await callback.answer()
+
+    if await _render_user_subscription_overview(callback, db, user_id):
+        await callback.answer()
 
 
 @admin_required
@@ -1552,7 +1699,7 @@ async def _show_servers_for_user(
             await callback.message.edit_text(
                 "❌ Доступные серверы не найдены",
                 reply_markup=types.InlineKeyboardMarkup(inline_keyboard=[
-                    [types.InlineKeyboardButton(text="⬅️ Назад", callback_data=f"admin_user_servers_{user_id}")]
+                    [types.InlineKeyboardButton(text="⬅️ Назад", callback_data=f"admin_user_subscription_{user_id}")]
                 ])
             )
             return
@@ -1595,8 +1742,8 @@ async def _show_servers_for_user(
             text += f"\n📝 Показано первых 20 из {len(servers_to_show)} серверов"
         
         keyboard.append([
-            types.InlineKeyboardButton(text="✅ Готово", callback_data=f"admin_user_servers_{user_id}"),
-            types.InlineKeyboardButton(text="⬅️ Назад", callback_data=f"admin_user_servers_{user_id}")
+            types.InlineKeyboardButton(text="✅ Готово", callback_data=f"admin_user_subscription_{user_id}"),
+            types.InlineKeyboardButton(text="⬅️ Назад", callback_data=f"admin_user_subscription_{user_id}")
         ])
         
         await callback.message.edit_text(
@@ -1687,7 +1834,7 @@ async def refresh_server_selection_screen(
             await callback.message.edit_text(
                 "❌ Доступные серверы не найдены",
                 reply_markup=types.InlineKeyboardMarkup(inline_keyboard=[
-                    [types.InlineKeyboardButton(text="⬅️ Назад", callback_data=f"admin_user_servers_{user_id}")]
+                    [types.InlineKeyboardButton(text="⬅️ Назад", callback_data=f"admin_user_subscription_{user_id}")]
                 ])
             )
             return
@@ -1711,8 +1858,8 @@ async def refresh_server_selection_screen(
             text += f"\n📝 Показано первых 15 из {len(servers)} серверов"
         
         keyboard.append([
-            types.InlineKeyboardButton(text="✅ Готово", callback_data=f"admin_user_servers_{user_id}"),
-            types.InlineKeyboardButton(text="⬅️ Назад", callback_data=f"admin_user_servers_{user_id}")
+            types.InlineKeyboardButton(text="✅ Готово", callback_data=f"admin_user_subscription_{user_id}"),
+            types.InlineKeyboardButton(text="⬅️ Назад", callback_data=f"admin_user_subscription_{user_id}")
         ])
         
         await callback.message.edit_text(
@@ -1752,7 +1899,7 @@ async def start_devices_edit(
                 types.InlineKeyboardButton(text="10", callback_data=f"admin_user_devices_set_{user_id}_10")
             ],
             [
-                types.InlineKeyboardButton(text="❌ Отмена", callback_data=f"admin_user_servers_{user_id}")
+                types.InlineKeyboardButton(text="❌ Отмена", callback_data=f"admin_user_subscription_{user_id}")
             ]
         ])
     )
@@ -1778,14 +1925,14 @@ async def set_user_devices_button(
         await callback.message.edit_text(
             f"✅ Количество устройств изменено на: {devices}",
             reply_markup=types.InlineKeyboardMarkup(inline_keyboard=[
-                [types.InlineKeyboardButton(text="🌍 Управление серверами", callback_data=f"admin_user_servers_{user_id}")]
+                [types.InlineKeyboardButton(text="📱 Подписка и настройки", callback_data=f"admin_user_subscription_{user_id}")]
             ])
         )
     else:
         await callback.message.edit_text(
             "❌ Ошибка изменения количества устройств",
             reply_markup=types.InlineKeyboardMarkup(inline_keyboard=[
-                [types.InlineKeyboardButton(text="🌍 Управление серверами", callback_data=f"admin_user_servers_{user_id}")]
+                [types.InlineKeyboardButton(text="📱 Подписка и настройки", callback_data=f"admin_user_subscription_{user_id}")]
             ])
         )
     
@@ -1821,7 +1968,7 @@ async def process_devices_edit_text(
             await message.answer(
                 f"✅ Количество устройств изменено на: {devices}",
                 reply_markup=types.InlineKeyboardMarkup(inline_keyboard=[
-                    [types.InlineKeyboardButton(text="🌍 Управление серверами", callback_data=f"admin_user_servers_{user_id}")]
+                    [types.InlineKeyboardButton(text="📱 Подписка и настройки", callback_data=f"admin_user_subscription_{user_id}")]
                 ])
             )
         else:
@@ -1865,7 +2012,7 @@ async def start_traffic_edit(
                 types.InlineKeyboardButton(text="♾️ Безлимит", callback_data=f"admin_user_traffic_set_{user_id}_0")
             ],
             [
-                types.InlineKeyboardButton(text="❌ Отмена", callback_data=f"admin_user_servers_{user_id}")
+                types.InlineKeyboardButton(text="❌ Отмена", callback_data=f"admin_user_subscription_{user_id}")
             ]
         ])
     )
@@ -1892,14 +2039,14 @@ async def set_user_traffic_button(
         await callback.message.edit_text(
             f"✅ Лимит трафика изменен на: {traffic_text}",
             reply_markup=types.InlineKeyboardMarkup(inline_keyboard=[
-                [types.InlineKeyboardButton(text="🌍 Управление серверами", callback_data=f"admin_user_servers_{user_id}")]
+                [types.InlineKeyboardButton(text="📱 Подписка и настройки", callback_data=f"admin_user_subscription_{user_id}")]
             ])
         )
     else:
         await callback.message.edit_text(
             "❌ Ошибка изменения лимита трафика",
             reply_markup=types.InlineKeyboardMarkup(inline_keyboard=[
-                [types.InlineKeyboardButton(text="🌍 Управление серверами", callback_data=f"admin_user_servers_{user_id}")]
+                [types.InlineKeyboardButton(text="📱 Подписка и настройки", callback_data=f"admin_user_subscription_{user_id}")]
             ])
         )
     
@@ -1936,7 +2083,7 @@ async def process_traffic_edit_text(
             await message.answer(
                 f"✅ Лимит трафика изменен на: {traffic_text}",
                 reply_markup=types.InlineKeyboardMarkup(inline_keyboard=[
-                    [types.InlineKeyboardButton(text="🌍 Управление серверами", callback_data=f"admin_user_servers_{user_id}")]
+                    [types.InlineKeyboardButton(text="📱 Подписка и настройки", callback_data=f"admin_user_subscription_{user_id}")]
                 ])
             )
         else:
@@ -1968,7 +2115,7 @@ async def confirm_reset_devices(
         "Продолжить?",
         reply_markup=get_confirmation_keyboard(
             f"admin_user_reset_devices_confirm_{user_id}",
-            f"admin_user_servers_{user_id}",
+            f"admin_user_subscription_{user_id}",
             db_user.language
         )
     )
@@ -1998,7 +2145,7 @@ async def reset_user_devices(
             await callback.message.edit_text(
                 "✅ Устройства пользователя успешно сброшены",
                 reply_markup=types.InlineKeyboardMarkup(inline_keyboard=[
-                    [types.InlineKeyboardButton(text="🌍 Управление серверами", callback_data=f"admin_user_servers_{user_id}")]
+                    [types.InlineKeyboardButton(text="📱 Подписка и настройки", callback_data=f"admin_user_subscription_{user_id}")]
                 ])
             )
             logger.info(f"Админ {db_user.id} сбросил устройства пользователя {user_id}")
@@ -2006,7 +2153,7 @@ async def reset_user_devices(
             await callback.message.edit_text(
                 "❌ Ошибка сброса устройств",
                 reply_markup=types.InlineKeyboardMarkup(inline_keyboard=[
-                    [types.InlineKeyboardButton(text="🌍 Управление серверами", callback_data=f"admin_user_servers_{user_id}")]
+                    [types.InlineKeyboardButton(text="📱 Подписка и настройки", callback_data=f"admin_user_subscription_{user_id}")]
                 ])
             )
         
@@ -2757,6 +2904,11 @@ def register_handlers(dp: Dispatcher):
     )
     
     dp.callback_query.register(
+        handle_users_balance_list_pagination,
+        F.data.startswith("admin_users_balance_list_page_")
+    )
+    
+    dp.callback_query.register(
         start_user_search,
         F.data == "admin_users_search"
     )
@@ -2937,6 +3089,22 @@ def register_handlers(dp: Dispatcher):
     dp.callback_query.register(
         admin_buy_subscription_execute,
         F.data.startswith("admin_buy_sub_execute_")
+    )
+    
+    # Регистрация обработчиков для фильтрации пользователей
+    dp.callback_query.register(
+        show_users_filters,
+        F.data == "admin_users_filters"
+    )
+    
+    dp.callback_query.register(
+        show_users_list_by_balance,
+        F.data == "admin_users_balance_filter"
+    )
+    
+    dp.callback_query.register(
+        show_users_list_by_balance,
+        F.data.startswith("admin_users_balance_list_page_")
     )
 
 

@@ -1,5 +1,7 @@
 from typing import List, Dict, Tuple
+
 from app.config import settings
+from app.localization.texts import get_texts
 
 def get_available_payment_methods() -> List[Dict[str, str]]:
     """
@@ -54,28 +56,50 @@ def get_available_payment_methods() -> List[Dict[str, str]]:
     
     return methods
 
-def get_payment_methods_text() -> str:
+def get_payment_methods_text(language: str) -> str:
     """
     Генерирует текст с описанием доступных способов оплаты
     """
+    texts = get_texts(language)
     methods = get_available_payment_methods()
-    
+
     if len(methods) <= 1:  # Только поддержка
-        return """💳 <b>Способы пополнения баланса</b>
+        return texts.t(
+            "PAYMENT_METHODS_ONLY_SUPPORT",
+            """💳 <b>Способы пополнения баланса</b>
 
 ⚠️ В данный момент автоматические способы оплаты временно недоступны.
 Обратитесь в техподдержку для пополнения баланса.
 
-Выберите способ пополнения:"""
-    
-    text = "💳 <b>Способы пополнения баланса</b>\n\n"
-    text += "Выберите удобный для вас способ оплаты:\n\n"
-    
+Выберите способ пополнения:""",
+        )
+
+    text = texts.t(
+        "PAYMENT_METHODS_TITLE",
+        "💳 <b>Способы пополнения баланса</b>",
+    ) + "\n\n"
+    text += texts.t(
+        "PAYMENT_METHODS_PROMPT",
+        "Выберите удобный для вас способ оплаты:",
+    ) + "\n\n"
+
     for method in methods:
-        text += f"{method['icon']} <b>{method['name']}</b> - {method['description']}\n"
-    
-    text += "\nВыберите способ пополнения:"
-    
+        method_id = method['id'].upper()
+        name = texts.t(
+            f"PAYMENT_METHOD_{method_id}_NAME",
+            f"{method['icon']} <b>{method['name']}</b>",
+        )
+        description = texts.t(
+            f"PAYMENT_METHOD_{method_id}_DESCRIPTION",
+            method['description'],
+        )
+        text += f"{name} - {description}\n"
+
+    text += "\n" + texts.t(
+        "PAYMENT_METHODS_FOOTER",
+        "Выберите способ пополнения:",
+    )
+
     return text
 
 def is_payment_method_available(method_id: str) -> bool:

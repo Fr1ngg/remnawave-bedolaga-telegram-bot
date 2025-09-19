@@ -216,7 +216,8 @@ async def get_users_list(
     offset: int = 0,
     limit: int = 50,
     search: Optional[str] = None,
-    status: Optional[UserStatus] = None
+    status: Optional[UserStatus] = None,
+    order_by_balance: bool = False
 ) -> List[User]:
     
     query = select(User).options(selectinload(User.subscription))
@@ -237,7 +238,13 @@ async def get_users_list(
         
         query = query.where(or_(*conditions))
     
-    query = query.order_by(User.created_at.desc()).offset(offset).limit(limit)
+    # Сортировка по балансу в порядке убывания, если order_by_balance=True
+    if order_by_balance:
+        query = query.order_by(User.balance_kopeks.desc())
+    else:
+        query = query.order_by(User.created_at.desc())
+    
+    query = query.offset(offset).limit(limit)
     
     result = await db.execute(query)
     return result.scalars().all()

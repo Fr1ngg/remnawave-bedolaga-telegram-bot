@@ -16,6 +16,7 @@ class SubscriptionStates(StatesGroup):
     adding_devices = State()
     extending_subscription = State()
     confirming_traffic_reset = State()
+    cart_saved_for_topup = State()
 
 class BalanceStates(StatesGroup):
     waiting_for_amount = State()
@@ -41,6 +42,23 @@ class AdminStates(StatesGroup):
     setting_promocode_value = State()
     setting_promocode_uses = State()
     setting_promocode_expiry = State()
+
+    creating_campaign_name = State()
+    creating_campaign_start = State()
+    creating_campaign_bonus = State()
+    creating_campaign_balance = State()
+    creating_campaign_subscription_days = State()
+    creating_campaign_subscription_traffic = State()
+    creating_campaign_subscription_devices = State()
+    creating_campaign_subscription_servers = State()
+
+    editing_campaign_name = State()
+    editing_campaign_start = State()
+    editing_campaign_balance = State()
+    editing_campaign_subscription_days = State()
+    editing_campaign_subscription_traffic = State()
+    editing_campaign_subscription_devices = State()
+    editing_campaign_subscription_servers = State()
     
     waiting_for_broadcast_message = State()
     waiting_for_broadcast_media = State()
@@ -69,6 +87,9 @@ class AdminStates(StatesGroup):
     
     editing_welcome_text = State()
     waiting_for_message_buttons = "waiting_for_message_buttons"
+    
+    # Состояния для отслеживания источника перехода
+    viewing_user_from_balance_list = State()
 
 class SupportStates(StatesGroup):
     waiting_for_message = State()

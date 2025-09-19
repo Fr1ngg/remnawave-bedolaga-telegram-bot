@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 from app.config import settings
 from app.database.crud.user import get_user_by_telegram_id, update_user
 from app.keyboards.inline import get_main_menu_keyboard
-from app.localization.texts import get_texts
+from app.localization.texts import get_texts, get_rules
 from app.database.models import User
 from app.utils.user_utils import mark_user_as_had_paid_subscription
 from app.database.crud.user_message import get_random_active_message
@@ -70,34 +70,22 @@ async def mark_user_as_had_paid_subscription(
 
 
 async def show_service_rules(
-    callback: types.CallbackQuery,
-    db_user: User,
+    callback: types.CallbackQuery, 
+    db_user: User, 
     db: AsyncSession
 ):
     from app.database.crud.rules import get_current_rules_content
-    
+
+    texts = get_texts(db_user.language)
     rules_text = await get_current_rules_content(db, db_user.language)
-    
+
     if not rules_text:
-        texts = get_texts(db_user.language)
-        rules_text = texts._get_default_rules(db_user.language) if hasattr(texts, '_get_default_rules') else """
-📋 <b>Правила использования сервиса</b>
+        rules_text = await get_rules(db_user.language)
 
-1. Запрещается использование сервиса для незаконной деятельности
-2. Запрещается нарушение авторских прав
-3. Запрещается спам и рассылка вредоносного ПО
-4. Запрещается использование сервиса для DDoS атак
-5. Один аккаунт - один пользователь
-6. Возврат средств производится только в исключительных случаях
-7. Администрация оставляет за собой право заблокировать аккаунт при нарушении правил
-
-<b>Принимая правила, вы соглашаетесь соблюдать их.</b>
-"""
-    
     await callback.message.edit_text(
-        f"📋 <b>Правила сервиса</b>\n\n{rules_text}",
+        f"{texts.t('RULES_HEADER', '📋 <b>Правила сервиса</b>')}\n\n{rules_text}",
         reply_markup=types.InlineKeyboardMarkup(inline_keyboard=[
-            [types.InlineKeyboardButton(text="⬅️ Назад", callback_data="back_to_menu")]
+            [types.InlineKeyboardButton(text=texts.BACK, callback_data="back_to_menu")]
         ])
     )
     await callback.answer()
@@ -142,53 +130,92 @@ async def handle_back_to_menu(
 
 def _get_subscription_status(user: User, texts) -> str:
     if not user.subscription:
-        return "❌ Отсутствует"
+        return texts.t("SUB_STATUS_NONE", "❌ Отсутствует")
     
     subscription = user.subscription
     current_time = datetime.utcnow()
     
     if subscription.end_date <= current_time:
-        return f"🔴 Истекла\n📅 {subscription.end_date.strftime('%d.%m.%Y')}"
+        return texts.t(
+            "SUB_STATUS_EXPIRED",
+            "🔴 Истекла\n📅 {end_date}",
+        ).format(end_date=subscription.end_date.strftime('%d.%m.%Y'))
     
     days_left = (subscription.end_date - current_time).days
     
     if subscription.is_trial:
         if days_left > 1:
-            return f"🎁 Тестовая подписка\n📅 до {subscription.end_date.strftime('%d.%m.%Y')} ({days_left} дн.)"
+            return texts.t(
+                "SUB_STATUS_TRIAL_ACTIVE",
+                "🎁 Тестовая подписка\n📅 до {end_date} ({days} дн.)",
+            ).format(
+                end_date=subscription.end_date.strftime('%d.%m.%Y'),
+                days=days_left,
+            )
         elif days_left == 1:
-            return f"🎁 Тестовая подписка\n⚠️ истекает завтра!"
+            return texts.t(
+                "SUB_STATUS_TRIAL_TOMORROW",
+                "🎁 Тестовая подписка\n⚠️ истекает завтра!",
+            )
         else:
-            return f"🎁 Тестовая подписка\n⚠️ истекает сегодня!"
-    
+            return texts.t(
+                "SUB_STATUS_TRIAL_TODAY",
+                "🎁 Тестовая подписка\n⚠️ истекает сегодня!",
+            )
+
     else: 
         if days_left > 7:
-            return f"💎 Активна\n📅 до {subscription.end_date.strftime('%d.%m.%Y')} ({days_left} дн.)"
+            return texts.t(
+                "SUB_STATUS_ACTIVE_LONG",
+                "💎 Активна\n📅 до {end_date} ({days} дн.)",
+            ).format(
+                end_date=subscription.end_date.strftime('%d.%m.%Y'),
+                days=days_left,
+            )
         elif days_left > 1:
-            return f"💎 Активна\n⚠️ истекает через {days_left} дн."
+            return texts.t(
+                "SUB_STATUS_ACTIVE_FEW_DAYS",
+                "💎 Активна\n⚠️ истекает через {days} дн.",
+            ).format(days=days_left)
         elif days_left == 1:
-            return f"💎 Активна\n⚠️ истекает завтра!"
+            return texts.t(
+                "SUB_STATUS_ACTIVE_TOMORROW",
+                "💎 Активна\n⚠️ истекает завтра!",
+            )
         else:
-            return f"💎 Активна\n⚠️ истекает сегодня!"
+            return texts.t(
+                "SUB_STATUS_ACTIVE_TODAY",
+                "💎 Активна\n⚠️ истекает сегодня!",
+            )
+
+
+def _insert_random_message(base_text: str, random_message: str, action_prompt: str) -> str:
+    if not random_message:
+        return base_text
+
+    prompt = action_prompt or ""
+    if prompt and prompt in base_text:
+        parts = base_text.split(prompt, 1)
+        if len(parts) == 2:
+            return f"{parts[0]}\n{random_message}\n\n{prompt}{parts[1]}"
+        return base_text.replace(prompt, f"\n{random_message}\n\n{prompt}", 1)
+
+    return f"{base_text}\n\n{random_message}"
+
 
 async def get_main_menu_text(user, texts, db: AsyncSession):
-    
+
     base_text = texts.MAIN_MENU.format(
         user_name=user.full_name,
         subscription_status=_get_subscription_status(user, texts)
     )
     
+    action_prompt = texts.t("MAIN_MENU_ACTION_PROMPT", "Выберите действие:")
+
     try:
         random_message = await get_random_active_message(db)
         if random_message:
-            if "Выберите действие:" in base_text:
-                parts = base_text.split("Выберите действие:")
-                if len(parts) == 2:
-                    return f"{parts[0]}\n{random_message}\n\nВыберите действие:{parts[1]}"
-            
-            if "Выберите действие:" in base_text:
-                return base_text.replace("Выберите действие:", f"\n{random_message}\n\nВыберите действие:")
-            else:
-                return f"{base_text}\n\n{random_message}"
+            return _insert_random_message(base_text, random_message, action_prompt)
                 
     except Exception as e:
         logger.error(f"Ошибка получения случайного сообщения: {e}")

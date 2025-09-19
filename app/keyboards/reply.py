@@ -33,19 +33,19 @@ def get_admin_reply_keyboard(language: str = "ru") -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(
         keyboard=[
             [
-                KeyboardButton(text="👥 Пользователи"),
-                KeyboardButton(text="📱 Подписки")
+                KeyboardButton(text=texts.ADMIN_USERS),
+                KeyboardButton(text=texts.ADMIN_SUBSCRIPTIONS)
             ],
             [
-                KeyboardButton(text="🎫 Промокоды"),
-                KeyboardButton(text="📨 Рассылки")
+                KeyboardButton(text=texts.ADMIN_PROMOCODES),
+                KeyboardButton(text=texts.ADMIN_MESSAGES)
             ],
             [
-                KeyboardButton(text="📊 Статистика"),
-                KeyboardButton(text="🔧 Мониторинг")
+                KeyboardButton(text=texts.ADMIN_STATISTICS),
+                KeyboardButton(text=texts.ADMIN_MONITORING)
             ],
             [
-                KeyboardButton(text="🏠 Главное меню")
+                KeyboardButton(text=texts.t("ADMIN_MAIN_MENU", "🏠 Главное меню"))
             ]
         ],
         resize_keyboard=True,
@@ -81,9 +81,10 @@ def get_confirmation_reply_keyboard(language: str = "ru") -> ReplyKeyboardMarkup
 
 
 def get_skip_keyboard(language: str = "ru") -> ReplyKeyboardMarkup:
+    texts = get_texts(language)
     return ReplyKeyboardMarkup(
         keyboard=[
-            [KeyboardButton(text="⏭️ Пропустить")]
+            [KeyboardButton(text=texts.REFERRAL_CODE_SKIP)]
         ],
         resize_keyboard=True,
         one_time_keyboard=True
@@ -95,10 +96,11 @@ def remove_keyboard() -> ReplyKeyboardRemove:
 
 
 def get_contact_keyboard(language: str = "ru") -> ReplyKeyboardMarkup:
+    texts = get_texts(language)
     return ReplyKeyboardMarkup(
         keyboard=[
-            [KeyboardButton(text="📱 Отправить контакт", request_contact=True)],
-            [KeyboardButton(text="❌ Отмена")]
+            [KeyboardButton(text=texts.t("SEND_CONTACT_BUTTON", "📱 Отправить контакт"), request_contact=True)],
+            [KeyboardButton(text=texts.CANCEL)]
         ],
         resize_keyboard=True,
         one_time_keyboard=True
@@ -106,10 +108,11 @@ def get_contact_keyboard(language: str = "ru") -> ReplyKeyboardMarkup:
 
 
 def get_location_keyboard(language: str = "ru") -> ReplyKeyboardMarkup:
+    texts = get_texts(language)
     return ReplyKeyboardMarkup(
         keyboard=[
-            [KeyboardButton(text="📍 Отправить геолокацию", request_location=True)],
-            [KeyboardButton(text="❌ Отмена")]
+            [KeyboardButton(text=texts.t("SEND_LOCATION_BUTTON", "📍 Отправить геолокацию"), request_location=True)],
+            [KeyboardButton(text=texts.CANCEL)]
         ],
         resize_keyboard=True,
         one_time_keyboard=True

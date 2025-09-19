@@ -145,13 +145,14 @@ class UserService:
         db: AsyncSession,
         page: int = 1,
         limit: int = 20,
-        status: Optional[UserStatus] = None
+        status: Optional[UserStatus] = None,
+        order_by_balance: bool = False
     ) -> Dict[str, Any]:
         try:
             offset = (page - 1) * limit
             
             users = await get_users_list(
-                db, offset=offset, limit=limit, status=status
+                db, offset=offset, limit=limit, status=status, order_by_balance=order_by_balance
             )
             total_count = await get_users_count(db, status=status)
             

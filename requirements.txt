@@ -11,6 +11,7 @@ pydantic==2.11.9
 pydantic-settings==2.10.1
 python-dotenv==1.1.1
 redis==5.0.1
+PyYAML==6.0.2
 
 # YooKassa SDK
 yookassa==3.7.0

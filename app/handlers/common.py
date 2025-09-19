@@ -4,7 +4,7 @@ from aiogram.fsm.context import FSMContext
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database.models import User
-from app.localization.texts import get_texts
+from app.localization.texts import get_texts, get_rules
 from app.keyboards.inline import get_back_keyboard
 
 logger = logging.getLogger(__name__)
@@ -18,8 +18,11 @@ async def handle_unknown_callback(
     texts = get_texts(db_user.language if db_user else "ru")
     
     await callback.answer(
-        "❓ Неизвестная команда. Попробуйте ещё раз.",
-        show_alert=True
+        texts.t(
+            "UNKNOWN_CALLBACK_ALERT",
+            "❓ Неизвестная команда. Попробуйте ещё раз.",
+        ),
+        show_alert=True,
     )
     
     logger.warning(f"Неизвестный callback: {callback.data} от пользователя {callback.from_user.id}")
@@ -49,8 +52,11 @@ async def handle_unknown_message(
     texts = get_texts(db_user.language if db_user else "ru")
     
     await message.answer(
-        "❓ Не понимаю эту команду. Используйте кнопки меню.",
-        reply_markup=get_back_keyboard(db_user.language if db_user else "ru")
+        texts.t(
+            "UNKNOWN_COMMAND_MESSAGE",
+            "❓ Не понимаю эту команду. Используйте кнопки меню.",
+        ),
+        reply_markup=get_back_keyboard(db_user.language if db_user else "ru"),
     )
 
 
@@ -61,8 +67,8 @@ async def show_rules(
 ):
     
     texts = get_texts(db_user.language)
-    
-    rules_text = texts.RULES_TEXT
+
+    rules_text = await get_rules(db_user.language)
     
     await callback.message.edit_text(
         rules_text,

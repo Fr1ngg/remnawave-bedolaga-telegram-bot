@@ -20,6 +20,7 @@ from app.external.webhook_server import WebhookServer
 from app.external.yookassa_webhook import start_yookassa_webhook_server
 from app.database.universal_migration import run_universal_migration
 from app.services.backup_service import backup_service
+from app.localization.loader import ensure_locale_templates
 
 
 class GracefulExit:
@@ -45,6 +46,11 @@ async def main():
     logger = logging.getLogger(__name__)
     logger.info("🚀 Запуск Bedolaga Remnawave Bot...")
     
+    try:
+        ensure_locale_templates()
+    except Exception as error:
+        logger.warning("Failed to prepare locale templates: %s", error)
+
     killer = GracefulExit()
     signal.signal(signal.SIGINT, killer.exit_gracefully)
     signal.signal(signal.SIGTERM, killer.exit_gracefully)

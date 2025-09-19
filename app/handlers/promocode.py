@@ -44,7 +44,10 @@ async def process_promocode(
     
     if not code:
         await message.answer(
-            "❌ Введите корректный промокод",
+            texts.t(
+                "PROMOCODE_EMPTY_INPUT",
+                "❌ Введите корректный промокод",
+            ),
             reply_markup=get_back_keyboard(db_user.language)
         )
         return

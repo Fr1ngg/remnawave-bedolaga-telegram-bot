@@ -57,11 +57,13 @@ services:
       REDIS_URL: "redis://redis:6379/0"
       
       TZ: "Europe/Moscow"
+      LOCALES_PATH: "${LOCALES_PATH:-/app/locales}"
     volumes:
       # Логи
       - ./logs:/app/logs:rw
       # Данные приложения (для SQLite в случае переключения)
       - ./data:/app/data:rw
+      - ./locales:/app/locales:rw
       # Конфигурация приложения
       # - ./app-config.json:/app/app-config.json:ro
       # Timezone

@@ -8,6 +8,8 @@ from aiogram.enums import ChatMemberStatus
 
 from app.config import settings
 from app.keyboards.inline import get_channel_sub_keyboard
+from app.localization.loader import DEFAULT_LANGUAGE
+from app.localization.texts import get_texts
 from app.utils.check_reg_process import is_registration_process
 
 logger = logging.getLogger(__name__)
@@ -111,9 +113,27 @@ class ChannelCheckerMiddleware(BaseMiddleware):
     @staticmethod
     async def _deny_message(event: TelegramObject, bot: Bot, channel_link: str):
         logger.debug("🚫 Отправляем сообщение о необходимости подписки")
-        channel_sub_kb = get_channel_sub_keyboard(channel_link)
-        text = f"""🔒 Для использования бота подпишитесь на новостной канал, чтобы получать уведомления о новых возможностях и обновлениях бота. Спасибо!"""
-        
+
+        user = None
+        if isinstance(event, (Message, CallbackQuery)):
+            user = getattr(event, "from_user", None)
+        elif isinstance(event, Update):
+            if event.message and event.message.from_user:
+                user = event.message.from_user
+            elif event.callback_query and event.callback_query.from_user:
+                user = event.callback_query.from_user
+
+        language = DEFAULT_LANGUAGE
+        if user and user.language_code:
+            language = user.language_code.split('-')[0]
+
+        texts = get_texts(language)
+        channel_sub_kb = get_channel_sub_keyboard(channel_link, language=language)
+        text = texts.t(
+            "CHANNEL_REQUIRED_TEXT",
+            "🔒 Для использования бота подпишитесь на новостной канал, чтобы получать уведомления о новых возможностях и обновлениях бота. Спасибо!",
+        )
+
         try:
             if isinstance(event, Message):
                 return await event.answer(text, reply_markup=channel_sub_kb)
