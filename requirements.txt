@@ -30,4 +30,4 @@ qrcode[pil]==7.4.2
 # Для работы с версиями
 packaging==23.2
 
-aiofiles==23.2.1
+aiofiles==24.1.0
