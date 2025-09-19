@@ -17,6 +17,11 @@ class UserRepository(BaseRepo[UserORM]):
         data = await self.session.execute(smtp)
         return data.scalars().one_or_none()
 
+    async def get_user_by_telegram_id(self, telegram_id: int) -> Optional[UserORM]:
+        stmt = select(self.model).where(self.model.telegram_id == telegram_id)
+        result = await self.session.execute(stmt)
+        return result.scalars().one_or_none()
+
     async def get_paginated_list(self, page: int, size: int) -> Page[UserORM]:
         stmt = select(self.model).offset((page - 1) * size).limit(size)
         result = await self.session.execute(stmt)
@@ -30,3 +35,8 @@ class UserRepository(BaseRepo[UserORM]):
             size=size,
             items=users
         )
+
+    async def get_users_by_username_prefix(self, prefix: str) -> list[UserORM]:
+        stmt = select(self.model).where(self.model.username.ilike(f"{prefix}%"))
+        result = await self.session.execute(stmt)
+        return result.scalars().all()

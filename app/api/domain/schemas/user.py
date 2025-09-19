@@ -35,3 +35,7 @@ class UserInfo(BaseModel):
     vless_uuid: Optional[int]
     ss_password: Optional[int]
     has_made_first_topup: bool
+
+
+class UserBalanceUpdate(BaseModel):
+    new_balance: int

@@ -7,7 +7,7 @@ from starlette.middleware.cors import CORSMiddleware
 
 from app.api.di import setup_di_fastapi
 from app.api.domain.schemas.exception.base import AppException, ErrorResponse
-from app.api.versions.v1.routers import users
+from app.api.versions.v1.routers import subscriptions, users
 from app.config import settings
 
 from fastapi import FastAPI, Request
@@ -39,6 +39,7 @@ def create_app() -> FastAPI:
     )
     setup_dishka(app=api, container=di)
     api.include_router(users.router, prefix="/api/v1/users", tags=["users"])
+    api.include_router(subscriptions.router, prefix="/api/v1/subscriptions", tags=["subscriptions"])
     setup_exception_handlers(api)
     return api
 
