@@ -383,7 +383,7 @@ async def handle_successful_topup_with_cart(
     amount_kopeks: int,
     bot,
     db: AsyncSession
-):
+) -> bool:
     from app.database.crud.user import get_user_by_id
     from aiogram.fsm.context import FSMContext
     from aiogram.fsm.storage.base import StorageKey
@@ -391,16 +391,18 @@ async def handle_successful_topup_with_cart(
     
     user = await get_user_by_id(db, user_id)
     if not user:
-        return
-    
+        return False
+
     storage = dp.storage
     key = StorageKey(bot_id=bot.id, chat_id=user.telegram_id, user_id=user.telegram_id)
-    
+
+    handled = False
+
     try:
-        state_data = await storage.get_data(key)
+        state_data = await storage.get_data(key) or {}
         current_state = await storage.get_state(key)
-        
-        if (current_state == "SubscriptionStates:cart_saved_for_topup" and 
+
+        if (current_state == "SubscriptionStates:cart_saved_for_topup" and
             state_data.get('saved_cart')):
             
             texts = get_texts(user.language)
@@ -435,9 +437,12 @@ async def handle_successful_topup_with_cart(
                 reply_markup=keyboard,
                 parse_mode="HTML"
             )
-            
+            handled = True
+
     except Exception as e:
         logger.error(f"Ошибка обработки успешного пополнения с корзиной: {e}")
+
+    return handled
 
 @error_handler
 async def request_support_topup(
