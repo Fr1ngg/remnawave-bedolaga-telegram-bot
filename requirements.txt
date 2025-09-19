@@ -10,7 +10,7 @@ aiosqlite==0.21.0
 pydantic==2.11.9
 pydantic-settings==2.10.1
 python-dotenv==1.1.1
-redis==5.0.1
+redis==6.4.0
 
 # YooKassa SDK
 yookassa==3.7.0
