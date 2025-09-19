@@ -76,6 +76,8 @@ async def setup_bot() -> tuple[Bot, Dispatcher]:
     
     
     dp = Dispatcher(storage=storage)
+    # expose dispatcher on the bot instance so background services can access FSM storage
+    setattr(bot, "dispatcher", dp)
 
     dp.message.middleware(GlobalErrorMiddleware())
     dp.callback_query.middleware(GlobalErrorMiddleware())
