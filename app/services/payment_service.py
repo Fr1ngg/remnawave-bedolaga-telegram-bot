@@ -123,65 +123,51 @@ class PaymentService:
                         logger.error(f"Ошибка отправки уведомления о пополнении Stars: {e}")
                 
                 if self.bot:
-                    cart_handled = False
                     try:
-                        from app.handlers.balance import handle_successful_topup_with_cart
+                        user_language = user.language if user else "ru"
+                        texts = get_texts(user_language)
+                        has_active_subscription = (
+                            user
+                            and user.subscription
+                            and not user.subscription.is_trial
+                            and user.subscription.is_active
+                        )
 
-                        cart_handled = await handle_successful_topup_with_cart(
-                            user.id,
-                            amount_kopeks,
-                            self.bot,
-                            db,
+                        first_button = InlineKeyboardButton(
+                            text=(
+                                texts.MENU_EXTEND_SUBSCRIPTION
+                                if has_active_subscription
+                                else texts.MENU_BUY_SUBSCRIPTION
+                            ),
+                            callback_data=(
+                                "subscription_extend" if has_active_subscription else "menu_buy"
+                            ),
+                        )
+
+                        keyboard = InlineKeyboardMarkup(
+                            inline_keyboard=[
+                                [first_button],
+                                [InlineKeyboardButton(text="💰 Мой баланс", callback_data="menu_balance")],
+                                [InlineKeyboardButton(text="🏠 Главное меню", callback_data="back_to_menu")],
+                            ]
+                        )
+
+                        await self.bot.send_message(
+                            user.telegram_id,
+                            f"✅ <b>Пополнение успешно!</b>\n\n"
+                            f"⭐ Звезд: {stars_amount}\n"
+                            f"💰 Сумма: {settings.format_price(amount_kopeks)}\n"
+                            f"🦊 Способ: Telegram Stars\n"
+                            f"🆔 Транзакция: {telegram_payment_charge_id[:8]}...\n\n"
+                            f"Баланс пополнен автоматически!",
+                            parse_mode="HTML",
+                            reply_markup=keyboard,
+                        )
+                        logger.info(
+                            f"✅ Отправлено уведомление пользователю {user.telegram_id} о пополнении на {int(rubles_amount)}₽"
                         )
                     except Exception as e:
-                        logger.error(f"Ошибка обработки корзины после пополнения Stars: {e}")
-
-                    if not cart_handled:
-                        try:
-                            user_language = user.language if user else "ru"
-                            texts = get_texts(user_language)
-                            has_active_subscription = (
-                                user
-                                and user.subscription
-                                and not user.subscription.is_trial
-                                and user.subscription.is_active
-                            )
-
-                            first_button = InlineKeyboardButton(
-                                text=(
-                                    texts.MENU_EXTEND_SUBSCRIPTION
-                                    if has_active_subscription
-                                    else texts.MENU_BUY_SUBSCRIPTION
-                                ),
-                                callback_data=(
-                                    "subscription_extend" if has_active_subscription else "menu_buy"
-                                ),
-                            )
-
-                            keyboard = InlineKeyboardMarkup(
-                                inline_keyboard=[
-                                    [first_button],
-                                    [InlineKeyboardButton(text="💰 Мой баланс", callback_data="menu_balance")],
-                                    [InlineKeyboardButton(text="🏠 Главное меню", callback_data="back_to_menu")],
-                                ]
-                            )
-
-                            await self.bot.send_message(
-                                user.telegram_id,
-                                f"✅ <b>Пополнение успешно!</b>\n\n"
-                                f"⭐ Звезд: {stars_amount}\n"
-                                f"💰 Сумма: {settings.format_price(amount_kopeks)}\n"
-                                f"🦊 Способ: Telegram Stars\n"
-                                f"🆔 Транзакция: {telegram_payment_charge_id[:8]}...\n\n"
-                                f"Баланс пополнен автоматически!",
-                                parse_mode="HTML",
-                                reply_markup=keyboard,
-                            )
-                            logger.info(
-                                f"✅ Отправлено уведомление пользователю {user.telegram_id} о пополнении на {int(rubles_amount)}₽"
-                            )
-                        except Exception as e:
-                            logger.error(f"Ошибка отправки уведомления о пополнении Stars: {e}")
+                        logger.error(f"Ошибка отправки уведомления о пополнении Stars: {e}")
                 
                 logger.info(
                     f"✅ Обработан Stars платеж: пользователь {user_id}, "
@@ -445,64 +431,50 @@ class PaymentService:
                             logger.error(f"Ошибка отправки уведомления о пополнении YooKassa: {e}")
                     
                     if self.bot:
-                        cart_handled = False
                         try:
-                            from app.handlers.balance import handle_successful_topup_with_cart
+                            user_language = user.language if user else "ru"
+                            texts = get_texts(user_language)
+                            has_active_subscription = (
+                                user
+                                and user.subscription
+                                and not user.subscription.is_trial
+                                and user.subscription.is_active
+                            )
 
-                            cart_handled = await handle_successful_topup_with_cart(
-                                user.id,
-                                updated_payment.amount_kopeks,
-                                self.bot,
-                                db,
+                            first_button = InlineKeyboardButton(
+                                text=(
+                                    texts.MENU_EXTEND_SUBSCRIPTION
+                                    if has_active_subscription
+                                    else texts.MENU_BUY_SUBSCRIPTION
+                                ),
+                                callback_data=(
+                                    "subscription_extend" if has_active_subscription else "menu_buy"
+                                ),
+                            )
+
+                            keyboard = InlineKeyboardMarkup(
+                                inline_keyboard=[
+                                    [first_button],
+                                    [InlineKeyboardButton(text="💰 Мой баланс", callback_data="menu_balance")],
+                                    [InlineKeyboardButton(text="🏠 Главное меню", callback_data="back_to_menu")],
+                                ]
+                            )
+
+                            await self.bot.send_message(
+                                user.telegram_id,
+                                f"✅ <b>Пополнение успешно!</b>\n\n"
+                                f"💰 Сумма: {settings.format_price(updated_payment.amount_kopeks)}\n"
+                                f"🦊 Способ: Банковская карта\n"
+                                f"🆔 Транзакция: {yookassa_payment_id[:8]}...\n\n"
+                                f"Баланс пополнен автоматически!",
+                                parse_mode="HTML",
+                                reply_markup=keyboard,
+                            )
+                            logger.info(
+                                f"✅ Отправлено уведомление пользователю {user.telegram_id} о пополнении на {updated_payment.amount_kopeks//100}₽"
                             )
                         except Exception as e:
-                            logger.error(f"Ошибка обработки корзины после пополнения YooKassa: {e}")
-
-                        if not cart_handled:
-                            try:
-                                user_language = user.language if user else "ru"
-                                texts = get_texts(user_language)
-                                has_active_subscription = (
-                                    user
-                                    and user.subscription
-                                    and not user.subscription.is_trial
-                                    and user.subscription.is_active
-                                )
-
-                                first_button = InlineKeyboardButton(
-                                    text=(
-                                        texts.MENU_EXTEND_SUBSCRIPTION
-                                        if has_active_subscription
-                                        else texts.MENU_BUY_SUBSCRIPTION
-                                    ),
-                                    callback_data=(
-                                        "subscription_extend" if has_active_subscription else "menu_buy"
-                                    ),
-                                )
-
-                                keyboard = InlineKeyboardMarkup(
-                                    inline_keyboard=[
-                                        [first_button],
-                                        [InlineKeyboardButton(text="💰 Мой баланс", callback_data="menu_balance")],
-                                        [InlineKeyboardButton(text="🏠 Главное меню", callback_data="back_to_menu")],
-                                    ]
-                                )
-
-                                await self.bot.send_message(
-                                    user.telegram_id,
-                                    f"✅ <b>Пополнение успешно!</b>\n\n"
-                                    f"💰 Сумма: {settings.format_price(updated_payment.amount_kopeks)}\n"
-                                    f"🦊 Способ: Банковская карта\n"
-                                    f"🆔 Транзакция: {yookassa_payment_id[:8]}...\n\n"
-                                    f"Баланс пополнен автоматически!",
-                                    parse_mode="HTML",
-                                    reply_markup=keyboard,
-                                )
-                                logger.info(
-                                    f"✅ Отправлено уведомление пользователю {user.telegram_id} о пополнении на {updated_payment.amount_kopeks//100}₽"
-                                )
-                            except Exception as e:
-                                logger.error(f"Ошибка отправки уведомления о пополнении: {e}")
+                            logger.error(f"Ошибка отправки уведомления о пополнении: {e}")
                 else:
                     logger.error(f"Пользователь с ID {updated_payment.user_id} не найден при пополнении баланса")
                     return False
@@ -854,63 +826,49 @@ class PaymentService:
                             logger.error(f"Ошибка отправки уведомления о пополнении CryptoBot: {e}")
                     
                     if self.bot:
-                        cart_handled = False
                         try:
-                            from app.handlers.balance import handle_successful_topup_with_cart
-
-                            cart_handled = await handle_successful_topup_with_cart(
-                                user.id,
-                                amount_kopeks,
-                                self.bot,
-                                db,
+                            user_language = user.language if user else "ru"
+                            texts = get_texts(user_language)
+                            has_active_subscription = (
+                                user
+                                and user.subscription
+                                and not user.subscription.is_trial
+                                and user.subscription.is_active
                             )
+
+                            first_button = InlineKeyboardButton(
+                                text=(
+                                    texts.MENU_EXTEND_SUBSCRIPTION
+                                    if has_active_subscription
+                                    else texts.MENU_BUY_SUBSCRIPTION
+                                ),
+                                callback_data=(
+                                    "subscription_extend" if has_active_subscription else "menu_buy"
+                                ),
+                            )
+
+                            keyboard = InlineKeyboardMarkup(
+                                inline_keyboard=[
+                                    [first_button],
+                                    [InlineKeyboardButton(text="💰 Мой баланс", callback_data="menu_balance")],
+                                    [InlineKeyboardButton(text="🏠 Главное меню", callback_data="back_to_menu")],
+                                ]
+                            )
+
+                            await self.bot.send_message(
+                                user.telegram_id,
+                                f"✅ <b>Пополнение успешно!</b>\n\n"
+                                f"💰 Сумма: {settings.format_price(amount_kopeks)}\n"
+                                f"🪙 Платеж: {updated_payment.amount} {updated_payment.asset}\n"
+                                f"💱 Курс: 1 USD = {conversion_rate:.2f}₽\n"
+                                f"🆔 Транзакция: {invoice_id[:8]}...\n\n"
+                                f"Баланс пополнен автоматически!",
+                                parse_mode="HTML",
+                                reply_markup=keyboard,
+                            )
+                            logger.info(f"✅ Отправлено уведомление пользователю {user.telegram_id} о пополнении на {amount_rubles:.2f}₽ ({updated_payment.asset})")
                         except Exception as e:
-                            logger.error(f"Ошибка обработки корзины после пополнения CryptoBot: {e}")
-
-                        if not cart_handled:
-                            try:
-                                user_language = user.language if user else "ru"
-                                texts = get_texts(user_language)
-                                has_active_subscription = (
-                                    user
-                                    and user.subscription
-                                    and not user.subscription.is_trial
-                                    and user.subscription.is_active
-                                )
-
-                                first_button = InlineKeyboardButton(
-                                    text=(
-                                        texts.MENU_EXTEND_SUBSCRIPTION
-                                        if has_active_subscription
-                                        else texts.MENU_BUY_SUBSCRIPTION
-                                    ),
-                                    callback_data=(
-                                        "subscription_extend" if has_active_subscription else "menu_buy"
-                                    ),
-                                )
-
-                                keyboard = InlineKeyboardMarkup(
-                                    inline_keyboard=[
-                                        [first_button],
-                                        [InlineKeyboardButton(text="💰 Мой баланс", callback_data="menu_balance")],
-                                        [InlineKeyboardButton(text="🏠 Главное меню", callback_data="back_to_menu")],
-                                    ]
-                                )
-
-                                await self.bot.send_message(
-                                    user.telegram_id,
-                                    f"✅ <b>Пополнение успешно!</b>\n\n"
-                                    f"💰 Сумма: {settings.format_price(amount_kopeks)}\n"
-                                    f"🪙 Платеж: {updated_payment.amount} {updated_payment.asset}\n"
-                                    f"💱 Курс: 1 USD = {conversion_rate:.2f}₽\n"
-                                    f"🆔 Транзакция: {invoice_id[:8]}...\n\n"
-                                    f"Баланс пополнен автоматически!",
-                                    parse_mode="HTML",
-                                    reply_markup=keyboard,
-                                )
-                                logger.info(f"✅ Отправлено уведомление пользователю {user.telegram_id} о пополнении на {amount_rubles:.2f}₽ ({updated_payment.asset})")
-                            except Exception as e:
-                                logger.error(f"Ошибка отправки уведомления о пополнении CryptoBot: {e}")
+                            logger.error(f"Ошибка отправки уведомления о пополнении CryptoBot: {e}")
                 else:
                     logger.error(f"Пользователь с ID {updated_payment.user_id} не найден при пополнении баланса")
                     return False
