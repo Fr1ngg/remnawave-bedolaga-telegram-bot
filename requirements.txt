@@ -25,7 +25,7 @@ APScheduler==3.11.0
 python-dateutil==2.9.0.post0
 pytz==2023.4
 cryptography>=41.0.0
-qrcode[pil]==7.4.2
+qrcode[pil]==8.2
 
 # Для работы с версиями
 packaging==23.2
