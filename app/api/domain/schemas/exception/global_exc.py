@@ -13,3 +13,9 @@ class AuthException(AppException):
     status_code = status.HTTP_401_UNAUTHORIZED
     code = "authorization_failed"
     detail = "Authorization failed"
+
+
+class RemnawaveIntegrationException(AppException):
+    status_code = status.HTTP_502_BAD_GATEWAY
+    code = "remnawave_integration_failed"
+    detail = "Failed to update RemnaWave user"
