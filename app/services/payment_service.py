@@ -22,6 +22,7 @@ from app.external.cryptobot import CryptoBotService
 from app.utils.currency_converter import currency_converter
 from app.database.database import get_db
 from app.localization.texts import get_texts
+from app.services.cart_topup_service import notify_saved_cart_after_topup
 
 logger = logging.getLogger(__name__)
 
@@ -162,6 +163,12 @@ class PaymentService:
                             f"Баланс пополнен автоматически!",
                             parse_mode="HTML",
                             reply_markup=keyboard,
+                        )
+                        await notify_saved_cart_after_topup(
+                            db=db,
+                            bot=self.bot,
+                            user_id=user.id,
+                            amount_kopeks=amount_kopeks,
                         )
                         logger.info(
                             f"✅ Отправлено уведомление пользователю {user.telegram_id} о пополнении на {int(rubles_amount)}₽"
@@ -470,6 +477,12 @@ class PaymentService:
                                 parse_mode="HTML",
                                 reply_markup=keyboard,
                             )
+                            await notify_saved_cart_after_topup(
+                                db=db,
+                                bot=self.bot,
+                                user_id=user.id,
+                                amount_kopeks=updated_payment.amount_kopeks,
+                            )
                             logger.info(
                                 f"✅ Отправлено уведомление пользователю {user.telegram_id} о пополнении на {updated_payment.amount_kopeks//100}₽"
                             )
@@ -586,6 +599,13 @@ class PaymentService:
                 parse_mode="HTML",
                 reply_markup=keyboard,
             )
+            if user:
+                await notify_saved_cart_after_topup(
+                    db=db,
+                    bot=self.bot,
+                    user_id=user.id,
+                    amount_kopeks=amount_kopeks,
+                )
         except Exception as e:
             logger.error(f"Ошибка отправки уведомления пользователю {telegram_id}: {e}")
     
@@ -865,6 +885,12 @@ class PaymentService:
                                 f"Баланс пополнен автоматически!",
                                 parse_mode="HTML",
                                 reply_markup=keyboard,
+                            )
+                            await notify_saved_cart_after_topup(
+                                db=db,
+                                bot=self.bot,
+                                user_id=user.id,
+                                amount_kopeks=amount_kopeks,
                             )
                             logger.info(f"✅ Отправлено уведомление пользователю {user.telegram_id} о пополнении на {amount_rubles:.2f}₽ ({updated_payment.asset})")
                         except Exception as e:

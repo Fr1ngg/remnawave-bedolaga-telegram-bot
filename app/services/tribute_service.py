@@ -16,6 +16,7 @@ from app.database.crud.transaction import (
 from app.database.crud.user import get_user_by_telegram_id, add_user_balance
 from app.external.tribute import TributeService as TributeAPI
 from app.localization.texts import get_texts
+from app.services.cart_topup_service import notify_saved_cart_after_topup
 
 logger = logging.getLogger(__name__)
 
@@ -153,6 +154,12 @@ class TributeService:
                     logger.error(f"Ошибка отправки уведомления о Tribute пополнении: {e}")
                 
                 await self._send_success_notification(user_telegram_id, amount_kopeks)
+                await notify_saved_cart_after_topup(
+                    db=session,
+                    bot=self.bot,
+                    user_id=user.id,
+                    amount_kopeks=amount_kopeks,
+                )
                 
                 logger.info(f"🎉 Успешно обработан Tribute платеж: {amount_kopeks/100}₽ для пользователя {user_telegram_id}")
                 break
@@ -366,6 +373,12 @@ class TributeService:
                 logger.info(f"💰 ПРИНУДИТЕЛЬНО обновлен баланс: {old_balance} -> {user.balance_kopeks} коп")
                 
                 await self._send_success_notification(user_id, amount_kopeks)
+                await notify_saved_cart_after_topup(
+                    db=session,
+                    bot=self.bot,
+                    user_id=user.id,
+                    amount_kopeks=amount_kopeks,
+                )
                 
                 logger.info(f"✅ Принудительно обработан платеж {payment_id}")
                 return True
