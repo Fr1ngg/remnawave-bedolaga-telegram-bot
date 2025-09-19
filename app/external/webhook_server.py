@@ -6,18 +6,21 @@ from aiohttp import web
 from aiogram import Bot
 
 from app.config import settings
+from app.database.database import AsyncSessionLocal
+from app.services.payment_service import PaymentService
 from app.services.tribute_service import TributeService
 
 logger = logging.getLogger(__name__)
 
 
 class WebhookServer:
-    
-    def __init__(self, bot: Bot):
+
+    def __init__(self, bot: Bot, payment_service: Optional[PaymentService] = None):
         self.bot = bot
         self.app = None
         self.runner = None
         self.site = None
+        self.payment_service = payment_service or PaymentService(bot)
         self.tribute_service = TributeService(bot)
     
     async def create_app(self) -> web.Application:
@@ -25,18 +28,28 @@ class WebhookServer:
         self.app = web.Application()
         
         self.app.router.add_post(settings.TRIBUTE_WEBHOOK_PATH, self._tribute_webhook_handler)
-        
+
+        if settings.is_mulenpay_enabled():
+            self.app.router.add_post(
+                settings.MULENPAY_WEBHOOK_PATH,
+                self._mulenpay_webhook_handler,
+            )
+
         if settings.is_cryptobot_enabled():
             self.app.router.add_post(settings.CRYPTOBOT_WEBHOOK_PATH, self._cryptobot_webhook_handler)
-        
+
         self.app.router.add_get('/health', self._health_check)
-        
+
         self.app.router.add_options(settings.TRIBUTE_WEBHOOK_PATH, self._options_handler)
+        if settings.is_mulenpay_enabled():
+            self.app.router.add_options(settings.MULENPAY_WEBHOOK_PATH, self._options_handler)
         if settings.is_cryptobot_enabled():
             self.app.router.add_options(settings.CRYPTOBOT_WEBHOOK_PATH, self._options_handler)
-        
+
         logger.info(f"Webhook сервер настроен:")
         logger.info(f"  - Tribute webhook: POST {settings.TRIBUTE_WEBHOOK_PATH}")
+        if settings.is_mulenpay_enabled():
+            logger.info(f"  - MulenPay webhook: POST {settings.MULENPAY_WEBHOOK_PATH}")
         if settings.is_cryptobot_enabled():
             logger.info(f"  - CryptoBot webhook: POST {settings.CRYPTOBOT_WEBHOOK_PATH}")
         logger.info(f"  - Health check: GET /health")
@@ -61,9 +74,20 @@ class WebhookServer:
             await self.site.start()
             
             logger.info(f"Webhook сервер запущен на порту {settings.TRIBUTE_WEBHOOK_PORT}")
-            logger.info(f"Tribute webhook URL: http://0.0.0.0:{settings.TRIBUTE_WEBHOOK_PORT}{settings.TRIBUTE_WEBHOOK_PATH}")
+            logger.info(
+                "Tribute webhook URL: "
+                f"http://0.0.0.0:{settings.TRIBUTE_WEBHOOK_PORT}{settings.TRIBUTE_WEBHOOK_PATH}"
+            )
+            if settings.is_mulenpay_enabled():
+                logger.info(
+                    "MulenPay webhook URL: "
+                    f"http://0.0.0.0:{settings.TRIBUTE_WEBHOOK_PORT}{settings.MULENPAY_WEBHOOK_PATH}"
+                )
             if settings.is_cryptobot_enabled():
-                logger.info(f"CryptoBot webhook URL: http://0.0.0.0:{settings.TRIBUTE_WEBHOOK_PORT}{settings.CRYPTOBOT_WEBHOOK_PATH}")
+                logger.info(
+                    "CryptoBot webhook URL: "
+                    f"http://0.0.0.0:{settings.TRIBUTE_WEBHOOK_PORT}{settings.CRYPTOBOT_WEBHOOK_PATH}"
+                )
             
         except Exception as e:
             logger.error(f"Ошибка запуска webhook сервера: {e}")
@@ -92,7 +116,7 @@ class WebhookServer:
                 'Access-Control-Allow-Headers': 'Content-Type, trbt-signature, Crypto-Pay-API-Signature',
             }
         )
-    
+
     async def _tribute_webhook_handler(self, request: web.Request) -> web.Response:
         
         try:
@@ -159,9 +183,68 @@ class WebhookServer:
                 {"status": "error", "reason": "internal_error", "message": str(e)},
                 status=500
             )
-    
+
+    async def _mulenpay_webhook_handler(self, request: web.Request) -> web.Response:
+
+        if not settings.is_mulenpay_enabled():
+            return web.json_response(
+                {"status": "error", "reason": "mulenpay_disabled"},
+                status=503
+            )
+
+        if not self.payment_service:
+            logger.error("Получен MulenPay webhook без инициализированного PaymentService")
+            return web.json_response(
+                {"status": "error", "reason": "service_not_configured"},
+                status=503
+            )
+
+        try:
+            logger.info(f"Получен MulenPay webhook: {request.method} {request.path}")
+            logger.info(f"Headers: {dict(request.headers)}")
+
+            raw_body = await request.text()
+
+            if not raw_body:
+                logger.warning("Получен пустой MulenPay webhook")
+                return web.json_response(
+                    {"status": "error", "reason": "empty_body"},
+                    status=400
+                )
+
+            logger.info(f"MulenPay payload: {raw_body}")
+
+            try:
+                callback_data = json.loads(raw_body)
+            except json.JSONDecodeError as e:
+                logger.error(f"Ошибка парсинга MulenPay JSON: {e}")
+                return web.json_response(
+                    {"status": "error", "reason": "invalid_json"},
+                    status=400
+                )
+
+            async with AsyncSessionLocal() as db:
+                processed = await self.payment_service.process_mulenpay_callback(db, callback_data)
+
+            if processed:
+                logger.info("MulenPay webhook обработан успешно")
+                return web.json_response({"status": "ok"}, status=200)
+
+            logger.error("Ошибка обработки MulenPay webhook")
+            return web.json_response(
+                {"status": "error", "reason": "processing_failed"},
+                status=400
+            )
+
+        except Exception as e:
+            logger.error(f"Критическая ошибка обработки MulenPay webhook: {e}", exc_info=True)
+            return web.json_response(
+                {"status": "error", "reason": "internal_error", "message": str(e)},
+                status=500
+            )
+
     async def _cryptobot_webhook_handler(self, request: web.Request) -> web.Response:
-        
+
         try:
             logger.info(f"Получен CryptoBot webhook: {request.method} {request.path}")
             logger.info(f"Headers: {dict(request.headers)}")

@@ -135,6 +135,23 @@ class Settings(BaseSettings):
     YOOKASSA_MIN_AMOUNT_KOPEKS: int = 5000
     YOOKASSA_MAX_AMOUNT_KOPEKS: int = 1000000
     YOOKASSA_QUICK_AMOUNT_SELECTION_ENABLED: bool = False
+
+    MULENPAY_ENABLED: bool = False
+    MULENPAY_API_KEY: Optional[str] = None
+    MULENPAY_SECRET_KEY: Optional[str] = None
+    MULENPAY_SHOP_ID: Optional[int] = None
+    MULENPAY_API_URL: str = "https://mulenpay.ru/api"
+    MULENPAY_WEBSITE_URL: Optional[str] = None
+    MULENPAY_LANGUAGE: str = "ru"
+    MULENPAY_VAT_CODE: int = 1
+    MULENPAY_PAYMENT_SUBJECT: int = 4
+    MULENPAY_PAYMENT_MODE: int = 1
+    MULENPAY_MEASUREMENT_UNIT: int = 0
+    MULENPAY_MIN_AMOUNT_KOPEKS: int = 5000
+    MULENPAY_MAX_AMOUNT_KOPEKS: int = 1000000
+    MULENPAY_QUICK_AMOUNT_SELECTION_ENABLED: bool = False
+    MULENPAY_WEBHOOK_PATH: str = "/mulenpay-webhook"
+
     PAYMENT_BALANCE_DESCRIPTION: str = "Пополнение баланса"
     PAYMENT_SUBSCRIPTION_DESCRIPTION: str = "Оплата подписки"
     PAYMENT_SERVICE_NAME: str = "Интернет-сервис"
@@ -358,10 +375,23 @@ class Settings(BaseSettings):
         return self.FIXED_TRAFFIC_LIMIT_GB
     
     def is_yookassa_enabled(self) -> bool:
-        return (self.YOOKASSA_ENABLED and 
-                self.YOOKASSA_SHOP_ID is not None and 
+        return (self.YOOKASSA_ENABLED and
+                self.YOOKASSA_SHOP_ID is not None and
                 self.YOOKASSA_SECRET_KEY is not None)
-    
+
+    def is_mulenpay_enabled(self) -> bool:
+        return (
+            self.MULENPAY_ENABLED
+            and self.MULENPAY_API_KEY is not None
+            and self.MULENPAY_SECRET_KEY is not None
+            and self.MULENPAY_SHOP_ID is not None
+        )
+
+    def get_mulenpay_website_url(self) -> Optional[str]:
+        if self.MULENPAY_WEBSITE_URL:
+            return self.MULENPAY_WEBSITE_URL
+        return self.WEBHOOK_URL
+
     def get_yookassa_return_url(self) -> str:
         if self.YOOKASSA_RETURN_URL:
             return self.YOOKASSA_RETURN_URL

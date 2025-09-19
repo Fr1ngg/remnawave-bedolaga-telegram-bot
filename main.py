@@ -106,20 +106,28 @@ async def main():
         
         payment_service = PaymentService(bot)
         
-        webhook_needed = settings.TRIBUTE_ENABLED or settings.is_cryptobot_enabled()
-        
+        webhook_needed = (
+            settings.TRIBUTE_ENABLED
+            or settings.is_cryptobot_enabled()
+            or settings.is_mulenpay_enabled()
+        )
+
         if webhook_needed:
             enabled_services = []
             if settings.TRIBUTE_ENABLED:
                 enabled_services.append("Tribute")
+            if settings.is_mulenpay_enabled():
+                enabled_services.append("MulenPay")
             if settings.is_cryptobot_enabled():
                 enabled_services.append("CryptoBot")
-            
+
             logger.info(f"🌐 Запуск webhook сервера для: {', '.join(enabled_services)}...")
-            webhook_server = WebhookServer(bot)
+            webhook_server = WebhookServer(bot, payment_service)
             await webhook_server.start()
         else:
-            logger.info("ℹ️ Tribute и CryptoBot отключены, webhook сервер не запускается")
+            logger.info(
+                "ℹ️ Tribute, MulenPay и CryptoBot отключены, webhook сервер не запускается"
+            )
         
         if settings.is_yookassa_enabled():
             logger.info("💳 Запуск YooKassa webhook сервера...")
@@ -154,6 +162,10 @@ async def main():
         if webhook_needed:
             if settings.TRIBUTE_ENABLED:
                 logger.info(f"   Tribute: {settings.WEBHOOK_URL}:{settings.TRIBUTE_WEBHOOK_PORT}{settings.TRIBUTE_WEBHOOK_PATH}")
+            if settings.is_mulenpay_enabled():
+                logger.info(
+                    f"   MulenPay: {settings.WEBHOOK_URL}:{settings.TRIBUTE_WEBHOOK_PORT}{settings.MULENPAY_WEBHOOK_PATH}"
+                )
             if settings.is_cryptobot_enabled():
                 logger.info(f"   CryptoBot: {settings.WEBHOOK_URL}:{settings.TRIBUTE_WEBHOOK_PORT}{settings.CRYPTOBOT_WEBHOOK_PATH}")
         if settings.is_yookassa_enabled():

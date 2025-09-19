@@ -13,6 +13,7 @@ from app.database.crud.transaction import get_transactions_statistics, get_reven
 from app.database.crud.referral import get_referral_statistics
 from app.utils.decorators import admin_required, error_handler
 from app.utils.formatters import format_datetime, format_percentage
+from app.utils.payment_utils import get_payment_method_display
 
 logger = logging.getLogger(__name__)
 
@@ -176,8 +177,12 @@ async def show_revenue_statistics(
 """
     
     for method, data in month_stats['by_payment_method'].items():
-        if method and data['count'] > 0:
-            text += f"• {method}: {data['count']} ({settings.format_price(data['amount'])})\n"
+        if data['count'] > 0:
+            method_display = get_payment_method_display(method)
+            text += (
+                f"• {method_display}: {data['count']} "
+                f"({settings.format_price(data['amount'])})\n"
+            )
     
     text += f"\n<b>Обновлено:</b> {current_time}"
     

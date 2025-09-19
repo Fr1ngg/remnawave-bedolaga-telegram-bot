@@ -494,23 +494,31 @@ def get_payment_methods_keyboard(amount_kopeks: int, language: str = "ru") -> In
     if settings.is_yookassa_enabled():
         keyboard.append([
             InlineKeyboardButton(
-                text="💳 Банковская карта (YooKassa)", 
+                text="💳 Банковская карта (YooKassa)",
                 callback_data="topup_yookassa"
             )
         ])
-        
+
         if settings.YOOKASSA_SBP_ENABLED:
             keyboard.append([
                 InlineKeyboardButton(
-                    text="🏦 Оплатить по СБП (YooKassa)", 
+                    text="🏦 Оплатить по СБП (YooKassa)",
                     callback_data="topup_yookassa_sbp"
                 )
             ])
-    
+
+    if settings.is_mulenpay_enabled():
+        keyboard.append([
+            InlineKeyboardButton(
+                text="💳 Банковская карта (MulenPay)",
+                callback_data="topup_mulenpay"
+            )
+        ])
+
     if settings.TRIBUTE_ENABLED:
         keyboard.append([
             InlineKeyboardButton(
-                text="💳 Банковская карта (Tribute)", 
+                text="💳 Банковская карта (Tribute)",
                 callback_data="topup_tribute"
             )
         ])

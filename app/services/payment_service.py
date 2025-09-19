@@ -1,7 +1,7 @@
 import logging
 import hashlib
 import hmac
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, Tuple
 from datetime import datetime
 from aiogram import Bot
 from aiogram.types import LabeledPrice, InlineKeyboardMarkup, InlineKeyboardButton
@@ -9,15 +9,24 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.services.yookassa_service import YooKassaService
+from app.services.mulenpay_service import MulenPayService
 from app.external.telegram_stars import TelegramStarsService
 from app.database.crud.yookassa import create_yookassa_payment, link_yookassa_payment_to_transaction
+from app.database.crud.mulenpay import (
+    create_mulenpay_payment,
+    get_mulenpay_payment_by_id,
+    get_mulenpay_payment_by_uuid,
+    get_mulenpay_payment_by_local_id,
+    update_mulenpay_payment_status,
+    link_mulenpay_payment_to_transaction,
+)
 from app.database.crud.transaction import create_transaction
 from app.database.crud.user import (
     add_user_balance,
     get_user_by_id,
     get_user_by_telegram_id,
 )
-from app.database.models import TransactionType, PaymentMethod
+from app.database.models import TransactionType, PaymentMethod, MulenPayPayment
 from app.external.cryptobot import CryptoBotService
 from app.utils.currency_converter import currency_converter
 from app.database.database import get_db
@@ -35,8 +44,45 @@ class PaymentService:
     def __init__(self, bot: Optional[Bot] = None):
         self.bot = bot
         self.yookassa_service = YooKassaService() if settings.is_yookassa_enabled() else None
+        self.mulenpay_service = MulenPayService() if settings.is_mulenpay_enabled() else None
         self.stars_service = TelegramStarsService(bot) if bot else None
         self.cryptobot_service = CryptoBotService() if settings.is_cryptobot_enabled() else None
+
+    @staticmethod
+    def _map_mulenpay_status(status: Any) -> str:
+        status_map = {
+            0: "created",
+            1: "processing",
+            2: "canceled",
+            3: "succeeded",
+            4: "error",
+            5: "hold",
+            6: "hold",
+            "success": "succeeded",
+            "cancel": "canceled",
+            "cancelled": "canceled",
+            "processing": "processing",
+            "created": "created",
+            "error": "error",
+            "hold": "hold",
+        }
+
+        if isinstance(status, str):
+            normalized = status.lower()
+            return status_map.get(normalized, normalized)
+
+        if isinstance(status, (int, float)):
+            return status_map.get(int(status), str(status))
+
+        return "unknown"
+
+    @staticmethod
+    def _is_mulenpay_success(status: str) -> bool:
+        return status in {"succeeded", "success"}
+
+    @staticmethod
+    def _is_mulenpay_failed(status: str) -> bool:
+        return status in {"canceled", "error"}
 
     async def build_topup_success_keyboard(self, user) -> InlineKeyboardMarkup:
         texts = get_texts(user.language if user else "ru")
@@ -195,13 +241,82 @@ class PaymentService:
                 )
                 return True
             else:
-                logger.error(f"Пользователь с ID {user_id} не найден при обработке Stars платежа")
+                logger.error(
+                    f"Пользователь с ID {user_id} не найден при обработке Stars платежа"
+                )
                 return False
-                
+
         except Exception as e:
             logger.error(f"Ошибка обработки Stars платежа: {e}", exc_info=True)
             return False
-    
+
+    async def create_mulenpay_payment(
+        self,
+        db: AsyncSession,
+        user_id: int,
+        amount_kopeks: int,
+        description: str,
+        uuid: str,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> Optional[Dict[str, Any]]:
+
+        if not self.mulenpay_service:
+            logger.error("MulenPay сервис не инициализирован")
+            return None
+
+        try:
+            response = await self.mulenpay_service.create_payment(
+                amount_kopeks=amount_kopeks,
+                description=description,
+                uuid=uuid,
+            )
+
+            if not response or not response.get("success"):
+                logger.error(f"Ошибка создания MulenPay платежа: {response}")
+                return None
+
+            mulen_payment_id = response.get("id")
+            payment_url = response.get("paymentUrl")
+
+            if mulen_payment_id is None or not payment_url:
+                logger.error(f"Некорректный ответ MulenPay: {response}")
+                return None
+
+            local_payment = await create_mulenpay_payment(
+                db=db,
+                user_id=user_id,
+                mulen_payment_id=int(mulen_payment_id),
+                uuid=uuid,
+                amount_kopeks=amount_kopeks,
+                currency="RUB",
+                description=description,
+                status="created",
+                payment_url=payment_url,
+                metadata_json=metadata,
+            )
+
+            logger.info(
+                "Создан MulenPay платеж %s на %s₽ для пользователя %s",
+                mulen_payment_id,
+                amount_kopeks / 100,
+                user_id,
+            )
+
+            return {
+                "local_payment_id": local_payment.id,
+                "mulen_payment_id": int(mulen_payment_id),
+                "payment_url": payment_url,
+                "amount_kopeks": amount_kopeks,
+                "amount_rubles": amount_kopeks / 100,
+                "status": local_payment.status,
+                "uuid": uuid,
+                "created_at": local_payment.created_at,
+            }
+
+        except Exception as e:
+            logger.error(f"Ошибка создания MulenPay платежа: {e}")
+            return None
+
     async def create_yookassa_payment(
         self,
         db: AsyncSession,
@@ -369,11 +484,46 @@ class PaymentService:
         except Exception as e:
             logger.error(f"Ошибка создания платежа YooKassa СБП: {e}")
             return None
-    
+
+    async def refresh_mulenpay_payment_status(
+        self,
+        db: AsyncSession,
+        local_payment_id: int,
+    ) -> Tuple[Optional[MulenPayPayment], Optional[Dict[str, Any]]]:
+
+        payment = await get_mulenpay_payment_by_local_id(db, local_payment_id)
+        if not payment:
+            return None, None
+
+        if not self.mulenpay_service:
+            return payment, None
+
+        remote_payment = await self.mulenpay_service.get_payment(payment.mulen_payment_id)
+        if not remote_payment:
+            return payment, None
+
+        mapped_status = self._map_mulenpay_status(remote_payment.get("status"))
+        is_paid = self._is_mulenpay_success(mapped_status)
+
+        paid_at: Optional[datetime] = None
+        if is_paid and not payment.paid_at:
+            paid_at = datetime.utcnow()
+
+        updated_payment = await update_mulenpay_payment_status(
+            db,
+            payment.mulen_payment_id,
+            mapped_status,
+            is_paid=is_paid,
+            payment_data=remote_payment,
+            paid_at=paid_at,
+        )
+
+        return updated_payment or payment, remote_payment
+
     async def process_yookassa_webhook(self, db: AsyncSession, webhook_data: dict) -> bool:
         try:
             from app.database.crud.yookassa import (
-                get_yookassa_payment_by_id, 
+                get_yookassa_payment_by_id,
                 update_yookassa_payment_status,
                 link_yookassa_payment_to_transaction
             )
@@ -478,7 +628,169 @@ class PaymentService:
         except Exception as e:
             logger.error(f"Ошибка обработки YooKassa webhook: {e}", exc_info=True)
             return False
-    
+
+    async def process_mulenpay_callback(
+        self,
+        db: AsyncSession,
+        callback_data: Dict[str, Any],
+    ) -> bool:
+
+        try:
+            payment_id_raw = callback_data.get("id")
+            uuid = callback_data.get("uuid")
+            status_value = callback_data.get("payment_status")
+
+            payment: Optional[MulenPayPayment] = None
+
+            if payment_id_raw is not None:
+                try:
+                    payment = await get_mulenpay_payment_by_id(db, int(payment_id_raw))
+                except (TypeError, ValueError):
+                    logger.warning(f"Некорректный MulenPay payment id: {payment_id_raw}")
+
+            if not payment and uuid:
+                payment = await get_mulenpay_payment_by_uuid(db, uuid)
+
+            if not payment:
+                logger.error(
+                    f"MulenPay платеж не найден (id={payment_id_raw}, uuid={uuid})"
+                )
+                return False
+
+            mapped_status = self._map_mulenpay_status(status_value)
+            is_paid = self._is_mulenpay_success(mapped_status)
+
+            paid_at: Optional[datetime] = None
+            if is_paid and not payment.paid_at:
+                paid_at = datetime.utcnow()
+
+            updated_payment = await update_mulenpay_payment_status(
+                db,
+                payment.mulen_payment_id,
+                mapped_status,
+                is_paid=is_paid,
+                callback_data=callback_data,
+                paid_at=paid_at,
+            )
+
+            if not updated_payment:
+                return False
+
+            if is_paid:
+                if updated_payment.transaction_id:
+                    logger.info(
+                        "MulenPay платеж %s уже обработан",
+                        updated_payment.mulen_payment_id,
+                    )
+                    return True
+
+                user = await get_user_by_id(db, updated_payment.user_id)
+                if not user:
+                    logger.error(
+                        f"Пользователь {updated_payment.user_id} не найден для MulenPay"
+                    )
+                    return False
+
+                transaction = await create_transaction(
+                    db,
+                    user_id=user.id,
+                    type=TransactionType.DEPOSIT,
+                    amount_kopeks=updated_payment.amount_kopeks,
+                    description=(
+                        f"Пополнение через MulenPay "
+                        f"({updated_payment.mulen_payment_id})"
+                    ),
+                    payment_method=PaymentMethod.MULENPAY,
+                    external_id=str(updated_payment.mulen_payment_id),
+                    is_completed=True,
+                )
+
+                await link_mulenpay_payment_to_transaction(
+                    db,
+                    updated_payment.mulen_payment_id,
+                    transaction.id,
+                )
+
+                old_balance = user.balance_kopeks
+                user.balance_kopeks += updated_payment.amount_kopeks
+                user.updated_at = datetime.utcnow()
+
+                await db.commit()
+                await db.refresh(user)
+
+                try:
+                    from app.services.referral_service import process_referral_topup
+
+                    await process_referral_topup(
+                        db, user.id, updated_payment.amount_kopeks, self.bot
+                    )
+                except Exception as e:
+                    logger.error(
+                        f"Ошибка обработки реферального пополнения MulenPay: {e}"
+                    )
+
+                if self.bot:
+                    try:
+                        from app.services.admin_notification_service import (
+                            AdminNotificationService,
+                        )
+
+                        notification_service = AdminNotificationService(self.bot)
+                        await notification_service.send_balance_topup_notification(
+                            db, user, transaction, old_balance
+                        )
+                    except Exception as e:
+                        logger.error(
+                            f"Ошибка отправки уведомления о MulenPay пополнении: {e}"
+                        )
+
+                if self.bot:
+                    try:
+                        keyboard = await self.build_topup_success_keyboard(user)
+                        await self.bot.send_message(
+                            user.telegram_id,
+                            (
+                                "✅ <b>Пополнение успешно!</b>\n\n"
+                                f"💰 Сумма: {settings.format_price(updated_payment.amount_kopeks)}\n"
+                                "🦊 Способ: MulenPay\n"
+                                f"🆔 Транзакция: {str(updated_payment.mulen_payment_id)[:8]}...\n\n"
+                                "Баланс пополнен автоматически!"
+                            ),
+                            parse_mode="HTML",
+                            reply_markup=keyboard,
+                        )
+                    except Exception as e:
+                        logger.error(
+                            f"Ошибка отправки уведомления пользователю о MulenPay пополнении: {e}"
+                        )
+
+                logger.info(
+                    "✅ Обработан MulenPay платеж %s для пользователя %s",
+                    updated_payment.mulen_payment_id,
+                    user.telegram_id if user else updated_payment.user_id,
+                )
+                return True
+
+            if self._is_mulenpay_failed(mapped_status) and self.bot and updated_payment.user:
+                try:
+                    await self.bot.send_message(
+                        updated_payment.user.telegram_id,
+                        (
+                            "❌ Оплата через MulenPay не была завершена. "
+                            "Если средства были списаны, обратитесь в поддержку."
+                        ),
+                    )
+                except Exception as e:
+                    logger.error(
+                        f"Ошибка отправки уведомления об ошибке MulenPay: {e}"
+                    )
+
+            return True
+
+        except Exception as e:
+            logger.error(f"Ошибка обработки MulenPay callback: {e}", exc_info=True)
+            return False
+
     async def _process_successful_yookassa_payment(
         self,
         db: AsyncSession,

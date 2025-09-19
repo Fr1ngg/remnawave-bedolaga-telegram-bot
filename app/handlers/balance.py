@@ -1,23 +1,20 @@
 import logging
+from uuid import uuid4
+
 from aiogram import Dispatcher, types, F
 from aiogram.fsm.context import FSMContext
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.states import BalanceStates
-from app.database.crud.user import add_user_balance
-from app.database.crud.transaction import (
-    get_user_transactions, get_user_transactions_count,
-    create_transaction
-)
-from app.database.models import User, TransactionType, PaymentMethod
+from app.database.crud.transaction import get_user_transactions
+from app.database.models import User, TransactionType
 from app.keyboards.inline import (
     get_balance_keyboard, get_payment_methods_keyboard,
     get_back_keyboard, get_pagination_keyboard
 )
 from app.localization.texts import get_texts
 from app.services.payment_service import PaymentService
-from app.utils.pagination import paginate_list
 from app.utils.decorators import error_handler
 
 logger = logging.getLogger(__name__)
@@ -25,12 +22,19 @@ logger = logging.getLogger(__name__)
 TRANSACTIONS_PER_PAGE = 10
 
 
-def get_quick_amount_buttons(language: str) -> list:
+def get_quick_amount_buttons(language: str, payment_method: str) -> list:
     """
-    Генерирует кнопки быстрого выбора суммы пополнения на основе 
+    Генерирует кнопки быстрого выбора суммы пополнения на основе
     AVAILABLE_SUBSCRIPTION_PERIODS и PRICE_*_DAYS
     """
-    if not settings.YOOKASSA_QUICK_AMOUNT_SELECTION_ENABLED:
+    if payment_method in {"yookassa", "yookassa_sbp"}:
+        quick_enabled = settings.YOOKASSA_QUICK_AMOUNT_SELECTION_ENABLED
+    elif payment_method == "mulenpay":
+        quick_enabled = settings.MULENPAY_QUICK_AMOUNT_SELECTION_ENABLED
+    else:
+        quick_enabled = False
+
+    if not quick_enabled:
         return []
     
     buttons = []
@@ -274,7 +278,7 @@ async def start_yookassa_payment(
     
     # Если включен быстрый выбор суммы, добавляем кнопки
     if settings.YOOKASSA_QUICK_AMOUNT_SELECTION_ENABLED:
-        quick_amount_buttons = get_quick_amount_buttons(db_user.language)
+        quick_amount_buttons = get_quick_amount_buttons(db_user.language, "yookassa")
         if quick_amount_buttons:
             # Вставляем кнопки быстрого выбора перед кнопкой "Назад"
             keyboard.inline_keyboard = quick_amount_buttons + keyboard.inline_keyboard
@@ -323,7 +327,7 @@ async def start_yookassa_sbp_payment(
     
     # Если включен быстрый выбор суммы, добавляем кнопки
     if settings.YOOKASSA_QUICK_AMOUNT_SELECTION_ENABLED:
-        quick_amount_buttons = get_quick_amount_buttons(db_user.language)
+        quick_amount_buttons = get_quick_amount_buttons(db_user.language, "yookassa_sbp")
         if quick_amount_buttons:
             # Вставляем кнопки быстрого выбора перед кнопкой "Назад"
             keyboard.inline_keyboard = quick_amount_buttons + keyboard.inline_keyboard
@@ -336,6 +340,51 @@ async def start_yookassa_sbp_payment(
     
     await state.set_state(BalanceStates.waiting_for_amount)
     await state.update_data(payment_method="yookassa_sbp")
+    await callback.answer()
+
+
+@error_handler
+async def start_mulenpay_payment(
+    callback: types.CallbackQuery,
+    db_user: User,
+    state: FSMContext,
+):
+    texts = get_texts(db_user.language)
+
+    if not settings.is_mulenpay_enabled():
+        await callback.answer("❌ Оплата через MulenPay временно недоступна", show_alert=True)
+        return
+
+    min_amount_rub = settings.MULENPAY_MIN_AMOUNT_KOPEKS / 100
+    max_amount_rub = settings.MULENPAY_MAX_AMOUNT_KOPEKS / 100
+
+    if settings.MULENPAY_QUICK_AMOUNT_SELECTION_ENABLED:
+        message_text = (
+            f"💳 <b>Оплата через MulenPay</b>\n\n"
+            f"Выберите сумму пополнения или введите вручную сумму "
+            f"от {min_amount_rub:.0f} до {max_amount_rub:,.0f} рублей:"
+        )
+    else:
+        message_text = (
+            f"💳 <b>Оплата через MulenPay</b>\n\n"
+            f"Введите сумму для пополнения от {min_amount_rub:.0f} до {max_amount_rub:,.0f} рублей:"
+        )
+
+    keyboard = get_back_keyboard(db_user.language)
+
+    if settings.MULENPAY_QUICK_AMOUNT_SELECTION_ENABLED:
+        quick_amount_buttons = get_quick_amount_buttons(db_user.language, "mulenpay")
+        if quick_amount_buttons:
+            keyboard.inline_keyboard = quick_amount_buttons + keyboard.inline_keyboard
+
+    await callback.message.edit_text(
+        message_text,
+        reply_markup=keyboard,
+        parse_mode="HTML",
+    )
+
+    await state.set_state(BalanceStates.waiting_for_amount)
+    await state.update_data(payment_method="mulenpay")
     await callback.answer()
 
 
@@ -458,10 +507,23 @@ async def process_topup_amount(
                 min_rubles = settings.YOOKASSA_MIN_AMOUNT_KOPEKS / 100
                 await message.answer(f"❌ Минимальная сумма для оплаты через YooKassa: {min_rubles:.0f} ₽")
                 return
-            
+
             if amount_kopeks > settings.YOOKASSA_MAX_AMOUNT_KOPEKS:
                 max_rubles = settings.YOOKASSA_MAX_AMOUNT_KOPEKS / 100
                 await message.answer(f"❌ Максимальная сумма для оплаты через YooKassa: {max_rubles:,.0f} ₽".replace(',', ' '))
+                return
+
+        if payment_method == "mulenpay":
+            if amount_kopeks < settings.MULENPAY_MIN_AMOUNT_KOPEKS:
+                min_rubles = settings.MULENPAY_MIN_AMOUNT_KOPEKS / 100
+                await message.answer(f"❌ Минимальная сумма для оплаты через MulenPay: {min_rubles:.0f} ₽")
+                return
+
+            if amount_kopeks > settings.MULENPAY_MAX_AMOUNT_KOPEKS:
+                max_rubles = settings.MULENPAY_MAX_AMOUNT_KOPEKS / 100
+                await message.answer(
+                    f"❌ Максимальная сумма для оплаты через MulenPay: {max_rubles:,.0f} ₽".replace(',', ' ')
+                )
                 return
         
         if payment_method == "stars":
@@ -470,10 +532,14 @@ async def process_topup_amount(
             from app.database.database import AsyncSessionLocal
             async with AsyncSessionLocal() as db:
                 await process_yookassa_payment_amount(message, db_user, db, amount_kopeks, state)
-        elif payment_method == "yookassa_sbp": 
+        elif payment_method == "yookassa_sbp":
             from app.database.database import AsyncSessionLocal
             async with AsyncSessionLocal() as db:
                 await process_yookassa_sbp_payment_amount(message, db_user, db, amount_kopeks, state)
+        elif payment_method == "mulenpay":
+            from app.database.database import AsyncSessionLocal
+            async with AsyncSessionLocal() as db:
+                await process_mulenpay_payment_amount(message, db_user, db, amount_kopeks, state)
         elif payment_method == "cryptobot":
             from app.database.database import AsyncSessionLocal
             async with AsyncSessionLocal() as db:
@@ -708,6 +774,114 @@ async def process_yookassa_sbp_payment_amount(
 
 
 @error_handler
+async def process_mulenpay_payment_amount(
+    message: types.Message,
+    db_user: User,
+    db: AsyncSession,
+    amount_kopeks: int,
+    state: FSMContext,
+):
+    texts = get_texts(db_user.language)
+
+    if not settings.is_mulenpay_enabled():
+        await message.answer("❌ Оплата через MulenPay временно недоступна")
+        return
+
+    if amount_kopeks < settings.MULENPAY_MIN_AMOUNT_KOPEKS:
+        min_rubles = settings.MULENPAY_MIN_AMOUNT_KOPEKS / 100
+        await message.answer(f"❌ Минимальная сумма для оплаты через MulenPay: {min_rubles:.0f} ₽")
+        return
+
+    if amount_kopeks > settings.MULENPAY_MAX_AMOUNT_KOPEKS:
+        max_rubles = settings.MULENPAY_MAX_AMOUNT_KOPEKS / 100
+        await message.answer(
+            f"❌ Максимальная сумма для оплаты через MulenPay: {max_rubles:,.0f} ₽".replace(',', ' ')
+        )
+        return
+
+    try:
+        payment_service = PaymentService(message.bot)
+        payment_uuid = f"mulenpay_{db_user.id}_{uuid4().hex}"
+
+        payment_result = await payment_service.create_mulenpay_payment(
+            db=db,
+            user_id=db_user.id,
+            amount_kopeks=amount_kopeks,
+            description=settings.get_balance_payment_description(amount_kopeks),
+            uuid=payment_uuid,
+            metadata={
+                "user_telegram_id": str(db_user.telegram_id),
+                "user_username": db_user.username or "",
+                "purpose": "balance_topup",
+            },
+        )
+
+        if not payment_result:
+            await message.answer(
+                "❌ Ошибка создания платежа. Попробуйте позже или обратитесь в поддержку."
+            )
+            await state.clear()
+            return
+
+        payment_url = payment_result.get("payment_url")
+        if not payment_url:
+            await message.answer(
+                "❌ Не удалось получить ссылку для оплаты. Обратитесь в поддержку."
+            )
+            await state.clear()
+            return
+
+        local_payment_id = payment_result.get("local_payment_id")
+
+        keyboard = types.InlineKeyboardMarkup(inline_keyboard=[
+            [
+                types.InlineKeyboardButton(
+                    text="💳 Оплатить MulenPay",
+                    url=payment_url,
+                )
+            ],
+            [
+                types.InlineKeyboardButton(
+                    text="📊 Проверить статус",
+                    callback_data=f"check_mulenpay_{local_payment_id}",
+                )
+            ],
+            [types.InlineKeyboardButton(text=texts.BACK, callback_data="balance_topup")],
+        ])
+
+        await message.answer(
+            f"💳 <b>Оплата через MulenPay</b>\n\n"
+            f"💰 Сумма: {settings.format_price(amount_kopeks)}\n"
+            f"🆔 ID платежа: {payment_result['mulen_payment_id']}\n\n"
+            f"📱 <b>Инструкция:</b>\n"
+            f"1. Нажмите кнопку 'Оплатить MulenPay'\n"
+            f"2. Введите данные карты и подтвердите оплату\n"
+            f"3. Деньги поступят на баланс автоматически\n\n"
+            f"🔒 Оплата происходит через систему MulenPay\n"
+            f"✅ Принимаем карты: Visa, MasterCard, МИР\n\n"
+            f"❓ Если возникнут проблемы, обратитесь в {settings.get_support_contact_display_html()}",
+            reply_markup=keyboard,
+            parse_mode="HTML",
+        )
+
+        await state.clear()
+
+        logger.info(
+            "Создан платеж MulenPay для пользователя %s: %s₽, ID: %s",
+            db_user.telegram_id,
+            amount_kopeks / 100,
+            payment_result['mulen_payment_id'],
+        )
+
+    except Exception as e:
+        logger.error(f"Ошибка создания MulenPay платежа: {e}")
+        await message.answer(
+            "❌ Ошибка создания платежа. Попробуйте позже или обратитесь в поддержку."
+        )
+        await state.clear()
+
+
+@error_handler
 async def check_yookassa_payment_status(
     callback: types.CallbackQuery,
     db: AsyncSession
@@ -760,6 +934,60 @@ async def check_yookassa_payment_status(
         
     except Exception as e:
         logger.error(f"Ошибка проверки статуса платежа: {e}")
+        await callback.answer("❌ Ошибка проверки статуса", show_alert=True)
+
+@error_handler
+async def check_mulenpay_payment_status(
+    callback: types.CallbackQuery,
+    db: AsyncSession
+):
+    try:
+        local_payment_id = int(callback.data.split('_')[-1])
+
+        payment_service = PaymentService(callback.message.bot)
+        payment, _ = await payment_service.refresh_mulenpay_payment_status(
+            db, local_payment_id
+        )
+
+        if not payment:
+            await callback.answer("❌ Платеж не найден", show_alert=True)
+            return
+
+        status_display = {
+            "created": "⏳ Создан",
+            "processing": "🔄 В обработке",
+            "hold": "⏸ На удержании",
+            "succeeded": "✅ Оплачен",
+            "success": "✅ Оплачен",
+            "canceled": "❌ Отменен",
+            "error": "⚠️ Ошибка",
+        }
+
+        status_text = status_display.get(payment.status, payment.status)
+        updated_at = payment.updated_at.strftime('%d.%m.%Y %H:%M') if payment.updated_at else "—"
+
+        message_text = (
+            "ℹ️ <b>Статус платежа MulenPay</b>\n\n"
+            f"🆔 ID: {payment.mulen_payment_id}\n"
+            f"💰 Сумма: {settings.format_price(payment.amount_kopeks)}\n"
+            f"📊 Статус: {status_text}\n"
+            f"🕒 Обновлено: {updated_at}\n"
+        )
+
+        if payment.is_paid:
+            message_text += "\n✅ Платеж подтвержден. Баланс будет пополнен автоматически."
+        elif payment.status in {"canceled", "error"}:
+            message_text += (
+                "\n❌ Платеж не завершен. Если средства были списаны, обратитесь в поддержку."
+            )
+        else:
+            message_text += "\n⏳ Платеж обрабатывается. Проверьте статус позднее."
+
+        await callback.message.answer(message_text, parse_mode="HTML")
+        await callback.answer("ℹ️ Статус обновлен", show_alert=True)
+
+    except Exception as e:
+        logger.error(f"Ошибка проверки статуса MulenPay: {e}")
         await callback.answer("❌ Ошибка проверки статуса", show_alert=True)
 
 @error_handler
@@ -1032,6 +1260,12 @@ async def handle_quick_amount_selection(
                 await process_yookassa_sbp_payment_amount(
                     callback.message, db_user, db, amount_kopeks, state
                 )
+        elif payment_method == "mulenpay":
+            from app.database.database import AsyncSessionLocal
+            async with AsyncSessionLocal() as db:
+                await process_mulenpay_payment_amount(
+                    callback.message, db_user, db, amount_kopeks, state
+                )
         else:
             await callback.answer("❌ Неизвестный способ оплаты", show_alert=True)
             return
@@ -1079,12 +1313,17 @@ def register_handlers(dp: Dispatcher):
         start_yookassa_sbp_payment,
         F.data == "topup_yookassa_sbp"
     )
-    
+
+    dp.callback_query.register(
+        start_mulenpay_payment,
+        F.data == "topup_mulenpay"
+    )
+
     dp.callback_query.register(
         check_yookassa_payment_status,
         F.data.startswith("check_yookassa_")
     )
-    
+
     dp.callback_query.register(
         start_tribute_payment,
         F.data == "topup_tribute"
@@ -1094,10 +1333,10 @@ def register_handlers(dp: Dispatcher):
         request_support_topup,
         F.data == "topup_support"
     )
-    
+
     dp.callback_query.register(
-        check_yookassa_payment_status,
-        F.data.startswith("check_yookassa_")
+        check_mulenpay_payment_status,
+        F.data.startswith("check_mulenpay_")
     )
     
     dp.message.register(

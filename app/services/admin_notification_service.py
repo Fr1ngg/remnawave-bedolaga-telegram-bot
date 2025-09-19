@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.database.models import User, Subscription, Transaction
 from app.database.crud.user import get_user_by_id
+from app.utils.payment_utils import get_payment_method_display
 
 logger = logging.getLogger(__name__)
 
@@ -328,18 +329,7 @@ class AdminNotificationService:
         return self.enabled and bool(self.chat_id)
     
     def _get_payment_method_display(self, payment_method: Optional[str]) -> str:
-        method_names = {
-            'telegram_stars': '⭐ Telegram Stars',
-            'yookassa': '💳 YooKassa (карта)',
-            'tribute': '💎 Tribute (карта)',
-            'manual': '🛠️ Вручную (админ)',
-            'balance': '💰 С баланса'
-        }
-        
-        if not payment_method:
-            return '💰 С баланса'
-            
-        return method_names.get(payment_method, f'💰 С баланса')
+        return get_payment_method_display(payment_method)
     
     def _format_traffic(self, traffic_gb: int) -> str:
         if traffic_gb == 0:

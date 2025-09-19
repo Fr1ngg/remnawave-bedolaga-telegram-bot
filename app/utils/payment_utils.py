@@ -1,5 +1,18 @@
-from typing import List, Dict, Tuple
+from typing import Dict, List, Optional
+
 from app.config import settings
+
+
+PAYMENT_METHOD_DISPLAY: Dict[Optional[str], str] = {
+    None: "💰 С баланса",
+    "telegram_stars": "⭐ Telegram Stars",
+    "yookassa": "💳 YooKassa (карта)",
+    "mulenpay": "💳 MulenPay (карта)",
+    "tribute": "💳 Tribute (карта)",
+    "cryptobot": "🪙 CryptoBot",
+    "manual": "🛠️ Вручную (админ)",
+    "balance": "💰 С баланса",
+}
 
 def get_available_payment_methods() -> List[Dict[str, str]]:
     """
@@ -25,10 +38,19 @@ def get_available_payment_methods() -> List[Dict[str, str]]:
             "callback": "topup_yookassa"
         })
     
+    if settings.is_mulenpay_enabled():
+        methods.append({
+            "id": "mulenpay",
+            "name": "Банковская карта",
+            "icon": "💳",
+            "description": "через MulenPay",
+            "callback": "topup_mulenpay"
+        })
+
     if settings.TRIBUTE_ENABLED:
         methods.append({
             "id": "tribute",
-            "name": "Банковская карта", 
+            "name": "Банковская карта",
             "icon": "💳",
             "description": "через Tribute",
             "callback": "topup_tribute"
@@ -86,6 +108,8 @@ def is_payment_method_available(method_id: str) -> bool:
         return settings.TELEGRAM_STARS_ENABLED
     elif method_id == "yookassa":
         return settings.is_yookassa_enabled()
+    elif method_id == "mulenpay":
+        return settings.is_mulenpay_enabled()
     elif method_id == "tribute":
         return settings.TRIBUTE_ENABLED
     elif method_id == "cryptobot":
@@ -102,6 +126,7 @@ def get_payment_method_status() -> Dict[str, bool]:
     return {
         "stars": settings.TELEGRAM_STARS_ENABLED,
         "yookassa": settings.is_yookassa_enabled(),
+        "mulenpay": settings.is_mulenpay_enabled(),
         "tribute": settings.TRIBUTE_ENABLED,
         "cryptobot": settings.is_cryptobot_enabled(),
         "support": True
@@ -116,8 +141,19 @@ def get_enabled_payment_methods_count() -> int:
         count += 1
     if settings.is_yookassa_enabled():
         count += 1 
+    if settings.is_mulenpay_enabled():
+        count += 1
     if settings.TRIBUTE_ENABLED:
         count += 1
     if settings.is_cryptobot_enabled():
         count += 1
     return count
+
+
+def get_payment_method_display(method_id: Optional[str]) -> str:
+    """Возвращает локализованное название способа оплаты."""
+
+    if method_id not in PAYMENT_METHOD_DISPLAY:
+        return f"💰 {method_id}" if method_id else PAYMENT_METHOD_DISPLAY[None]
+
+    return PAYMENT_METHOD_DISPLAY[method_id]

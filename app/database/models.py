@@ -53,13 +53,14 @@ class PromoCodeType(Enum):
 class PaymentMethod(Enum):
     TELEGRAM_STARS = "telegram_stars"
     TRIBUTE = "tribute"
-    YOOKASSA = "yookassa" 
+    YOOKASSA = "yookassa"
     CRYPTOBOT = "cryptobot"
-    MANUAL = "manual"  
+    MULENPAY = "mulenpay"
+    MANUAL = "manual"
 
 class YooKassaPayment(Base):
     __tablename__ = "yookassa_payments"
-    
+
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     yookassa_payment_id = Column(String(255), unique=True, nullable=False, index=True)
@@ -104,6 +105,50 @@ class YooKassaPayment(Base):
     
     def __repr__(self):
         return f"<YooKassaPayment(id={self.id}, yookassa_id={self.yookassa_payment_id}, amount={self.amount_rubles}₽, status={self.status})>"
+
+
+class MulenPayPayment(Base):
+    __tablename__ = "mulenpay_payments"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    mulen_payment_id = Column(Integer, unique=True, nullable=False, index=True)
+    uuid = Column(String(255), unique=True, nullable=False, index=True)
+    amount_kopeks = Column(Integer, nullable=False)
+    currency = Column(String(3), default="RUB", nullable=False)
+    description = Column(Text, nullable=True)
+    status = Column(String(50), nullable=False, default="created")
+    payment_url = Column(Text, nullable=True)
+    metadata_json = Column(JSON, nullable=True)
+    payment_data_json = Column(JSON, nullable=True)
+    callback_data = Column(JSON, nullable=True)
+    transaction_id = Column(Integer, ForeignKey("transactions.id"), nullable=True)
+    is_paid = Column(Boolean, default=False)
+    paid_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=func.now())
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+
+    user = relationship("User", backref="mulenpay_payments")
+    transaction = relationship("Transaction", backref="mulenpay_payment")
+
+    @property
+    def amount_rubles(self) -> float:
+        return self.amount_kopeks / 100 if self.amount_kopeks else 0.0
+
+    @property
+    def is_pending(self) -> bool:
+        return self.status in ["created", "processing", "hold"]
+
+    @property
+    def is_succeeded(self) -> bool:
+        return self.status in ["succeeded", "success"] and self.is_paid
+
+    def __repr__(self):
+        return (
+            f"<MulenPayPayment(id={self.id}, mulen_id={self.mulen_payment_id}, "
+            f"amount={self.amount_rubles}₽, status={self.status})>"
+        )
+
 
 class CryptoBotPayment(Base):
     __tablename__ = "cryptobot_payments"
