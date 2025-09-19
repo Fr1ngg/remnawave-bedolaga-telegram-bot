@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 import logging
 from typing import Any, Dict
 
@@ -122,7 +121,9 @@ class Texts:
 
     def _get_value(self, item: str) -> Any:
         if item == "RULES_TEXT":
-            return get_rules_sync(self.language)
+            if self.language in _cached_rules:
+                return _cached_rules[self.language]
+            return _get_default_rules(self.language)
 
         if item in self._values:
             return self._values[item]
@@ -183,18 +184,11 @@ def _get_default_rules(language: str = DEFAULT_LANGUAGE) -> str:
     return fallback.get(default_key, "")
 
 
-def get_rules_sync(language: str = DEFAULT_LANGUAGE) -> str:
+async def get_rules_text(language: str = DEFAULT_LANGUAGE) -> str:
     if language in _cached_rules:
         return _cached_rules[language]
 
-    try:
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        rules = loop.run_until_complete(get_rules_from_db(language))
-        return rules
-    finally:
-        asyncio.set_event_loop(None)
-        loop.close()
+    return await get_rules_from_db(language)
 
 
 async def refresh_rules_cache(language: str = DEFAULT_LANGUAGE) -> None:

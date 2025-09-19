@@ -4,7 +4,7 @@ from aiogram.fsm.context import FSMContext
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database.models import User
-from app.localization.texts import get_texts
+from app.localization.texts import get_texts, get_rules_text
 from app.keyboards.inline import get_back_keyboard
 
 logger = logging.getLogger(__name__)
@@ -68,7 +68,7 @@ async def show_rules(
     
     texts = get_texts(db_user.language)
     
-    rules_text = texts.RULES_TEXT
+    rules_text = await get_rules_text(db_user.language)
     
     await callback.message.edit_text(
         rules_text,

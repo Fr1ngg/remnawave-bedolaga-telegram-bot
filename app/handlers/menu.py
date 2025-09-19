@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 from app.config import settings
 from app.database.crud.user import get_user_by_telegram_id, update_user
 from app.keyboards.inline import get_main_menu_keyboard
-from app.localization.texts import get_texts, get_rules_sync
+from app.localization.texts import get_texts, get_rules_text
 from app.database.models import User
 from app.utils.user_utils import mark_user_as_had_paid_subscription
 from app.database.crud.user_message import get_random_active_message
@@ -80,7 +80,7 @@ async def show_service_rules(
     rules_text = await get_current_rules_content(db, db_user.language)
 
     if not rules_text:
-        rules_text = get_rules_sync(db_user.language)
+        rules_text = await get_rules_text(db_user.language)
 
     await callback.message.edit_text(
         f"{texts.t('RULES_HEADER', '📋 <b>Правила сервиса</b>')}\n\n{rules_text}",

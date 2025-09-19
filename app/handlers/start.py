@@ -22,7 +22,7 @@ from app.keyboards.inline import (
     get_rules_keyboard, get_main_menu_keyboard, get_post_registration_keyboard
 )
 from app.localization.loader import DEFAULT_LANGUAGE
-from app.localization.texts import get_texts
+from app.localization.texts import get_texts, get_rules_text
 from app.services.referral_service import process_referral_registration
 from app.services.campaign_service import AdvertisingCampaignService
 from app.utils.user_utils import generate_unique_referral_code
@@ -122,8 +122,10 @@ async def handle_potential_referral_code(
         language = data.get('language', DEFAULT_LANGUAGE)
         texts = get_texts(language)
         
+        rules_text = await get_rules_text(language)
+
         await message.answer(
-            texts.RULES_TEXT,
+            rules_text,
             reply_markup=get_rules_keyboard(language)
         )
         await state.set_state(RegistrationStates.waiting_for_rules_accept)
@@ -341,8 +343,10 @@ async def cmd_start(message: types.Message, state: FSMContext, db: AsyncSession,
                 await complete_registration(message, state, db)
         return
 
+    rules_text = await get_rules_text(language)
+
     await message.answer(
-        texts.RULES_TEXT,
+        rules_text,
         reply_markup=get_rules_keyboard(language)
     )
     logger.info(f"📋 Правила отправлены")
@@ -1187,17 +1191,19 @@ async def required_sub_channel_check(
                 from app.utils.message_patch import LOGO_PATH
                 from aiogram.types import FSInputFile
 
+                rules_text = await get_rules_text(language)
+
                 if settings.ENABLE_LOGO_MODE:
                     await bot.send_photo(
                         chat_id=query.from_user.id,
                         photo=FSInputFile(LOGO_PATH),
-                        caption=texts.RULES_TEXT,
+                        caption=rules_text,
                         reply_markup=get_rules_keyboard(language),
                     )
                 else:
                     await bot.send_message(
                         chat_id=query.from_user.id,
-                        text=texts.RULES_TEXT,
+                        text=rules_text,
                         reply_markup=get_rules_keyboard(language),
                     )
                 await state.set_state(RegistrationStates.waiting_for_rules_accept)
