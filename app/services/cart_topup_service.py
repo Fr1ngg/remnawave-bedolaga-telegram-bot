@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database.crud.user import get_user_by_id
 from app.localization.texts import get_texts
+from app.states import SubscriptionStates
 
 logger = logging.getLogger(__name__)
 
@@ -39,14 +40,28 @@ async def notify_saved_cart_after_topup(
         logger.error("Не удалось получить состояние корзины из FSM: %s", exc, exc_info=True)
         return False
 
-    if current_state != "SubscriptionStates:cart_saved_for_topup":
+    if not state_data.get("saved_cart"):
+        logger.debug("У пользователя %s нет сохраненной корзины", user.telegram_id)
         return False
 
-    if not state_data.get("saved_cart"):
+    if state_data.get("return_to_cart") is False:
+        logger.debug("Повторное уведомление о корзине для пользователя %s не требуется", user.telegram_id)
+        return False
+
+    if current_state not in (None, SubscriptionStates.cart_saved_for_topup.state):
+        logger.debug(
+            "Текущее состояние %s пользователя %s не соответствует сохраненной корзине",
+            current_state,
+            user.telegram_id,
+        )
         return False
 
     texts = get_texts(user.language)
     total_price = state_data.get("total_price", 0)
+    has_enough_balance = user.balance_kopeks >= total_price > 0
+
+    balance_text = texts.format_price(user.balance_kopeks)
+    total_text = texts.format_price(total_price) if total_price else None
 
     keyboard = types.InlineKeyboardMarkup(
         inline_keyboard=[
@@ -71,13 +86,44 @@ async def notify_saved_cart_after_topup(
         ]
     )
 
-    success_text = (
-        f"✅ Баланс пополнен на {texts.format_price(amount_kopeks)}!\n\n"
-        f"💰 Текущий баланс: {texts.format_price(user.balance_kopeks)}\n\n"
-        f"🛒 У вас есть сохраненная корзина подписки\n"
-        f"Стоимость: {texts.format_price(total_price)}\n\n"
-        f"Хотите продолжить оформление?"
-    )
+    success_parts = [
+        f"✅ Баланс пополнен на {texts.format_price(amount_kopeks)}!",
+        "",
+        f"💰 Текущий баланс: {balance_text}",
+    ]
+
+    if total_price:
+        success_parts.extend(
+            [
+                "",
+                "🛒 У вас есть сохраненная корзина подписки",
+                f"Стоимость: {total_text}",
+            ]
+        )
+
+    if has_enough_balance:
+        success_parts.extend([
+            "",
+            "🎯 Теперь средств достаточно, можно продолжить оформление.",
+        ])
+    elif total_price:
+        missing_amount = total_price - user.balance_kopeks
+        if missing_amount > 0:
+            success_parts.extend(
+                [
+                    "",
+                    "⚠️ Пока средств недостаточно для оформления.",
+                    f"Не хватает: {texts.format_price(missing_amount)}",
+                    "Пополните баланс еще или вернитесь к корзине, чтобы изменить параметры.",
+                ]
+            )
+
+    success_parts.extend([
+        "",
+        "Хотите продолжить оформление?",
+    ])
+
+    success_text = "\n".join(success_parts)
 
     await bot.send_message(
         chat_id=user.telegram_id,
@@ -85,6 +131,15 @@ async def notify_saved_cart_after_topup(
         reply_markup=keyboard,
         parse_mode="HTML",
     )
+
+    try:
+        await fsm_storage.update_data(key, return_to_cart=False)
+    except Exception as exc:
+        logger.warning(
+            "Не удалось обновить флаг возврата к корзине для пользователя %s: %s",
+            user.telegram_id,
+            exc,
+        )
 
     return True
 
