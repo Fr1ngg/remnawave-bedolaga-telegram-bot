@@ -19,15 +19,23 @@ from app.handlers import (
     referral, support, common
 )
 from app.handlers.admin import (
-    main as admin_main, users as admin_users, subscriptions as admin_subscriptions,
-    promocodes as admin_promocodes, messages as admin_messages,
-    monitoring as admin_monitoring, referrals as admin_referrals,
-    rules as admin_rules, remnawave as admin_remnawave,
-    statistics as admin_statistics, servers as admin_servers,
+    main as admin_main,
+    users as admin_users,
+    subscriptions as admin_subscriptions,
+    promocodes as admin_promocodes,
+    messages as admin_messages,
+    monitoring as admin_monitoring,
+    referrals as admin_referrals,
+    rules as admin_rules,
+    remnawave as admin_remnawave,
+    statistics as admin_statistics,
+    servers as admin_servers,
     maintenance as admin_maintenance,
+    campaigns as admin_campaigns,
     user_messages as admin_user_messages,
-    updates as admin_updates, backup as admin_backup,
-    welcome_text as admin_welcome_text
+    updates as admin_updates,
+    backup as admin_backup,
+    welcome_text as admin_welcome_text,
 )
 from app.handlers.stars_payments import register_stars_handlers
 
@@ -119,6 +127,7 @@ async def setup_bot() -> tuple[Bot, Dispatcher]:
     admin_rules.register_handlers(dp)
     admin_remnawave.register_handlers(dp)
     admin_statistics.register_handlers(dp)
+    admin_campaigns.register_handlers(dp)
     admin_maintenance.register_handlers(dp)
     admin_user_messages.register_handlers(dp)
     admin_updates.register_handlers(dp)

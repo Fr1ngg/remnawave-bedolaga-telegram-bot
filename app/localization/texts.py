@@ -312,8 +312,15 @@ class RussianTexts(Texts):
 
 💪 Быстро, надежно, недорого!
 """
-    
+
     CREATE_INVITE = "📝 Создать приглашение"
+    CAMPAIGN_EXISTING_USER = (
+        "ℹ️ Эта рекламная ссылка доступна только новым пользователям."
+    )
+    CAMPAIGN_BONUS_BALANCE = (
+        "🎉 Вы получили {amount} за регистрацию по кампании «{name}»!"
+    )
+    CAMPAIGN_BONUS_SUBSCRIPTION = "🎉 Вам выдана подписка на {days} д. (трафик: {traffic}, устройств: {devices}) по кампании «{name}»!"
 
     TRIAL_ENDING_SOON = """
 🎁 <b>Тестовая подписка скоро закончится!</b>
@@ -421,6 +428,7 @@ class RussianTexts(Texts):
     ADMIN_USERS = "👥 Пользователи"
     ADMIN_SUBSCRIPTIONS = "📱 Подписки"
     ADMIN_PROMOCODES = "🎫 Промокоды"
+    ADMIN_CAMPAIGNS = "📣 Рекламные кампании"
     ADMIN_MESSAGES = "📨 Рассылки"
     ADMIN_MONITORING = "🔍 Мониторинг"
     ADMIN_REFERRALS = "🤝 Партнерка"
@@ -535,6 +543,7 @@ To get started, select interface language:
     CONTINUE = "➡️ Continue"
     YES = "✅ Yes"
     NO = "❌ No"
+    ADMIN_CAMPAIGNS = "📣 Campaigns"
 
     MENU_BALANCE = "💰 Balance"
     MENU_SUBSCRIPTION = "📱 Subscription"
@@ -545,6 +554,9 @@ To get started, select interface language:
     GO_TO_BALANCE_TOP_UP = "💳 Go to balance top up"
     RETURN_TO_SUBSCRIPTION_CHECKOUT = "↩️ Back to checkout"
     NO_SAVED_SUBSCRIPTION_ORDER = "❌ Saved subscription order not found. Please configure it again."
+    CAMPAIGN_EXISTING_USER = "ℹ️ This campaign link is available for new users only."
+    CAMPAIGN_BONUS_BALANCE = "🎉 You received {amount} for joining via campaign “{name}”!"
+    CAMPAIGN_BONUS_SUBSCRIPTION = "🎉 You received a {days}-day subscription (traffic: {traffic}, devices: {devices}) from campaign “{name}”!"
     
 
 LANGUAGES = {

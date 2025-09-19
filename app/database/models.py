@@ -3,8 +3,17 @@ from typing import Optional, List
 from enum import Enum
 
 from sqlalchemy import (
-    Column, Integer, String, DateTime, Boolean, Text, 
-    ForeignKey, Float, JSON, BigInteger
+    Column,
+    Integer,
+    String,
+    DateTime,
+    Boolean,
+    Text,
+    ForeignKey,
+    Float,
+    JSON,
+    BigInteger,
+    UniqueConstraint,
 )
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship, Mapped, mapped_column
@@ -666,7 +675,7 @@ class UserMessage(Base):
 
 class WelcomeText(Base):
     __tablename__ = "welcome_texts"
-    
+
     id = Column(Integer, primary_key=True, index=True)
     text_content = Column(Text, nullable=False)
     is_active = Column(Boolean, default=True)
@@ -674,5 +683,61 @@ class WelcomeText(Base):
     created_by = Column(Integer, ForeignKey("users.id"), nullable=True)
     created_at = Column(DateTime, default=func.now())
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
-    
+
     creator = relationship("User", backref="created_welcome_texts")
+
+
+class AdvertisingCampaign(Base):
+    __tablename__ = "advertising_campaigns"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(255), nullable=False)
+    start_parameter = Column(String(64), nullable=False, unique=True, index=True)
+    bonus_type = Column(String(20), nullable=False)
+
+    balance_bonus_kopeks = Column(Integer, default=0)
+
+    subscription_duration_days = Column(Integer, nullable=True)
+    subscription_traffic_gb = Column(Integer, nullable=True)
+    subscription_device_limit = Column(Integer, nullable=True)
+    subscription_squads = Column(JSON, default=list)
+
+    is_active = Column(Boolean, default=True)
+
+    created_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    created_at = Column(DateTime, default=func.now())
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+
+    registrations = relationship("AdvertisingCampaignRegistration", back_populates="campaign")
+
+    @property
+    def is_balance_bonus(self) -> bool:
+        return self.bonus_type == "balance"
+
+    @property
+    def is_subscription_bonus(self) -> bool:
+        return self.bonus_type == "subscription"
+
+
+class AdvertisingCampaignRegistration(Base):
+    __tablename__ = "advertising_campaign_registrations"
+    __table_args__ = (
+        UniqueConstraint("campaign_id", "user_id", name="uq_campaign_user"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    campaign_id = Column(Integer, ForeignKey("advertising_campaigns.id", ondelete="CASCADE"), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+
+    bonus_type = Column(String(20), nullable=False)
+    balance_bonus_kopeks = Column(Integer, default=0)
+    subscription_duration_days = Column(Integer, nullable=True)
+
+    created_at = Column(DateTime, default=func.now())
+
+    campaign = relationship("AdvertisingCampaign", back_populates="registrations")
+    user = relationship("User")
+
+    @property
+    def balance_bonus_rubles(self) -> float:
+        return (self.balance_bonus_kopeks or 0) / 100
