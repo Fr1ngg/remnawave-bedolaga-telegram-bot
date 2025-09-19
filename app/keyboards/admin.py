@@ -36,11 +36,14 @@ def get_admin_users_submenu_keyboard(language: str = "ru") -> InlineKeyboardMark
 
 def get_admin_promo_submenu_keyboard(language: str = "ru") -> InlineKeyboardMarkup:
     texts = get_texts(language)
-    
+
     return InlineKeyboardMarkup(inline_keyboard=[
         [
             InlineKeyboardButton(text=texts.ADMIN_PROMOCODES, callback_data="admin_promocodes"),
             InlineKeyboardButton(text=texts.ADMIN_STATISTICS, callback_data="admin_statistics")
+        ],
+        [
+            InlineKeyboardButton(text=texts.ADMIN_CAMPAIGNS, callback_data="admin_campaigns")
         ],
         [
             InlineKeyboardButton(text="⬅️ Назад", callback_data="admin_panel")
@@ -143,6 +146,57 @@ def get_admin_promocodes_keyboard(language: str = "ru") -> InlineKeyboardMarkup:
         ],
         [
             InlineKeyboardButton(text="⬅️ Назад", callback_data="admin_submenu_promo")
+        ]
+    ])
+
+
+def get_admin_campaigns_keyboard(language: str = "ru") -> InlineKeyboardMarkup:
+    texts = get_texts(language)
+
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(text="📋 Список кампаний", callback_data="admin_campaigns_list"),
+            InlineKeyboardButton(text="➕ Создать", callback_data="admin_campaigns_create")
+        ],
+        [
+            InlineKeyboardButton(text="📊 Общая статистика", callback_data="admin_campaigns_stats")
+        ],
+        [
+            InlineKeyboardButton(text=texts.BACK, callback_data="admin_submenu_promo")
+        ]
+    ])
+
+
+def get_campaign_management_keyboard(campaign_id: int, is_active: bool, language: str = "ru") -> InlineKeyboardMarkup:
+    status_text = "🔴 Выключить" if is_active else "🟢 Включить"
+
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(text="📊 Статистика", callback_data=f"admin_campaign_stats_{campaign_id}"),
+            InlineKeyboardButton(text=status_text, callback_data=f"admin_campaign_toggle_{campaign_id}")
+        ],
+        [
+            InlineKeyboardButton(text="✏️ Редактировать", callback_data=f"admin_campaign_edit_{campaign_id}")
+        ],
+        [
+            InlineKeyboardButton(text="🗑️ Удалить", callback_data=f"admin_campaign_delete_{campaign_id}")
+        ],
+        [
+            InlineKeyboardButton(text="⬅️ К списку", callback_data="admin_campaigns_list")
+        ]
+    ])
+
+
+def get_campaign_bonus_type_keyboard(language: str = "ru") -> InlineKeyboardMarkup:
+    texts = get_texts(language)
+
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(text="💰 Бонус на баланс", callback_data="campaign_bonus_balance"),
+            InlineKeyboardButton(text="📱 Подписка", callback_data="campaign_bonus_subscription")
+        ],
+        [
+            InlineKeyboardButton(text=texts.BACK, callback_data="admin_campaigns")
         ]
     ])
 
