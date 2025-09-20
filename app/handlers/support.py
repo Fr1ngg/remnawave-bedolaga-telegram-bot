@@ -28,8 +28,13 @@ async def show_support_info(
         await callback.answer()
         return
     
+    # Форматируем текст с контактом поддержки
+    support_text = texts.SUPPORT_INFO.format(
+        support_contact=settings.get_support_contact_display_html()
+    )
+    
     await callback.message.edit_text(
-        texts.SUPPORT_INFO,
+        support_text,
         reply_markup=get_support_keyboard(db_user.language),
         parse_mode="HTML"
     )

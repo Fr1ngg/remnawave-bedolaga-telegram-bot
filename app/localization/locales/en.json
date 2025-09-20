@@ -232,7 +232,7 @@
   "SUBSCRIPTION_PURCHASED": "🎉 Subscription purchased successfully!",
   "SUBSCRIPTION_SUMMARY": "\n📋 <b>Final configuration</b>\n\n📅 <b>Period:</b> {period} days\n📈 <b>Traffic:</b> {traffic}\n🌍 <b>Countries:</b> {countries}\n📱 <b>Devices:</b> {devices}\n\n💰 <b>Total:</b> {total_price}\n\nConfirm the purchase?\n",
   "SUBSCRIPTION_TRIAL": "🧪 Trial subscription",
-  "SUPPORT_INFO": "\n🛠️ <b>Technical support</b>\n\nFor any questions contact our support:\n\n👤 {settings.SUPPORT_USERNAME}\n\nWe can help with:\n• Connection setup\n• Troubleshooting issues\n• Payment questions\n• Other requests\n\n⏰ Response time: usually within 1-2 hours\n",
+  "SUPPORT_INFO": "\n🛠️ <b>Technical support</b>\n\nFor any questions contact our support:\n\n👤 {support_contact}\n\nWe can help with:\n• Connection setup\n• Troubleshooting issues\n• Payment questions\n• Other requests\n\n⏰ Response time: usually within 1-2 hours\n",
   "SWITCH_TRAFFIC_CONFIRM": "\n🔄 <b>Confirm traffic change</b>\n\nCurrent limit: {current_traffic}\nNew limit: {new_traffic}\n\nAction: {action}\n💰 {cost}\n\nApply this change?\n",
   "SWITCH_TRAFFIC_INFO": "\n🔄 <b>Switch traffic limit</b>\n\nCurrent limit: {current_traffic}\nChoose the new traffic amount:\n\n💡 <b>Important:</b>\n• Increasing — you pay the difference proportionally to the remaining time\n• Decreasing — payments are not refunded\n• The used traffic counter is NOT reset\n",
   "SWITCH_TRAFFIC_SUCCESS_DECREASE": "\n✅ Traffic limit decreased!\n\n📊 Was: {old_traffic} → Now: {new_traffic}\nℹ️ Payments are not refunded\n",

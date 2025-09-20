@@ -716,7 +716,12 @@ class Settings(BaseSettings):
         """Возвращает HTML-ссылку на поддержку с отображаемым именем"""
         display_name = self.get_support_display_name()
         url = self.get_support_contact_url()
-        return f'<a href="{url}">{html.escape(display_name)}</a>'
+        
+        if url:
+            return f'<a href="{url}">{html.escape(display_name)}</a>'
+        else:
+            # Если URL недоступен, возвращаем просто отображаемое имя
+            return html.escape(display_name)
     
     def get_support_display_name(self) -> str:
         return self.SUPPORT_DISPLAY_NAME or "Техподдержка"
