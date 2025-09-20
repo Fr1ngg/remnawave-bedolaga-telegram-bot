@@ -250,6 +250,9 @@ async def admin_commands_help(
 • <code>/clear_rules</code> - очистить все правила
 • <code>/rules_stats</code> - статистика правил
 
+<b>📊 Мониторинг системы:</b>
+• <code>/redis_status</code> - статус Redis
+
 <b>ℹ️ Справка:</b>
 • <code>/admin_help</code> - это сообщение
 

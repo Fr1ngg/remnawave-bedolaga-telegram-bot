@@ -530,11 +530,13 @@ async def process_promocode_value(
         
         promo_type = data.get('promocode_type')
         
-        if promo_type == "balance" and (value < 1 or value > 10000):
-            await message.answer("❌ Сумма должна быть от 1 до 10,000 рублей")
+        from app.constants import PROMOCODE_BALANCE_MIN, PROMOCODE_BALANCE_MAX, PROMOCODE_DAYS_MIN, PROMOCODE_DAYS_MAX, ERROR_MESSAGES
+        
+        if promo_type == "balance" and (value < PROMOCODE_BALANCE_MIN or value > PROMOCODE_BALANCE_MAX):
+            await message.answer(ERROR_MESSAGES['INVALID_BALANCE'])
             return
-        elif promo_type in ["days", "trial"] and (value < 1 or value > 3650):
-            await message.answer("❌ Количество дней должно быть от 1 до 3650")
+        elif promo_type in ["days", "trial"] and (value < PROMOCODE_DAYS_MIN or value > PROMOCODE_DAYS_MAX):
+            await message.answer(ERROR_MESSAGES['INVALID_DAYS'])
             return
         
         await state.update_data(promocode_value=value)
@@ -617,12 +619,14 @@ async def process_promocode_uses(
     try:
         max_uses = int(message.text.strip())
         
-        if max_uses < 0 or max_uses > 100000:
-            await message.answer("❌ Количество использований должно быть от 0 до 100,000")
+        from app.constants import PROMOCODE_USES_MIN, PROMOCODE_USES_MAX, PROMOCODE_UNLIMITED_USES, ERROR_MESSAGES
+        
+        if max_uses < PROMOCODE_USES_MIN or max_uses > PROMOCODE_USES_MAX:
+            await message.answer(ERROR_MESSAGES['INVALID_USES'])
             return
         
         if max_uses == 0:
-            max_uses = 999999
+            max_uses = PROMOCODE_UNLIMITED_USES
         
         await state.update_data(promocode_max_uses=max_uses)
         
@@ -653,12 +657,14 @@ async def handle_edit_uses(
     try:
         max_uses = int(message.text.strip())
         
-        if max_uses < 0 or max_uses > 100000:
-            await message.answer("❌ Количество использований должно быть от 0 до 100,000")
+        from app.constants import PROMOCODE_USES_MIN, PROMOCODE_USES_MAX, PROMOCODE_UNLIMITED_USES, ERROR_MESSAGES
+        
+        if max_uses < PROMOCODE_USES_MIN or max_uses > PROMOCODE_USES_MAX:
+            await message.answer(ERROR_MESSAGES['INVALID_USES'])
             return
         
         if max_uses == 0:
-            max_uses = 999999
+            max_uses = PROMOCODE_UNLIMITED_USES
         
         if max_uses < promo.current_uses:
             await message.answer(
@@ -700,8 +706,10 @@ async def process_promocode_expiry(
     try:
         expiry_days = int(message.text.strip())
         
-        if expiry_days < 0 or expiry_days > 3650:
-            await message.answer("❌ Срок действия должен быть от 0 до 3650 дней")
+        from app.constants import PROMOCODE_DAYS_MAX, ERROR_MESSAGES
+        
+        if expiry_days < 0 or expiry_days > PROMOCODE_DAYS_MAX:
+            await message.answer(ERROR_MESSAGES['INVALID_EXPIRY'])
             return
         
         code = data.get('promocode_code')
@@ -785,8 +793,10 @@ async def handle_edit_expiry(
     try:
         expiry_days = int(message.text.strip())
         
-        if expiry_days < 0 or expiry_days > 3650:
-            await message.answer("❌ Срок действия должен быть от 0 до 3650 дней")
+        from app.constants import PROMOCODE_DAYS_MAX, ERROR_MESSAGES
+        
+        if expiry_days < 0 or expiry_days > PROMOCODE_DAYS_MAX:
+            await message.answer(ERROR_MESSAGES['INVALID_EXPIRY'])
             return
         
         valid_until = None

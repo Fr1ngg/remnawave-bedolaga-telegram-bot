@@ -14,19 +14,43 @@ async def show_support_info(
     callback: types.CallbackQuery,
     db_user: User
 ):
-    
+    """Показывает основную информацию о поддержке"""
     texts = get_texts(db_user.language)
     
+    # Проверяем, настроена ли поддержка
+    if not settings.is_support_configured():
+        await callback.message.edit_text(
+            "⚠️ <b>Поддержка временно недоступна</b>\n\n"
+            "Обратитесь к администратору для настройки системы поддержки.",
+            reply_markup=get_support_keyboard(db_user.language),
+            parse_mode="HTML"
+        )
+        await callback.answer()
+        return
+    
+    # Форматируем текст с контактом поддержки
+    support_text = texts.SUPPORT_INFO.format(
+        support_contact=settings.get_support_contact_display_html()
+    )
+    
     await callback.message.edit_text(
-        texts.SUPPORT_INFO,
-        reply_markup=get_support_keyboard(db_user.language)
+        support_text,
+        reply_markup=get_support_keyboard(db_user.language),
+        parse_mode="HTML"
     )
     await callback.answer()
 
 
+
+
+
+
 def register_handlers(dp: Dispatcher):
+    """Регистрирует обработчики поддержки"""
     
+    # Основные обработчики
     dp.callback_query.register(
         show_support_info,
         F.data == "menu_support"
     )
+    

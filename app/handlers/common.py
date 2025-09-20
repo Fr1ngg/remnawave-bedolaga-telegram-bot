@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 async def handle_unknown_callback(
     callback: types.CallbackQuery,
     db_user: User
-):
+) -> None:
     
     texts = get_texts(db_user.language if db_user else "ru")
     
@@ -32,7 +32,7 @@ async def handle_cancel(
     callback: types.CallbackQuery,
     state: FSMContext,
     db_user: User
-):
+) -> None:
     
     texts = get_texts(db_user.language)
     
