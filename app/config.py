@@ -12,7 +12,11 @@ class Settings(BaseSettings):
     
     BOT_TOKEN: str
     ADMIN_IDS: str = ""
-    SUPPORT_USERNAME: str = "@support"
+    # Настройки поддержки
+    SUPPORT_USERNAME: str = "@support"  # Реальный username для перехода
+    SUPPORT_DISPLAY_NAME: str = "Техподдержка"  # Отображаемое имя
+    SUPPORT_DESCRIPTION: str = "По всем вопросам обращайтесь к нашей поддержке"
+    SUPPORT_RESPONSE_TIME: str = "обычно в течение 1-2 часов"
 
     ADMIN_NOTIFICATIONS_ENABLED: bool = False
     ADMIN_NOTIFICATIONS_CHAT_ID: Optional[str] = None
@@ -709,7 +713,34 @@ class Settings(BaseSettings):
         return contact
 
     def get_support_contact_display_html(self) -> str:
-        return html.escape(self.get_support_contact_display())
+        """Возвращает HTML-ссылку на поддержку с отображаемым именем"""
+        display_name = self.get_support_display_name()
+        url = self.get_support_contact_url()
+        return f'<a href="{url}">{html.escape(display_name)}</a>'
+    
+    def get_support_display_name(self) -> str:
+        return self.SUPPORT_DISPLAY_NAME or "Техподдержка"
+    
+    def get_support_description(self) -> str:
+        return self.SUPPORT_DESCRIPTION or "По всем вопросам обращайтесь к нашей поддержке"
+    
+    def get_support_response_time(self) -> str:
+        return self.SUPPORT_RESPONSE_TIME or "обычно в течение 1-2 часов"
+    
+    def is_support_configured(self) -> bool:
+        """Проверяет, настроена ли система поддержки"""
+        return bool(self.SUPPORT_USERNAME and self.SUPPORT_USERNAME.strip())
+    
+    def get_support_contact_info(self) -> dict:
+        """Возвращает полную информацию о поддержке"""
+        return {
+            'username': self.get_support_contact_display(),  # Реальный username
+            'display_name': self.get_support_display_name(),  # Отображаемое имя
+            'url': self.get_support_contact_url(),
+            'description': self.get_support_description(),
+            'response_time': self.get_support_response_time(),
+            'is_configured': self.is_support_configured()
+        }
         
         
         enabled_packages = [pkg for pkg in packages if pkg["enabled"]]
