@@ -1,6 +1,4 @@
 import logging
-from collections import OrderedDict
-from datetime import datetime
 from typing import List, Tuple
 
 from aiogram import Dispatcher, F, types
@@ -25,16 +23,6 @@ async def show_server_status(callback: types.CallbackQuery, db_user: User) -> No
 
 
 async def change_server_status_page(callback: types.CallbackQuery, db_user: User) -> None:
-    try:
-        _, page_str = callback.data.split(":", 1)
-        page = int(page_str)
-    except (ValueError, AttributeError, IndexError):
-        page = 1
-
-    await _render_server_status(callback, db_user, page=page)
-
-
-async def refresh_server_status(callback: types.CallbackQuery, db_user: User) -> None:
     try:
         _, page_str = callback.data.split(":", 1)
         page = int(page_str)
@@ -108,25 +96,16 @@ def _build_status_message(
         message = "\n".join(lines).strip()
         return message, 1, 1
 
-    summary_total = texts.t(
-        "SERVER_STATUS_TOTAL",
-        "Всего серверов: {total}",
-    ).format(total=total_servers)
-
-    summary_breakdown = texts.t(
-        "SERVER_STATUS_BREAKDOWN",
-        "(В сети: {online}, Не сети: {offline})",
+    summary = texts.t(
+        "SERVER_STATUS_SUMMARY",
+        "Всего серверов: {total} (в сети: {online}, вне сети: {offline})",
     ).format(
+        total=total_servers,
         online=len(online_servers),
         offline=len(offline_servers),
     )
 
-    updated_at = texts.t(
-        "SERVER_STATUS_UPDATED_AT",
-        "Обновлено: {time}",
-    ).format(time=datetime.now().strftime("%H:%M:%S"))
-
-    lines.extend(["", summary_total, summary_breakdown, updated_at, ""])
+    lines.extend(["", summary, ""])
 
     if current_online:
         lines.append(texts.t("SERVER_STATUS_AVAILABLE", "✅ <b>Доступны</b>"))
@@ -190,35 +169,21 @@ def _format_server_lines(
     online: bool,
 ) -> List[str]:
     lines: List[str] = []
-    bullet = texts.t("SERVER_STATUS_LIST_BULLET", "•")
-    grouped: OrderedDict[str, List[ServerStatusEntry]] = OrderedDict()
-
     for server in servers:
-        flag_key = server.flag or ""
-        grouped.setdefault(flag_key, []).append(server)
-
-    for flag, entries in grouped.items():
-        group_header = flag or texts.t("SERVER_STATUS_NO_FLAG", "🌐")
-        lines.append(f"> {group_header}")
-
-        for server in entries:
-            if online:
-                if server.latency_ms and server.latency_ms > 0:
-                    latency_text = texts.t("SERVER_STATUS_LATENCY", "{latency} мс").format(
-                        latency=server.latency_ms
-                    )
-                else:
-                    latency_text = texts.t("SERVER_STATUS_LATENCY_UNKNOWN", "нет данных")
+        latency_text: str
+        if online:
+            if server.latency_ms and server.latency_ms > 0:
+                latency_text = texts.t("SERVER_STATUS_LATENCY", "{latency} мс").format(
+                    latency=server.latency_ms
+                )
             else:
-                latency_text = texts.t("SERVER_STATUS_OFFLINE", "нет ответа")
+                latency_text = texts.t("SERVER_STATUS_LATENCY_UNKNOWN", "нет данных")
+        else:
+            latency_text = texts.t("SERVER_STATUS_OFFLINE", "нет ответа")
 
-            name = server.display_name or server.name
-            lines.append(f"> {bullet} {name} — {latency_text}")
-
-        lines.append(None)
-
-    if lines and lines[-1] is None:
-        lines.pop()
+        name = server.display_name or server.name
+        flag_prefix = f"{server.flag} " if server.flag else ""
+        lines.append(f"> {flag_prefix}{name} — {latency_text}")
 
     return lines
 
@@ -232,10 +197,5 @@ def register_handlers(dp: Dispatcher) -> None:
     dp.callback_query.register(
         change_server_status_page,
         F.data.startswith("server_status_page:"),
-    )
-
-    dp.callback_query.register(
-        refresh_server_status,
-        F.data.startswith("server_status_refresh:"),
     )
 
