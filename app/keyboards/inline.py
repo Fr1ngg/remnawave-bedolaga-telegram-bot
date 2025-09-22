@@ -239,13 +239,6 @@ def get_server_status_keyboard(
         if nav_row:
             keyboard.append(nav_row)
 
-    keyboard.append([
-        InlineKeyboardButton(
-            text=texts.t("SERVER_STATUS_REFRESH_BUTTON", "🔄 Обновить"),
-            callback_data=f"server_status_refresh:{current_page}",
-        )
-    ])
-
     keyboard.append([InlineKeyboardButton(text=texts.BACK, callback_data="back_to_menu")])
 
     return InlineKeyboardMarkup(inline_keyboard=keyboard)

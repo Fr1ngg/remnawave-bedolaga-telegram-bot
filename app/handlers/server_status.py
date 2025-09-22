@@ -1,8 +1,4 @@
-from __future__ import annotations
-
 import logging
-from collections import OrderedDict
-from datetime import datetime
 from typing import List, Tuple
 
 from aiogram import Dispatcher, F, types
@@ -16,8 +12,6 @@ from app.services.server_status_service import (
     ServerStatusError,
     ServerStatusService,
 )
-from app.utils.countries import flag_to_country_code, get_country_name_by_flag
-from app.utils.formatters import format_datetime
 
 logger = logging.getLogger(__name__)
 
@@ -29,16 +23,6 @@ async def show_server_status(callback: types.CallbackQuery, db_user: User) -> No
 
 
 async def change_server_status_page(callback: types.CallbackQuery, db_user: User) -> None:
-    try:
-        _, page_str = callback.data.split(":", 1)
-        page = int(page_str)
-    except (ValueError, AttributeError, IndexError):
-        page = 1
-
-    await _render_server_status(callback, db_user, page=page)
-
-
-async def refresh_server_status(callback: types.CallbackQuery, db_user: User) -> None:
     try:
         _, page_str = callback.data.split(":", 1)
         page = int(page_str)
@@ -112,27 +96,16 @@ def _build_status_message(
         message = "\n".join(lines).strip()
         return message, 1, 1
 
-    summary_total = texts.t(
-        "SERVER_STATUS_SUMMARY_TOTAL",
-        "Всего серверов: {total}",
-    ).format(total=total_servers)
-
-    summary_breakdown = texts.t(
-        "SERVER_STATUS_SUMMARY_BREAKDOWN",
-        "(В сети: {online}, Не в сети: {offline})",
+    summary = texts.t(
+        "SERVER_STATUS_SUMMARY",
+        "Всего серверов: {total} (в сети: {online}, вне сети: {offline})",
     ).format(
+        total=total_servers,
         online=len(online_servers),
         offline=len(offline_servers),
     )
 
-    updated_at = texts.t(
-        "SERVER_STATUS_UPDATED_AT",
-        "🕒 Обновлено: {time}",
-    ).format(
-        time=format_datetime(datetime.now(), "%d.%m.%Y %H:%M:%S"),
-    )
-
-    lines.extend(["", summary_total, summary_breakdown, "", updated_at, ""])
+    lines.extend(["", summary, ""])
 
     if current_online:
         lines.append(texts.t("SERVER_STATUS_AVAILABLE", "✅ <b>Доступны</b>"))
@@ -196,8 +169,6 @@ def _format_server_lines(
     online: bool,
 ) -> List[str]:
     lines: List[str] = []
-    grouped_servers: OrderedDict[str, Tuple[str, List[str]]] = OrderedDict()
-
     for server in servers:
         latency_text: str
         if online:
@@ -212,38 +183,7 @@ def _format_server_lines(
 
         name = server.display_name or server.name
         flag_prefix = f"{server.flag} " if server.flag else ""
-        country_code = flag_to_country_code(server.flag)
-        country_name = get_country_name_by_flag(server.flag, texts.language)
-
-        if not country_name:
-            if country_code:
-                country_name = texts.t(
-                    "SERVER_STATUS_COUNTRY_FALLBACK",
-                    "Страна {code}",
-                ).format(code=country_code)
-            else:
-                country_name = texts.t(
-                    "SERVER_STATUS_COUNTRY_UNKNOWN",
-                    "Прочие локации",
-                )
-
-        group_key = server.flag or country_name
-        if group_key not in grouped_servers:
-            heading_flag = server.flag if server.flag else "🌐"
-            grouped_servers[group_key] = (
-                f"{heading_flag} {country_name}".strip(),
-                [],
-            )
-
-        grouped_servers[group_key][1].append(f"{flag_prefix}{name} — {latency_text}")
-
-    groups = list(grouped_servers.values())
-    for index, (heading, entries) in enumerate(groups):
-        lines.append(f"> {heading}")
-        for entry in entries:
-            lines.append(f"> • {entry}")
-        if index < len(groups) - 1:
-            lines.append(">")
+        lines.append(f"> {flag_prefix}{name} — {latency_text}")
 
     return lines
 
@@ -257,10 +197,5 @@ def register_handlers(dp: Dispatcher) -> None:
     dp.callback_query.register(
         change_server_status_page,
         F.data.startswith("server_status_page:"),
-    )
-
-    dp.callback_query.register(
-        refresh_server_status,
-        F.data.startswith("server_status_refresh"),
     )
 
