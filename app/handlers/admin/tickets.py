@@ -1,4 +1,5 @@
 import logging
+import re
 from typing import List, Dict, Any
 from aiogram import Dispatcher, types, F, Bot
 from aiogram.fsm.context import FSMContext
@@ -22,6 +23,15 @@ from app.config import settings
 from app.utils.cache import RateLimitCache
 
 logger = logging.getLogger(__name__)
+
+
+
+def extract_id_from_callback(callback_data: str) -> int:
+    """Извлекает числовой идентификатор из callback_data."""
+    match = re.search(r"(\d+)$", callback_data or "")
+    if not match:
+        raise ValueError(f"ID not found in callback data: {callback_data}")
+    return int(match.group(1))
 
 
  
@@ -95,12 +105,19 @@ async def view_admin_ticket(
     state: FSMContext
 ):
     """Показать детали тикета для админа"""
-    ticket_id = int(callback.data.replace("admin_view_ticket_", ""))
-    
+    texts = get_texts(db_user.language)
+    try:
+        ticket_id = extract_id_from_callback(callback.data)
+    except ValueError:
+        await callback.answer(
+            texts.t("TICKET_NOT_FOUND", "Тикет не найден."),
+            show_alert=True
+        )
+        return
+
     ticket = await TicketCRUD.get_ticket_by_id(db, ticket_id, load_messages=True, load_user=True)
-    
+
     if not ticket:
-        texts = get_texts(db_user.language)
         await callback.answer(
             texts.t("TICKET_NOT_FOUND", "Тикет не найден."),
             show_alert=True
@@ -181,8 +198,16 @@ async def reply_to_admin_ticket(
     db_user: User
 ):
     """Начать ответ на тикет от админа"""
-    ticket_id = int(callback.data.replace("admin_reply_ticket_", ""))
-    
+    try:
+        ticket_id = extract_id_from_callback(callback.data)
+    except ValueError:
+        texts = get_texts(db_user.language)
+        await callback.answer(
+            texts.t("TICKET_NOT_FOUND", "Тикет не найден."),
+            show_alert=True
+        )
+        return
+
     await state.update_data(ticket_id=ticket_id, reply_mode=True)
     texts = get_texts(db_user.language)
     await callback.message.edit_text(
@@ -335,7 +360,15 @@ async def mark_ticket_as_answered(
     db: AsyncSession
 ):
     """Отметить тикет как отвеченный"""
-    ticket_id = int(callback.data.replace("admin_mark_answered_", ""))
+    try:
+        ticket_id = extract_id_from_callback(callback.data)
+    except ValueError:
+        texts = get_texts(db_user.language)
+        await callback.answer(
+            texts.t("TICKET_UPDATE_ERROR", "❌ Ошибка при обновлении тикета."),
+            show_alert=True
+        )
+        return
     
     try:
         success = await TicketCRUD.update_ticket_status(
@@ -373,8 +406,16 @@ async def close_admin_ticket(
     db: AsyncSession
 ):
     """Закрыть тикет админом"""
-    ticket_id = int(callback.data.replace("admin_close_ticket_", ""))
-    
+    try:
+        ticket_id = extract_id_from_callback(callback.data)
+    except ValueError:
+        texts = get_texts(db_user.language)
+        await callback.answer(
+            texts.t("TICKET_CLOSE_ERROR", "❌ Ошибка при закрытии тикета."),
+            show_alert=True
+        )
+        return
+
     try:
         success = await TicketCRUD.close_ticket(db, ticket_id)
         
@@ -433,8 +474,12 @@ async def block_user_in_ticket(
     db_user: User,
     db: AsyncSession
 ):
-    ticket_id = int(callback.data.replace("admin_block_user_ticket_", ""))
     texts = get_texts(db_user.language)
+    try:
+        ticket_id = extract_id_from_callback(callback.data)
+    except ValueError:
+        await callback.answer(texts.t("TICKET_NOT_FOUND", "Тикет не найден."), show_alert=True)
+        return
     await callback.message.edit_text(
         texts.t("ENTER_BLOCK_MINUTES", "Введите количество минут для блокировки пользователя (например, 15):"),
         reply_markup=types.InlineKeyboardMarkup(inline_keyboard=[
@@ -515,7 +560,12 @@ async def unblock_user_in_ticket(
     db_user: User,
     db: AsyncSession
 ):
-    ticket_id = int(callback.data.replace("admin_unblock_user_ticket_", ""))
+    try:
+        ticket_id = extract_id_from_callback(callback.data)
+    except ValueError:
+        texts = get_texts(db_user.language)
+        await callback.answer(texts.t("TICKET_NOT_FOUND", "Тикет не найден."), show_alert=True)
+        return
     ok = await TicketCRUD.set_user_reply_block(db, ticket_id, permanent=False, until=None)
     if ok:
         await callback.answer("✅ Блок снят")
@@ -529,7 +579,12 @@ async def block_user_permanently(
     db_user: User,
     db: AsyncSession
 ):
-    ticket_id = int(callback.data.replace("admin_block_user_perm_ticket_", ""))
+    try:
+        ticket_id = extract_id_from_callback(callback.data)
+    except ValueError:
+        texts = get_texts(db_user.language)
+        await callback.answer(texts.t("TICKET_NOT_FOUND", "Тикет не найден."), show_alert=True)
+        return
     ok = await TicketCRUD.set_user_reply_block(db, ticket_id, permanent=True, until=None)
     if ok:
         await callback.answer("✅ Пользователь заблокирован навсегда")
@@ -640,7 +695,7 @@ def register_handlers(dp: Dispatcher):
     ):
         texts = get_texts(db_user.language)
         try:
-            ticket_id = int(callback.data.replace("admin_ticket_attachments_", ""))
+            ticket_id = extract_id_from_callback(callback.data)
         except ValueError:
             await callback.answer(texts.t("TICKET_NOT_FOUND", "Тикет не найден."), show_alert=True)
             return
@@ -679,7 +734,7 @@ def register_handlers(dp: Dispatcher):
         callback: types.CallbackQuery
     ):
         try:
-            msg_id = int(callback.data.replace("admin_delete_message_", ""))
+            msg_id = extract_id_from_callback(callback.data)
         except ValueError:
             await callback.answer("❌")
             return
