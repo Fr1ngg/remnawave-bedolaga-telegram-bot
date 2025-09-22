@@ -1,5 +1,5 @@
 import logging
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any
 from aiogram import Dispatcher, types, F, Bot
 from aiogram.fsm.context import FSMContext
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -88,51 +88,14 @@ async def show_admin_tickets(
     await callback.answer()
 
 
-def _extract_ticket_id_from_callback(callback_data: str) -> Optional[int]:
-    """Извлечь ID тикета из callback data для различных админских действий."""
-    prefixes = [
-        "admin_view_ticket_",
-        "admin_block_user_ticket_",
-        "admin_unblock_user_ticket_",
-        "admin_block_user_perm_ticket_",
-        "admin_close_ticket_",
-        "admin_mark_answered_",
-    ]
-
-    for prefix in prefixes:
-        if callback_data.startswith(prefix):
-            suffix = callback_data[len(prefix):]
-            try:
-                return int(suffix)
-            except ValueError:
-                return None
-    return None
-
-
 async def view_admin_ticket(
     callback: types.CallbackQuery,
     db_user: User,
     db: AsyncSession,
-    state: Optional[FSMContext] = None,
-    ticket_id: Optional[int] = None
+    state: FSMContext
 ):
     """Показать детали тикета для админа"""
-    resolved_ticket_id = ticket_id or _extract_ticket_id_from_callback(callback.data)
-
-    if resolved_ticket_id is None and state is not None:
-        state_data = await state.get_data()
-        resolved_ticket_id = state_data.get("ticket_id")
-
-    if resolved_ticket_id is None:
-        logger.error("Не удалось определить ID тикета из callback data: %s", callback.data)
-        texts = get_texts(db_user.language)
-        await callback.answer(
-            texts.t("TICKET_NOT_FOUND", "Тикет не найден."),
-            show_alert=True
-        )
-        return
-
-    ticket_id = resolved_ticket_id
+    ticket_id = int(callback.data.replace("admin_view_ticket_", ""))
     
     ticket = await TicketCRUD.get_ticket_by_id(db, ticket_id, load_messages=True, load_user=True)
     
@@ -208,8 +171,7 @@ async def view_admin_ticket(
             reply_markup=keyboard,
         )
     # сохраняем id для дальнейших действий (ответ/статусы)
-    if state is not None:
-        await state.update_data(ticket_id=ticket_id)
+    await state.update_data(ticket_id=ticket_id)
     await callback.answer()
 
 
@@ -557,13 +519,7 @@ async def unblock_user_in_ticket(
     ok = await TicketCRUD.set_user_reply_block(db, ticket_id, permanent=False, until=None)
     if ok:
         await callback.answer("✅ Блок снят")
-        await view_admin_ticket(
-            callback,
-            db_user,
-            db,
-            FSMContext(callback.bot, callback.from_user.id),
-            ticket_id=ticket_id
-        )
+        await view_admin_ticket(callback, db_user, db, FSMContext(callback.bot, callback.from_user.id))
     else:
         await callback.answer("❌ Ошибка", show_alert=True)
 
@@ -577,13 +533,7 @@ async def block_user_permanently(
     ok = await TicketCRUD.set_user_reply_block(db, ticket_id, permanent=True, until=None)
     if ok:
         await callback.answer("✅ Пользователь заблокирован навсегда")
-        await view_admin_ticket(
-            callback,
-            db_user,
-            db,
-            FSMContext(callback.bot, callback.from_user.id),
-            ticket_id=ticket_id
-        )
+        await view_admin_ticket(callback, db_user, db, FSMContext(callback.bot, callback.from_user.id))
     else:
         await callback.answer("❌ Ошибка", show_alert=True)
 
