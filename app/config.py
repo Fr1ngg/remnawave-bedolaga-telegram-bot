@@ -64,8 +64,17 @@ class Settings(BaseSettings):
     ENABLE_NOTIFICATIONS: bool = True 
     NOTIFICATION_RETRY_ATTEMPTS: int = 3 
     
-    MONITORING_LOGS_RETENTION_DAYS: int = 30 
-    NOTIFICATION_CACHE_HOURS: int = 24  
+    MONITORING_LOGS_RETENTION_DAYS: int = 30
+    NOTIFICATION_CACHE_HOURS: int = 24
+
+    SERVER_STATUS_MODE: str = "disabled"
+    SERVER_STATUS_EXTERNAL_URL: Optional[str] = None
+    SERVER_STATUS_METRICS_URL: Optional[str] = None
+    SERVER_STATUS_METRICS_USERNAME: Optional[str] = None
+    SERVER_STATUS_METRICS_PASSWORD: Optional[str] = None
+    SERVER_STATUS_METRICS_VERIFY_SSL: bool = True
+    SERVER_STATUS_REQUEST_TIMEOUT: int = 10
+    SERVER_STATUS_ITEMS_PER_PAGE: int = 10
     
     BASE_SUBSCRIPTION_PRICE: int = 50000
     AVAILABLE_SUBSCRIPTION_PERIODS: str = "14,30,60,90,180,360"
@@ -196,6 +205,54 @@ class Settings(BaseSettings):
     BACKUP_SEND_ENABLED: bool = False
     BACKUP_SEND_CHAT_ID: Optional[str] = None
     BACKUP_SEND_TOPIC_ID: Optional[int] = None
+
+    @field_validator('SERVER_STATUS_MODE', mode='before')
+    @classmethod
+    def normalize_server_status_mode(cls, value: Optional[str]) -> str:
+        if not value:
+            return "disabled"
+
+        normalized = str(value).strip().lower()
+        aliases = {
+            "off": "disabled",
+            "none": "disabled",
+            "disabled": "disabled",
+            "external": "external_link",
+            "link": "external_link",
+            "url": "external_link",
+            "external_link": "external_link",
+            "xray": "xray",
+            "xraychecker": "xray",
+            "xray_metrics": "xray",
+            "metrics": "xray",
+        }
+
+        mode = aliases.get(normalized, normalized)
+        if mode not in {"disabled", "external_link", "xray"}:
+            raise ValueError("SERVER_STATUS_MODE must be one of: disabled, external_link, xray")
+        return mode
+
+    @field_validator('SERVER_STATUS_ITEMS_PER_PAGE', mode='before')
+    @classmethod
+    def ensure_positive_server_status_page_size(cls, value: Optional[int]) -> int:
+        try:
+            if value is None:
+                return 10
+            value_int = int(value)
+            return max(1, value_int)
+        except (TypeError, ValueError):
+            return 10
+
+    @field_validator('SERVER_STATUS_REQUEST_TIMEOUT', mode='before')
+    @classmethod
+    def ensure_positive_server_status_timeout(cls, value: Optional[int]) -> int:
+        try:
+            if value is None:
+                return 10
+            value_int = int(value)
+            return max(1, value_int)
+        except (TypeError, ValueError):
+            return 10
     
     @field_validator('LOG_FILE', mode='before')
     @classmethod
@@ -650,12 +707,42 @@ class Settings(BaseSettings):
             {"gb": 0, "price": self.PRICE_TRAFFIC_UNLIMITED, "enabled": True}, 
         ]
     
-    def get_traffic_price(self, gb: int) -> int:
+    def get_traffic_price(self, gb: Optional[int]) -> int:
         packages = self.get_traffic_packages()
+        enabled_packages = [pkg for pkg in packages if pkg["enabled"]]
 
-        for package in packages:
-            if package["gb"] == gb and package["enabled"]:
+        if not enabled_packages:
+            return 0
+
+        if gb is None:
+            gb = 0
+
+        for package in enabled_packages:
+            if package["gb"] == gb:
                 return package["price"]
+
+        unlimited_package = next((pkg for pkg in enabled_packages if pkg["gb"] == 0), None)
+
+        if gb <= 0:
+            return unlimited_package["price"] if unlimited_package else 0
+
+        finite_packages = [pkg for pkg in enabled_packages if pkg["gb"] > 0]
+
+        if not finite_packages:
+            return unlimited_package["price"] if unlimited_package else 0
+
+        max_package = max(finite_packages, key=lambda x: x["gb"])
+
+        if gb >= max_package["gb"]:
+            return unlimited_package["price"] if unlimited_package else max_package["price"]
+
+        suitable_packages = [pkg for pkg in finite_packages if pkg["gb"] >= gb]
+
+        if suitable_packages:
+            nearest_package = min(suitable_packages, key=lambda x: x["gb"])
+            return nearest_package["price"]
+
+        return unlimited_package["price"] if unlimited_package else 0
 
     def _clean_support_contact(self) -> str:
         return (self.SUPPORT_USERNAME or "").strip()
@@ -712,74 +799,104 @@ class Settings(BaseSettings):
 
         return contact
 
-    def get_support_contact_display_html(self) -> str:
-        """Возвращает HTML-ссылку на поддержку с отображаемым именем"""
-        display_name = self.get_support_display_name()
-        url = self.get_support_contact_url()
-        
-        if url:
-            return f'<a href="{url}">{html.escape(display_name)}</a>'
-        else:
-            # Если URL недоступен, возвращаем просто отображаемое имя
-            return html.escape(display_name)
+ def get_support_contact_display_html(self) -> str:
+    """Возвращает HTML-ссылку на поддержку с отображаемым именем"""
+    display_name = self.get_support_display_name()
+    url = self.get_support_contact_url()
     
-    def get_support_display_name(self) -> str:
-        return self.SUPPORT_DISPLAY_NAME or "Техподдержка"
-    
-    def get_support_description(self) -> str:
-        return self.SUPPORT_DESCRIPTION or "По всем вопросам обращайтесь к нашей поддержке"
-    
-    def get_support_response_time(self) -> str:
-        return self.SUPPORT_RESPONSE_TIME or "обычно в течение 1-2 часов"
-    
-    def is_support_configured(self) -> bool:
-        """Проверяет, настроена ли система поддержки"""
-        return bool(self.SUPPORT_USERNAME and self.SUPPORT_USERNAME.strip())
-    
-    def get_support_contact_info(self) -> dict:
-        """Возвращает полную информацию о поддержке"""
-        return {
-            'username': self.get_support_contact_display(),  # Реальный username
-            'display_name': self.get_support_display_name(),  # Отображаемое имя
-            'url': self.get_support_contact_url(),
-            'description': self.get_support_description(),
-            'response_time': self.get_support_response_time(),
-            'is_configured': self.is_support_configured()
-        }
-        
-        
-        enabled_packages = [pkg for pkg in packages if pkg["enabled"]]
-        if not enabled_packages:
-            return 0
-        
-        unlimited_package = next((pkg for pkg in enabled_packages if pkg["gb"] == 0), None)
-        
-        finite_packages = [pkg for pkg in enabled_packages if pkg["gb"] > 0]
-        if finite_packages:
-            max_package = max(finite_packages, key=lambda x: x["gb"])
-            
-            if gb > max_package["gb"]:
-                if unlimited_package:
-                    return unlimited_package["price"]
-                else:
-                    return max_package["price"]
-            
-            suitable_packages = [pkg for pkg in finite_packages if pkg["gb"] >= gb]
-            if suitable_packages:
-                nearest_package = min(suitable_packages, key=lambda x: x["gb"])
-                return nearest_package["price"]
-        
-        if unlimited_package:
-            return unlimited_package["price"]
-        
-        return 0
-    
-    model_config = {
-        "env_file": ".env",
-        "env_file_encoding": "utf-8",
-        "extra": "ignore"  
+    if url:
+        return f'<a href="{url}">{html.escape(display_name)}</a>'
+    else:
+        # Если URL недоступен, возвращаем просто отображаемое имя
+        return html.escape(display_name)
+
+def get_support_display_name(self) -> str:
+    return self.SUPPORT_DISPLAY_NAME or "Техподдержка"
+
+def get_support_description(self) -> str:
+    return self.SUPPORT_DESCRIPTION or "По всем вопросам обращайтесь к нашей поддержке"
+
+def get_support_response_time(self) -> str:
+    return self.SUPPORT_RESPONSE_TIME or "обычно в течение 1-2 часов"
+
+def is_support_configured(self) -> bool:
+    """Проверяет, настроена ли система поддержки"""
+    return bool(self.SUPPORT_USERNAME and self.SUPPORT_USERNAME.strip())
+
+def get_support_contact_info(self) -> dict:
+    """Возвращает полную информацию о поддержке"""
+    return {
+        'username': self.get_support_contact_display(),  # Реальный username
+        'display_name': self.get_support_display_name(),  # Отображаемое имя
+        'url': self.get_support_contact_url(),
+        'description': self.get_support_description(),
+        'response_time': self.get_support_response_time(),
+        'is_configured': self.is_support_configured()
     }
 
+# --- блок статуса сервера ---
+def get_server_status_mode(self) -> str:
+    return self.SERVER_STATUS_MODE
+
+def is_server_status_enabled(self) -> bool:
+    return self.get_server_status_mode() != "disabled"
+
+def get_server_status_external_url(self) -> Optional[str]:
+    url = (self.SERVER_STATUS_EXTERNAL_URL or "").strip()
+    return url or None
+
+def get_server_status_metrics_url(self) -> Optional[str]:
+    url = (self.SERVER_STATUS_METRICS_URL or "").strip()
+    return url or None
+
+def get_server_status_metrics_auth(self) -> Optional[tuple[str, str]]:
+    username = (self.SERVER_STATUS_METRICS_USERNAME or "").strip()
+    password_raw = self.SERVER_STATUS_METRICS_PASSWORD
+
+    if not username:
+        return None
+
+    password = "" if password_raw is None else str(password_raw)
+    return username, password
+
+def get_server_status_items_per_page(self) -> int:
+    return max(1, self.SERVER_STATUS_ITEMS_PER_PAGE)
+
+def get_server_status_request_timeout(self) -> int:
+    return max(1, self.SERVER_STATUS_REQUEST_TIMEOUT)
+
+# --- логика с пакетами ---
+enabled_packages = [pkg for pkg in packages if pkg["enabled"]]
+if not enabled_packages:
+    return 0
+
+unlimited_package = next((pkg for pkg in enabled_packages if pkg["gb"] == 0), None)
+
+finite_packages = [pkg for pkg in enabled_packages if pkg["gb"] > 0]
+if finite_packages:
+    max_package = max(finite_packages, key=lambda x: x["gb"])
+    
+    if gb > max_package["gb"]:
+        if unlimited_package:
+            return unlimited_package["price"]
+        else:
+            return max_package["price"]
+    
+    suitable_packages = [pkg for pkg in finite_packages if pkg["gb"] >= gb]
+    if suitable_packages:
+        nearest_package = min(suitable_packages, key=lambda x: x["gb"])
+        return nearest_package["price"]
+
+if unlimited_package:
+    return unlimited_package["price"]
+
+return 0
+
+model_config = {
+    "env_file": ".env",
+    "env_file_encoding": "utf-8",
+    "extra": "ignore"
+}
 
 settings = Settings()
 

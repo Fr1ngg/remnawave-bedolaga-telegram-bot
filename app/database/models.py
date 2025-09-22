@@ -181,10 +181,11 @@ class PromoGroup(Base):
             try:
                 from app.config import settings
 
-                discounts = settings.get_base_promo_group_period_discounts()
-                if period_days in discounts:
-                    period_discount = discounts[period_days]
-                    percent = period_discount
+                if settings.is_base_promo_group_period_discount_enabled():
+                    discounts = settings.get_base_promo_group_period_discounts()
+                    if period_days in discounts:
+                        period_discount = discounts[period_days]
+                        percent = period_discount
             except Exception:
                 pass
 

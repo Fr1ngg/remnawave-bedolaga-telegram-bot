@@ -278,6 +278,99 @@ async def _prepare_subscription_summary(
 
     return summary_text, summary_data
 
+
+def _build_promo_group_discount_text(
+    db_user: User,
+    periods: Optional[List[int]] = None,
+    texts=None,
+) -> str:
+    promo_group = getattr(db_user, "promo_group", None)
+
+    if not promo_group:
+        return ""
+
+    if texts is None:
+        texts = get_texts(db_user.language)
+
+    service_lines: List[str] = []
+
+    if promo_group.server_discount_percent > 0:
+        service_lines.append(
+            texts.PROMO_GROUP_DISCOUNT_SERVERS.format(
+                percent=promo_group.server_discount_percent
+            )
+        )
+
+    if promo_group.traffic_discount_percent > 0:
+        service_lines.append(
+            texts.PROMO_GROUP_DISCOUNT_TRAFFIC.format(
+                percent=promo_group.traffic_discount_percent
+            )
+        )
+
+    if promo_group.device_discount_percent > 0:
+        service_lines.append(
+            texts.PROMO_GROUP_DISCOUNT_DEVICES.format(
+                percent=promo_group.device_discount_percent
+            )
+        )
+
+    period_lines: List[str] = []
+
+    if (
+        promo_group.is_default
+        and periods
+        and settings.is_base_promo_group_period_discount_enabled()
+    ):
+        discounts = settings.get_base_promo_group_period_discounts()
+
+        for period_days in periods:
+            percent = discounts.get(period_days, 0)
+
+            if percent <= 0:
+                continue
+
+            period_display = format_period_description(period_days, db_user.language)
+            period_lines.append(
+                texts.PROMO_GROUP_PERIOD_DISCOUNT_ITEM.format(
+                    period=period_display,
+                    percent=percent,
+                )
+            )
+
+    if not service_lines and not period_lines:
+        return ""
+
+    lines: List[str] = [texts.PROMO_GROUP_DISCOUNTS_HEADER]
+
+    if service_lines:
+        lines.extend(service_lines)
+
+    if period_lines:
+        if service_lines:
+            lines.append("")
+
+        lines.append(texts.PROMO_GROUP_PERIOD_DISCOUNTS_HEADER)
+        lines.extend(period_lines)
+
+    return "\n".join(lines)
+
+
+def _build_subscription_period_prompt(db_user: User, texts) -> str:
+    base_text = texts.BUY_SUBSCRIPTION_START.rstrip()
+
+    promo_text = _build_promo_group_discount_text(
+        db_user,
+        settings.get_available_subscription_periods(),
+        texts=texts,
+    )
+
+    if not promo_text:
+        return f"{base_text}\n"
+
+    return f"{base_text}\n\n{promo_text}\n"
+
+
 async def show_subscription_info(
     callback: types.CallbackQuery,
     db_user: User,
@@ -774,9 +867,9 @@ async def start_subscription_purchase(
     db_user: User
 ):
     texts = get_texts(db_user.language)
-    
+
     await callback.message.edit_text(
-        texts.BUY_SUBSCRIPTION_START,
+        _build_subscription_period_prompt(db_user, texts),
         reply_markup=get_subscription_period_keyboard(db_user.language)
     )
     
@@ -1782,14 +1875,20 @@ async def handle_extend_subscription(
         return
     
     prices_text = ""
-    
+
     for days in available_periods:
         if days in renewal_prices:
             period_display = format_period_description(days, db_user.language)
             prices_text += f"📅 {period_display} - {texts.format_price(renewal_prices[days])}\n"
-    
-    await callback.message.edit_text(
-        f"⏰ Продление подписки\n\n"
+
+    promo_discounts_text = _build_promo_group_discount_text(
+        db_user,
+        available_periods,
+        texts=texts,
+    )
+
+    message_text = (
+        "⏰ Продление подписки\n\n"
         f"Осталось дней: {subscription.days_left}\n\n"
         f"<b>Ваша текущая конфигурация:</b>\n"
         f"🌍 Серверов: {len(subscription.connected_squads)}\n"
@@ -1797,7 +1896,15 @@ async def handle_extend_subscription(
         f"📱 Устройств: {subscription.device_limit}\n\n"
         f"<b>Выберите период продления:</b>\n"
         f"{prices_text.rstrip()}\n\n"
-        f"💡 <i>Цена включает все ваши текущие серверы и настройки</i>",
+    )
+
+    if promo_discounts_text:
+        message_text += f"{promo_discounts_text}\n\n"
+
+    message_text += "💡 <i>Цена включает все ваши текущие серверы и настройки</i>"
+
+    await callback.message.edit_text(
+        message_text,
         reply_markup=get_extend_subscription_keyboard_with_prices(db_user.language, renewal_prices),
         parse_mode="HTML"
     )
@@ -2135,11 +2242,15 @@ async def confirm_extend_subscription(
         except Exception as e:
             logger.error(f"Ошибка отправки уведомления о продлении: {e}")
 
+        success_message = (
+            "✅ Подписка успешно продлена!\n\n"
+            f"⏰ Добавлено: {days} дней\n"
+            f"Действует до: {subscription.end_date.strftime('%d.%m.%Y %H:%M')}\n\n"
+            f"💰 Списано: {texts.format_price(price)}"
+        )
+
         await callback.message.edit_text(
-            f"✅ Подписка успешно продлена!\n\n",
-            f"⏰ Добавлено: {days} дней\n",
-            f"Действует до: {subscription.end_date.strftime('%d.%m.%Y %H:%M')}\n\n",
-            f"💰 Списано: {texts.format_price(price)}",
+            success_message,
             reply_markup=get_back_keyboard(db_user.language)
         )
 
@@ -3261,11 +3372,11 @@ async def handle_subscription_config_back(
     
     if current_state == SubscriptionStates.selecting_traffic.state:
         await callback.message.edit_text(
-            texts.BUY_SUBSCRIPTION_START,
+            _build_subscription_period_prompt(db_user, texts),
             reply_markup=get_subscription_period_keyboard(db_user.language)
         )
         await state.set_state(SubscriptionStates.selecting_period)
-        
+
     elif current_state == SubscriptionStates.selecting_countries.state:
         if settings.is_traffic_selectable():
             await callback.message.edit_text(
@@ -3275,11 +3386,11 @@ async def handle_subscription_config_back(
             await state.set_state(SubscriptionStates.selecting_traffic)
         else:
             await callback.message.edit_text(
-                texts.BUY_SUBSCRIPTION_START,
+                _build_subscription_period_prompt(db_user, texts),
                 reply_markup=get_subscription_period_keyboard(db_user.language)
             )
             await state.set_state(SubscriptionStates.selecting_period)
-        
+
     elif current_state == SubscriptionStates.selecting_devices.state:
         if await _should_show_countries_management():
             countries = await _get_available_countries()
@@ -3299,7 +3410,7 @@ async def handle_subscription_config_back(
             await state.set_state(SubscriptionStates.selecting_traffic)
         else:
             await callback.message.edit_text(
-                texts.BUY_SUBSCRIPTION_START,
+                _build_subscription_period_prompt(db_user, texts),
                 reply_markup=get_subscription_period_keyboard(db_user.language)
             )
             await state.set_state(SubscriptionStates.selecting_period)

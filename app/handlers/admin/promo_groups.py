@@ -315,7 +315,22 @@ async def process_create_group_devices(
 
     await state.clear()
     await message.answer(
-        texts.t("ADMIN_PROMO_GROUP_CREATED", "Промогруппа «{name}» создана.").format(name=group.name)
+        texts.t("ADMIN_PROMO_GROUP_CREATED", "Промогруппа «{name}» создана.").format(
+            name=group.name
+        ),
+        reply_markup=types.InlineKeyboardMarkup(
+            inline_keyboard=[
+                [
+                    types.InlineKeyboardButton(
+                        text=texts.t(
+                            "ADMIN_PROMO_GROUP_CREATED_BACK_BUTTON",
+                            "↩️ К промогруппам",
+                        ),
+                        callback_data="admin_promo_groups",
+                    )
+                ]
+            ]
+        ),
     )
 
 

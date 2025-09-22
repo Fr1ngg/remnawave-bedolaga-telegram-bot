@@ -6,7 +6,23 @@ WELCOME: |
 
 MENU:
   BALANCE: "Balance"
+  SERVER_STATUS: "Server status"
   SUBSCRIPTION: "Subscription"
+
+SERVER_STATUS:
+  TITLE: "📊 <b>Server status</b>"
+  SUMMARY: "Total servers: {total} (online: {online}, offline: {offline})"
+  AVAILABLE: "✅ <b>Online</b>"
+  UNAVAILABLE: "❌ <b>Offline</b>"
+  LATENCY: "{latency} ms"
+  LATENCY_UNKNOWN: "no data"
+  OFFLINE: "no response"
+  NO_SERVERS: "No server data available."
+  PAGINATION: "Page {current} of {total}"
+  PREV_PAGE: "⬅️ Back"
+  NEXT_PAGE: "Next ➡️"
+  ERROR_SHORT: "Failed to fetch data"
+  NOT_CONFIGURED: "Feature is not available."
 
 RULES_TEXT: |
   Remnawave service rules:

@@ -108,6 +108,16 @@ docker compose logs
 | 🛡️ **REMNAWAVE_SECRET_KEY** | Ключ защиты панели | `secret_name:secret_value` |
 | 👑 **ADMIN_IDS** | Твой Telegram ID | `123456789,987654321` |
 
+### 📊 Статус серверов в главном меню
+
+| Переменная | Описание | Пример |
+|------------|----------|--------|
+| `SERVER_STATUS_MODE` | Режим работы кнопки: `disabled`, `external_link` (просто ссылка) или `xray` (интеграция с XrayChecker). | `xray` |
+| `SERVER_STATUS_EXTERNAL_URL` | Прямая ссылка на внешний мониторинг (используется в режиме `external_link`). | `https://status.example.com` |
+| `SERVER_STATUS_METRICS_URL` | URL страницы метрик XrayChecker (Prometheus формат). | `https://sub.example.com/metrics` |
+| `SERVER_STATUS_METRICS_USERNAME` / `SERVER_STATUS_METRICS_PASSWORD` | Данные Basic Auth, если страница метрик защищена паролем. | `status` / `secret` |
+| `SERVER_STATUS_ITEMS_PER_PAGE` | Количество серверов, показываемых на одной странице в режиме интеграции. | `10` |
+
 ### 🛡️ Защита панели Remnawave
 
 Для панелей, защищенных через [remnawave-reverse-proxy](https://github.com/eGamesAPI/remnawave-reverse-proxy):
