@@ -11,7 +11,12 @@ MENU:
 
 SERVER_STATUS:
   TITLE: "📊 <b>Server status</b>"
-  SUMMARY: "Total servers: {total} (online: {online}, offline: {offline})"
+  SUMMARY_TOTAL: "Total servers: {total}"
+  SUMMARY_BREAKDOWN: "(Online: {online}, Offline: {offline})"
+  UPDATED_AT: "🕒 Updated: {time}"
+  REFRESH_BUTTON: "🔄 Refresh"
+  COUNTRY_UNKNOWN: "Other locations"
+  COUNTRY_FALLBACK: "Country {code}"
   AVAILABLE: "✅ <b>Online</b>"
   UNAVAILABLE: "❌ <b>Offline</b>"
   LATENCY: "{latency} ms"

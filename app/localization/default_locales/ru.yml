@@ -11,7 +11,12 @@ MENU:
 
 SERVER_STATUS:
   TITLE: "📊 <b>Статус серверов</b>"
-  SUMMARY: "Всего серверов: {total} (в сети: {online}, вне сети: {offline})"
+  SUMMARY_TOTAL: "Всего серверов: {total}"
+  SUMMARY_BREAKDOWN: "(В сети: {online}, Не в сети: {offline})"
+  UPDATED_AT: "🕒 Обновлено: {time}"
+  REFRESH_BUTTON: "🔄 Обновить"
+  COUNTRY_UNKNOWN: "Прочие локации"
+  COUNTRY_FALLBACK: "Страна {code}"
   AVAILABLE: "✅ <b>Доступны</b>"
   UNAVAILABLE: "❌ <b>Недоступны</b>"
   LATENCY: "{latency} мс"
