@@ -92,10 +92,33 @@ async def view_admin_ticket(
     callback: types.CallbackQuery,
     db_user: User,
     db: AsyncSession,
-    state: FSMContext
+    state: FSMContext | None = None,
+    ticket_id: int | None = None,
 ):
     """Показать детали тикета для админа"""
-    ticket_id = int(callback.data.replace("admin_view_ticket_", ""))
+
+    if ticket_id is None:
+        data = callback.data or ""
+        prefix = "admin_view_ticket_"
+        if data.startswith(prefix):
+            try:
+                ticket_id = int(data.replace(prefix, ""))
+            except ValueError:
+                ticket_id = None
+        if ticket_id is None and state is not None:
+            stored_data = await state.get_data()
+            ticket_id = stored_data.get("ticket_id")
+
+    if ticket_id is None:
+        texts = get_texts(db_user.language)
+        await callback.answer(
+            texts.t("TICKET_NOT_FOUND", "Тикет не найден."),
+            show_alert=True
+        )
+        return
+
+    if state is None:
+        state = FSMContext(callback.bot, callback.from_user.id)
     
     ticket = await TicketCRUD.get_ticket_by_id(db, ticket_id, load_messages=True, load_user=True)
     
@@ -350,7 +373,7 @@ async def mark_ticket_as_answered(
             )
             
             # Обновляем сообщение
-            await view_admin_ticket(callback, db_user, db)
+            await view_admin_ticket(callback, db_user, db, ticket_id=ticket_id)
         else:
             texts = get_texts(db_user.language)
             await callback.answer(
@@ -519,7 +542,13 @@ async def unblock_user_in_ticket(
     ok = await TicketCRUD.set_user_reply_block(db, ticket_id, permanent=False, until=None)
     if ok:
         await callback.answer("✅ Блок снят")
-        await view_admin_ticket(callback, db_user, db, FSMContext(callback.bot, callback.from_user.id))
+        await view_admin_ticket(
+            callback,
+            db_user,
+            db,
+            FSMContext(callback.bot, callback.from_user.id),
+            ticket_id=ticket_id,
+        )
     else:
         await callback.answer("❌ Ошибка", show_alert=True)
 
@@ -533,7 +562,13 @@ async def block_user_permanently(
     ok = await TicketCRUD.set_user_reply_block(db, ticket_id, permanent=True, until=None)
     if ok:
         await callback.answer("✅ Пользователь заблокирован навсегда")
-        await view_admin_ticket(callback, db_user, db, FSMContext(callback.bot, callback.from_user.id))
+        await view_admin_ticket(
+            callback,
+            db_user,
+            db,
+            FSMContext(callback.bot, callback.from_user.id),
+            ticket_id=ticket_id,
+        )
     else:
         await callback.answer("❌ Ошибка", show_alert=True)
 
