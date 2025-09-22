@@ -23,26 +23,34 @@ services:
     image: redis:7-alpine
     container_name: remnawave_bot_redis
     restart: unless-stopped
-    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    command: redis-server /usr/local/etc/redis/redis.conf
     volumes:
       - redis_data:/data
+      - ./redis.conf:/usr/local/etc/redis/redis.conf:ro
     networks:
       - bot_network
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
-      interval: 30s
-      timeout: 10s
+      interval: 15s
+      timeout: 5s
       retries: 3
+      start_period: 10s
+    sysctls:
+      - net.core.somaxconn=2048
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
 
   bot:
-    image: fr1ngg/remnawave-bedolaga-telegram-bot:latest
+    build: .
     container_name: remnawave_bot
     restart: unless-stopped
     depends_on:
       postgres:
         condition: service_healthy
       redis:
-        condition: service_healthy
+        condition: service_started
     env_file:
       - .env
     environment:
@@ -55,6 +63,9 @@ services:
       POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:-secure_password_123}"
       
       REDIS_URL: "redis://redis:6379/0"
+      REDIS_CONNECTION_TIMEOUT: "5"
+      REDIS_RETRY_ON_TIMEOUT: "true"
+      REDIS_MAX_CONNECTIONS: "10"
       
       TZ: "Europe/Moscow"
       LOCALES_PATH: "${LOCALES_PATH:-/app/locales}"
@@ -64,8 +75,12 @@ services:
       # Данные приложения (для SQLite в случае переключения)
       - ./data:/app/data:rw
       - ./locales:/app/locales:rw
+      # Монтирование кода приложения для разработки
+      - ./app:/app/app:rw
+      - ./main.py:/app/main.py:rw
+      - ./requirements.txt:/app/requirements.txt:ro
       # Конфигурация приложения
-      # - ./app-config.json:/app/app-config.json:ro
+      - ./app-config.json:/app/app-config.json:ro
       # Timezone
       - /etc/timezone:/etc/timezone:ro
       - /etc/localtime:/etc/localtime:ro

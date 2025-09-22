@@ -1114,14 +1114,77 @@ async def handle_manage_country(
     
     await callback.answer()
 
+async def _calculate_country_changes(
+    selected_countries: list[str], 
+    current_countries: list[str]
+) -> tuple[list[str], list[str]]:
+    """Вычисляет добавленные и удаленные страны."""
+    added = [c for c in selected_countries if c not in current_countries]
+    removed = [c for c in current_countries if c not in selected_countries]
+    return added, removed
+
+
+async def _calculate_country_costs(
+    countries: list[dict], 
+    added_countries: list[str], 
+    subscription_end_date: datetime
+) -> tuple[int, list[str], list[int], int]:
+    """Вычисляет стоимость добавленных стран."""
+    from app.utils.pricing_utils import calculate_prorated_price
+    
+    cost_per_month = 0
+    added_names = []
+    added_server_prices = []
+    
+    for country in countries:
+        if country['uuid'] in added_countries:
+            server_price_per_month = country['price_kopeks']
+            cost_per_month += server_price_per_month
+            added_names.append(country['name'])
+    
+    total_cost, charged_months = calculate_prorated_price(cost_per_month, subscription_end_date)
+    
+    for country in countries:
+        if country['uuid'] in added_countries:
+            server_price_per_month = country['price_kopeks']
+            server_total_price = server_price_per_month * charged_months
+            added_server_prices.append(server_total_price)
+    
+    return total_cost, added_names, added_server_prices, charged_months
+
+
+async def _process_country_payment(
+    db: AsyncSession, 
+    db_user: User, 
+    total_cost: int, 
+    added_names: list[str], 
+    charged_months: int
+) -> bool:
+    """Обрабатывает платеж за добавление стран."""
+    success = await subtract_user_balance(
+        db, db_user, total_cost, 
+        f"Добавление стран: {', '.join(added_names)} на {charged_months} мес"
+    )
+    if not success:
+        return False
+    
+    await create_transaction(
+        db=db,
+        user_id=db_user.id,
+        type=TransactionType.SUBSCRIPTION_PAYMENT,
+        amount_kopeks=total_cost,
+        description=f"Добавление стран к подписке: {', '.join(added_names)} на {charged_months} мес"
+    )
+    return True
+
+
 async def apply_countries_changes(
     callback: types.CallbackQuery,
     db_user: User,
     db: AsyncSession,
     state: FSMContext
 ):
-    from app.utils.pricing_utils import get_remaining_months, calculate_prorated_price
-    
+    """Применяет изменения в списке стран подписки."""
     logger.info(f"🔧 Применение изменений стран")
     
     data = await state.get_data()
@@ -1138,8 +1201,7 @@ async def apply_countries_changes(
     selected_countries = data.get('countries', [])
     current_countries = subscription.connected_squads
     
-    added = [c for c in selected_countries if c not in current_countries]
-    removed = [c for c in current_countries if c not in selected_countries]
+    added, removed = await _calculate_country_changes(selected_countries, current_countries)
     
     if not added and not removed:
         await callback.answer("⚠️ Изменения не обнаружены", show_alert=True)
@@ -1148,57 +1210,30 @@ async def apply_countries_changes(
     logger.info(f"🔧 Добавлено: {added}, Удалено: {removed}")
     
     countries = await _get_available_countries()
+    total_cost, added_names, added_server_prices, charged_months = await _calculate_country_costs(
+        countries, added, subscription.end_date
+    )
     
-    months_to_pay = get_remaining_months(subscription.end_date)
-    
-    cost_per_month = 0
-    added_names = []
+    # Получаем названия удаленных стран
     removed_names = []
-    
-    added_server_prices = []
-    
     for country in countries:
-        if country['uuid'] in added:
-            server_price_per_month = country['price_kopeks']
-            cost_per_month += server_price_per_month
-            added_names.append(country['name'])
         if country['uuid'] in removed:
             removed_names.append(country['name'])
     
-    total_cost, charged_months = calculate_prorated_price(cost_per_month, subscription.end_date)
-    
-    for country in countries:
-        if country['uuid'] in added:
-            server_price_per_month = country['price_kopeks']
-            server_total_price = server_price_per_month * charged_months
-            added_server_prices.append(server_total_price)
-    
-    logger.info(f"Стоимость новых серверов: {cost_per_month/100}₽/мес × {charged_months} мес = {total_cost/100}₽")
-    
     if total_cost > 0 and db_user.balance_kopeks < total_cost:
         await callback.answer(
-            f"⚠️ Недостаточно средств!\nТребуется: {texts.format_price(total_cost)} (за {charged_months} мес)\nУ вас: {texts.format_price(db_user.balance_kopeks)}", 
+            f"⚠️ Недостаточно средств!\nТребуется: {texts.format_price(total_cost)}\nУ вас: {texts.format_price(db_user.balance_kopeks)}", 
             show_alert=True
         )
         return
     
     try:
+        # Обработка платежа за добавленные страны
         if added and total_cost > 0:
-            success = await subtract_user_balance(
-                db, db_user, total_cost, 
-                f"Добавление стран: {', '.join(added_names)} на {charged_months} мес"
-            )
-            if not success:
+            payment_success = await _process_country_payment(db, db_user, total_cost, added_names, charged_months)
+            if not payment_success:
                 await callback.answer("⚠️ Ошибка списания средств", show_alert=True)
                 return
-            
-            await create_transaction(
-                db=db,
-                user_id=db_user.id,
-                type=TransactionType.SUBSCRIPTION_PAYMENT,
-                amount_kopeks=total_cost,
-                description=f"Добавление стран к подписке: {', '.join(added_names)} на {charged_months} мес"
-            )
         
         if added:
             from app.database.crud.server_squad import get_server_ids_by_uuids, add_user_to_servers
