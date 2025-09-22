@@ -2,9 +2,9 @@ import json
 import logging
 from typing import Any, Optional, Union
 from datetime import datetime, timedelta
+import redis.asyncio as redis
 
 from app.config import settings
-from app.services.redis_service import redis_service
 
 logger = logging.getLogger(__name__)
 
@@ -12,30 +12,30 @@ logger = logging.getLogger(__name__)
 class CacheService:
     
     def __init__(self):
+        self.redis_client: Optional[redis.Redis] = None
         self._connected = False
     
     async def connect(self):
         try:
-            success = await redis_service.connect()
-            self._connected = success
-            if success:
-                logger.info("✅ Подключение к Redis кешу установлено")
-            else:
-                logger.warning("⚠️ Не удалось подключиться к Redis")
+            self.redis_client = redis.from_url(settings.REDIS_URL)
+            await self.redis_client.ping()
+            self._connected = True
+            logger.info("✅ Подключение к Redis кешу установлено")
         except Exception as e:
             logger.warning(f"⚠️ Не удалось подключиться к Redis: {e}")
             self._connected = False
     
     async def disconnect(self):
-        await redis_service.disconnect()
-        self._connected = False
+        if self.redis_client:
+            await self.redis_client.close()
+            self._connected = False
     
     async def get(self, key: str) -> Optional[Any]:
         if not self._connected:
             return None
         
         try:
-            value = await redis_service.get(key)
+            value = await self.redis_client.get(key)
             if value:
                 return json.loads(value)
             return None
@@ -58,7 +58,8 @@ class CacheService:
             if isinstance(expire, timedelta):
                 expire = int(expire.total_seconds())
             
-            return await redis_service.set(key, serialized_value, expire)
+            await self.redis_client.set(key, serialized_value, ex=expire)
+            return True
         except Exception as e:
             logger.error(f"Ошибка записи в кеш {key}: {e}")
             return False
@@ -68,7 +69,8 @@ class CacheService:
             return False
         
         try:
-            return await redis_service.delete(key)
+            deleted = await self.redis_client.delete(key)
+            return deleted > 0
         except Exception as e:
             logger.error(f"Ошибка удаления из кеша {key}: {e}")
             return False
@@ -78,7 +80,7 @@ class CacheService:
             return False
         
         try:
-            return await redis_service.exists(key)
+            return await self.redis_client.exists(key)
         except Exception as e:
             logger.error(f"Ошибка проверки существования в кеше {key}: {e}")
             return False
@@ -88,7 +90,7 @@ class CacheService:
             return False
         
         try:
-            return await redis_service.expire(key, seconds)
+            return await self.redis_client.expire(key, seconds)
         except Exception as e:
             logger.error(f"Ошибка установки TTL для {key}: {e}")
             return False
@@ -98,7 +100,7 @@ class CacheService:
             return []
         
         try:
-            keys = await redis_service.keys(pattern)
+            keys = await self.redis_client.keys(pattern)
             return [key.decode() if isinstance(key, bytes) else key for key in keys]
         except Exception as e:
             logger.error(f"Ошибка получения ключей по паттерну {pattern}: {e}")
@@ -109,10 +111,9 @@ class CacheService:
             return False
         
         try:
-            result = await redis_service.flushall()
-            if result:
-                logger.info("🗑️ Кеш полностью очищен")
-            return result
+            await self.redis_client.flushall()
+            logger.info("🗑️ Кеш полностью очищен")
+            return True
         except Exception as e:
             logger.error(f"Ошибка очистки кеша: {e}")
             return False
@@ -122,8 +123,7 @@ class CacheService:
             return None
         
         try:
-            result = await redis_service.increment(key, amount)
-            return result if result is not None else 0
+            return await self.redis_client.incrby(key, amount)
         except Exception as e:
             logger.error(f"Ошибка инкремента {key}: {e}")
             return None
@@ -133,7 +133,10 @@ class CacheService:
             return False
         
         try:
-            return await redis_service.hset(name, mapping, expire)
+            await self.redis_client.hset(name, mapping=mapping)
+            if expire:
+                await self.redis_client.expire(name, expire)
+            return True
         except Exception as e:
             logger.error(f"Ошибка записи хеша {name}: {e}")
             return False
@@ -144,10 +147,10 @@ class CacheService:
         
         try:
             if key:
-                value = await redis_service.hget(name, key)
+                value = await self.redis_client.hget(name, key)
                 return value.decode() if value else None
             else:
-                hash_data = await redis_service.hgetall(name)
+                hash_data = await self.redis_client.hgetall(name)
                 return {k.decode(): v.decode() for k, v in hash_data.items()}
         except Exception as e:
             logger.error(f"Ошибка получения хеша {name}: {e}")

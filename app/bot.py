@@ -37,7 +37,6 @@ from app.handlers.admin import (
     updates as admin_updates,
     backup as admin_backup,
     welcome_text as admin_welcome_text,
-    redis_monitoring as admin_redis_monitoring,
 )
 from app.handlers.stars_payments import register_stars_handlers
 
@@ -75,14 +74,10 @@ async def setup_bot() -> tuple[Bot, Dispatcher]:
     logger.info("Бот установлен в maintenance_service")
     
     try:
-        from app.services.redis_service import redis_service
-        await redis_service.connect()
-        redis_client = await redis_service.get_client()
-        if redis_client:
-            storage = RedisStorage(redis_client)
-            logger.info("Подключено к Redis для FSM storage")
-        else:
-            raise Exception("Не удалось получить Redis клиент")
+        redis_client = redis.from_url(settings.REDIS_URL)
+        await redis_client.ping()
+        storage = RedisStorage(redis_client)
+        logger.info("Подключено к Redis для FSM storage")
     except Exception as e:
         logger.warning(f"Не удалось подключиться к Redis: {e}")
         logger.info("Используется MemoryStorage для FSM")
@@ -141,7 +136,6 @@ async def setup_bot() -> tuple[Bot, Dispatcher]:
     admin_updates.register_handlers(dp)
     admin_backup.register_handlers(dp)
     admin_welcome_text.register_welcome_text_handlers(dp)
-    admin_redis_monitoring.register_handlers(dp)
     common.register_handlers(dp)
     register_stars_handlers(dp)
     logger.info("⭐ Зарегистрированы обработчики Telegram Stars платежей")
@@ -166,7 +160,7 @@ async def shutdown_bot():
         logger.error(f"Ошибка остановки мониторинга: {e}")
     
     try:
-        await cache.disconnect()
+        await cache.close()
         logger.info("Соединения с кешем закрыты")
     except Exception as e:
         logger.error(f"Ошибка закрытия кеша: {e}")

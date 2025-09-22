@@ -46,7 +46,7 @@ def _build_dynamic_values(language: str) -> Dict[str, Any]:
             "SUPPORT_INFO": (
                 "\n🛠️ <b>Техническая поддержка</b>\n\n"
                 "По всем вопросам обращайтесь к нашей поддержке:\n\n"
-                f"👤 {settings.get_support_contact_display_html()}\n\n"
+                f"👤 {settings.SUPPORT_USERNAME}\n\n"
                 "Мы поможем с:\n"
                 "• Настройкой подключения\n"
                 "• Решением технических проблем  \n"
@@ -74,7 +74,7 @@ def _build_dynamic_values(language: str) -> Dict[str, Any]:
             "SUPPORT_INFO": (
                 "\n🛠️ <b>Technical support</b>\n\n"
                 "For any questions contact our support:\n\n"
-                f"👤 {settings.get_support_contact_display_html()}\n\n"
+                f"👤 {settings.SUPPORT_USERNAME}\n\n"
                 "We can help with:\n"
                 "• Connection setup\n"
                 "• Troubleshooting issues\n"

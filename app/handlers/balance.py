@@ -806,7 +806,7 @@ async def check_yookassa_payment_status(
             message_text += "\n⏳ Платеж ожидает оплаты. Нажмите кнопку 'Оплатить' выше."
         elif payment.is_failed:
             message_text += (
-                f"\n❌ Платеж не прошел. Обратитесь в {settings.get_support_contact_display_html()}"
+                f"\n❌ Платеж не прошел. Обратитесь в {settings.get_support_contact_display()}"
             )
         
         await callback.answer(message_text, show_alert=True)
@@ -1002,7 +1002,7 @@ async def check_cryptobot_payment_status(
             message_text += "\n⏳ Платеж ожидает оплаты. Нажмите кнопку 'Оплатить' выше."
         elif payment.is_expired:
             message_text += (
-                f"\n❌ Платеж истек. Обратитесь в {settings.get_support_contact_display_html()}"
+                f"\n❌ Платеж истек. Обратитесь в {settings.get_support_contact_display()}"
             )
         
         await callback.answer(message_text, show_alert=True)

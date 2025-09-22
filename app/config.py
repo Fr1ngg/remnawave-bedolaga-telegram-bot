@@ -12,11 +12,7 @@ class Settings(BaseSettings):
     
     BOT_TOKEN: str
     ADMIN_IDS: str = ""
-    # Настройки поддержки
-    SUPPORT_USERNAME: str = "@support"  # Реальный username для перехода
-    SUPPORT_DISPLAY_NAME: str = "Техподдержка"  # Отображаемое имя
-    SUPPORT_DESCRIPTION: str = "По всем вопросам обращайтесь к нашей поддержке"
-    SUPPORT_RESPONSE_TIME: str = "обычно в течение 1-2 часов"
+    SUPPORT_USERNAME: str = "@support"
 
     ADMIN_NOTIFICATIONS_ENABLED: bool = False
     ADMIN_NOTIFICATIONS_CHAT_ID: Optional[str] = None
@@ -799,104 +795,72 @@ class Settings(BaseSettings):
 
         return contact
 
- def get_support_contact_display_html(self) -> str:
-    """Возвращает HTML-ссылку на поддержку с отображаемым именем"""
-    display_name = self.get_support_display_name()
-    url = self.get_support_contact_url()
-    
-    if url:
-        return f'<a href="{url}">{html.escape(display_name)}</a>'
-    else:
-        # Если URL недоступен, возвращаем просто отображаемое имя
-        return html.escape(display_name)
+    def get_support_contact_display_html(self) -> str:
+        return html.escape(self.get_support_contact_display())
 
-def get_support_display_name(self) -> str:
-    return self.SUPPORT_DISPLAY_NAME or "Техподдержка"
+    def get_server_status_mode(self) -> str:
+        return self.SERVER_STATUS_MODE
 
-def get_support_description(self) -> str:
-    return self.SUPPORT_DESCRIPTION or "По всем вопросам обращайтесь к нашей поддержке"
+    def is_server_status_enabled(self) -> bool:
+        return self.get_server_status_mode() != "disabled"
 
-def get_support_response_time(self) -> str:
-    return self.SUPPORT_RESPONSE_TIME or "обычно в течение 1-2 часов"
+    def get_server_status_external_url(self) -> Optional[str]:
+        url = (self.SERVER_STATUS_EXTERNAL_URL or "").strip()
+        return url or None
 
-def is_support_configured(self) -> bool:
-    """Проверяет, настроена ли система поддержки"""
-    return bool(self.SUPPORT_USERNAME and self.SUPPORT_USERNAME.strip())
+    def get_server_status_metrics_url(self) -> Optional[str]:
+        url = (self.SERVER_STATUS_METRICS_URL or "").strip()
+        return url or None
 
-def get_support_contact_info(self) -> dict:
-    """Возвращает полную информацию о поддержке"""
-    return {
-        'username': self.get_support_contact_display(),  # Реальный username
-        'display_name': self.get_support_display_name(),  # Отображаемое имя
-        'url': self.get_support_contact_url(),
-        'description': self.get_support_description(),
-        'response_time': self.get_support_response_time(),
-        'is_configured': self.is_support_configured()
-    }
+    def get_server_status_metrics_auth(self) -> Optional[tuple[str, str]]:
+        username = (self.SERVER_STATUS_METRICS_USERNAME or "").strip()
+        password_raw = self.SERVER_STATUS_METRICS_PASSWORD
 
-# --- блок статуса сервера ---
-def get_server_status_mode(self) -> str:
-    return self.SERVER_STATUS_MODE
+        if not username:
+            return None
 
-def is_server_status_enabled(self) -> bool:
-    return self.get_server_status_mode() != "disabled"
+        password = "" if password_raw is None else str(password_raw)
+        return username, password
 
-def get_server_status_external_url(self) -> Optional[str]:
-    url = (self.SERVER_STATUS_EXTERNAL_URL or "").strip()
-    return url or None
+    def get_server_status_items_per_page(self) -> int:
+        return max(1, self.SERVER_STATUS_ITEMS_PER_PAGE)
 
-def get_server_status_metrics_url(self) -> Optional[str]:
-    url = (self.SERVER_STATUS_METRICS_URL or "").strip()
-    return url or None
+    def get_server_status_request_timeout(self) -> int:
+        return max(1, self.SERVER_STATUS_REQUEST_TIMEOUT)
 
-def get_server_status_metrics_auth(self) -> Optional[tuple[str, str]]:
-    username = (self.SERVER_STATUS_METRICS_USERNAME or "").strip()
-    password_raw = self.SERVER_STATUS_METRICS_PASSWORD
-
-    if not username:
-        return None
-
-    password = "" if password_raw is None else str(password_raw)
-    return username, password
-
-def get_server_status_items_per_page(self) -> int:
-    return max(1, self.SERVER_STATUS_ITEMS_PER_PAGE)
-
-def get_server_status_request_timeout(self) -> int:
-    return max(1, self.SERVER_STATUS_REQUEST_TIMEOUT)
-
-# --- логика с пакетами ---
-enabled_packages = [pkg for pkg in packages if pkg["enabled"]]
-if not enabled_packages:
-    return 0
-
-unlimited_package = next((pkg for pkg in enabled_packages if pkg["gb"] == 0), None)
-
-finite_packages = [pkg for pkg in enabled_packages if pkg["gb"] > 0]
-if finite_packages:
-    max_package = max(finite_packages, key=lambda x: x["gb"])
-    
-    if gb > max_package["gb"]:
+        
+        enabled_packages = [pkg for pkg in packages if pkg["enabled"]]
+        if not enabled_packages:
+            return 0
+        
+        unlimited_package = next((pkg for pkg in enabled_packages if pkg["gb"] == 0), None)
+        
+        finite_packages = [pkg for pkg in enabled_packages if pkg["gb"] > 0]
+        if finite_packages:
+            max_package = max(finite_packages, key=lambda x: x["gb"])
+            
+            if gb > max_package["gb"]:
+                if unlimited_package:
+                    return unlimited_package["price"]
+                else:
+                    return max_package["price"]
+            
+            suitable_packages = [pkg for pkg in finite_packages if pkg["gb"] >= gb]
+            if suitable_packages:
+                nearest_package = min(suitable_packages, key=lambda x: x["gb"])
+                return nearest_package["price"]
+        
         if unlimited_package:
             return unlimited_package["price"]
-        else:
-            return max_package["price"]
+        
+        return 0
     
-    suitable_packages = [pkg for pkg in finite_packages if pkg["gb"] >= gb]
-    if suitable_packages:
-        nearest_package = min(suitable_packages, key=lambda x: x["gb"])
-        return nearest_package["price"]
+    model_config = {
+        "env_file": ".env",
+        "env_file_encoding": "utf-8",
+        "extra": "ignore"  
+    }
 
-if unlimited_package:
-    return unlimited_package["price"]
-
-return 0
-
-model_config = {
-    "env_file": ".env",
-    "env_file_encoding": "utf-8",
-    "extra": "ignore"
-}
 
 settings = Settings()
 

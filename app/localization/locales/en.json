@@ -240,7 +240,7 @@
   "SUBSCRIPTION_PURCHASED": "🎉 Subscription purchased successfully!",
   "SUBSCRIPTION_SUMMARY": "\n📋 <b>Final configuration</b>\n\n📅 <b>Period:</b> {period} days\n📈 <b>Traffic:</b> {traffic}\n🌍 <b>Countries:</b> {countries}\n📱 <b>Devices:</b> {devices}\n\n💰 <b>Total:</b> {total_price}\n\nConfirm the purchase?\n",
   "SUBSCRIPTION_TRIAL": "🧪 Trial subscription",
-  "SUPPORT_INFO": "\n🛠️ <b>Technical support</b>\n\nFor any questions contact our support:\n\n👤 {support_contact}\n\nWe can help with:\n• Connection setup\n• Troubleshooting issues\n• Payment questions\n• Other requests\n\n⏰ Response time: usually within 1-2 hours\n",
+  "SUPPORT_INFO": "\n🛠️ <b>Technical support</b>\n\nFor any questions contact our support:\n\n👤 {settings.SUPPORT_USERNAME}\n\nWe can help with:\n• Connection setup\n• Troubleshooting issues\n• Payment questions\n• Other requests\n\n⏰ Response time: usually within 1-2 hours\n",
   "SERVER_STATUS_AVAILABLE": "✅ <b>Online</b>",
   "SERVER_STATUS_ERROR_SHORT": "Failed to fetch data",
   "SERVER_STATUS_LATENCY": "{latency} ms",

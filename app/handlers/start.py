@@ -1,6 +1,5 @@
 import logging
 from datetime import datetime
-from typing import Optional
 from aiogram import Dispatcher, types, F, Bot
 from aiogram.enums import ChatMemberStatus
 from aiogram.filters import Command, StateFilter
@@ -18,7 +17,7 @@ from app.database.crud.campaign import (
     get_campaign_by_start_parameter,
     get_campaign_by_id,
 )
-from app.database.models import UserStatus, User
+from app.database.models import UserStatus
 from app.keyboards.inline import (
     get_rules_keyboard, get_main_menu_keyboard, get_post_registration_keyboard
 )
@@ -75,7 +74,7 @@ async def handle_potential_referral_code(
     message: types.Message, 
     state: FSMContext, 
     db: AsyncSession
-) -> bool:
+):
     current_state = await state.get_state()
     logger.info(f"🔍 REFERRAL CHECK: Проверка сообщения '{message.text}' в состоянии {current_state}")
     
@@ -136,7 +135,7 @@ async def handle_potential_referral_code(
     return True 
 
 
-async def cmd_start(message: types.Message, state: FSMContext, db: AsyncSession, db_user: Optional[User] = None) -> None:
+async def cmd_start(message: types.Message, state: FSMContext, db: AsyncSession, db_user=None):
     logger.info(f"🚀 START: Обработка /start от {message.from_user.id}")
     
     referral_code = None

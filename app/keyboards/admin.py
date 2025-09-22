@@ -84,10 +84,6 @@ def get_admin_settings_submenu_keyboard(language: str = "ru") -> InlineKeyboardM
             InlineKeyboardButton(text="🔧 Техработы", callback_data="maintenance_panel")
         ],
         [
-            InlineKeyboardButton(text="📊 Redis мониторинг", callback_data="redis_status"),
-            InlineKeyboardButton(text="🛠️ Система", callback_data="admin_submenu_system")
-        ],
-        [
             InlineKeyboardButton(text="⬅️ Назад", callback_data="admin_panel")
         ]
     ])
