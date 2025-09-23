@@ -1,5 +1,6 @@
 import logging
 from datetime import datetime, timedelta
+from typing import List
 from aiogram import Dispatcher, types, F
 from aiogram.fsm.context import FSMContext
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -17,10 +18,50 @@ from app.database.crud.promocode import (
     get_promocode_statistics, get_promocode_by_code, update_promocode,
     delete_promocode
 )
+from app.database.crud.server_squad import get_all_server_squads, get_server_squad_by_id
 from app.utils.decorators import admin_required, error_handler
 from app.utils.formatters import format_datetime
 
 logger = logging.getLogger(__name__)
+
+
+def _format_reset_strategy(strategy: str) -> str:
+    mapping = {
+        "NO_RESET": "Без сброса",
+        "DAY": "Каждый день",
+        "WEEK": "Каждую неделю",
+        "MONTH": "Каждый месяц",
+    }
+    return mapping.get((strategy or "").upper(), strategy or "Не указан")
+
+
+def _build_trial_squads_keyboard(
+    servers,
+    selected_uuids: List[str],
+) -> types.InlineKeyboardMarkup:
+    keyboard: List[List[types.InlineKeyboardButton]] = []
+
+    for server in servers[:20]:
+        is_selected = server.squad_uuid in selected_uuids
+        emoji = "✅" if is_selected else ("⚪" if server.is_available else "🔒")
+        text = f"{emoji} {server.display_name}"
+        keyboard.append([
+            types.InlineKeyboardButton(
+                text=text,
+                callback_data=f"promo_trial_squad_{server.id}"
+            )
+        ])
+
+    keyboard.append([
+        types.InlineKeyboardButton(
+            text="✅ Продолжить", callback_data="promo_trial_squads_save"
+        ),
+        types.InlineKeyboardButton(
+            text="❌ Отмена", callback_data="admin_promocodes"
+        ),
+    ])
+
+    return types.InlineKeyboardMarkup(inline_keyboard=keyboard)
 
 
 @admin_required
@@ -90,7 +131,19 @@ async def show_promocodes_list(
             text += f"💰 Бонус: {settings.format_price(promo.balance_bonus_kopeks)}\n"
         elif promo.type == PromoCodeType.SUBSCRIPTION_DAYS.value:
             text += f"📅 Дней: {promo.subscription_days}\n"
-        
+        elif promo.type == PromoCodeType.TRIAL_SUBSCRIPTION.value:
+            text += f"📅 Дней: {promo.subscription_days}\n"
+            traffic_text = (
+                "Безлимит" if not promo.subscription_traffic_gb else f"{promo.subscription_traffic_gb} ГБ"
+            )
+            text += f"📶 Трафик: {traffic_text}\n"
+            if promo.subscription_device_limit:
+                text += f"📱 Устройства: {promo.subscription_device_limit}\n"
+            if promo.traffic_reset_strategy:
+                text += f"🔄 Сброс: {_format_reset_strategy(promo.traffic_reset_strategy)}\n"
+            if promo.subscription_squads:
+                text += f"🌐 Сквады: {len(promo.subscription_squads)}\n"
+
         if promo.valid_until:
             text += f"⏰ До: {format_datetime(promo.valid_until)}\n"
         
@@ -150,7 +203,19 @@ async def show_promocode_management(
         text += f"💰 <b>Бонус:</b> {settings.format_price(promo.balance_bonus_kopeks)}\n"
     elif promo.type == PromoCodeType.SUBSCRIPTION_DAYS.value:
         text += f"📅 <b>Дней:</b> {promo.subscription_days}\n"
-    
+    elif promo.type == PromoCodeType.TRIAL_SUBSCRIPTION.value:
+        text += f"📅 <b>Дней:</b> {promo.subscription_days}\n"
+        traffic_text = (
+            "Безлимит" if not promo.subscription_traffic_gb else f"{promo.subscription_traffic_gb} ГБ"
+        )
+        text += f"📶 <b>Трафик:</b> {traffic_text}\n"
+        if promo.subscription_device_limit:
+            text += f"📱 <b>Устройства:</b> {promo.subscription_device_limit}\n"
+        if promo.traffic_reset_strategy:
+            text += f"🔄 <b>Сброс:</b> {_format_reset_strategy(promo.traffic_reset_strategy)}\n"
+        if promo.subscription_squads:
+            text += f"🌐 <b>Сквады:</b> {len(promo.subscription_squads)}\n"
+
     if promo.valid_until:
         text += f"⏰ <b>Действует до:</b> {format_datetime(promo.valid_until)}\n"
     
@@ -216,6 +281,17 @@ async def show_promocode_edit_menu(
         text += f"• Бонус: {settings.format_price(promo.balance_bonus_kopeks)}\n"
     elif promo.type in [PromoCodeType.SUBSCRIPTION_DAYS.value, PromoCodeType.TRIAL_SUBSCRIPTION.value]:
         text += f"• Дней: {promo.subscription_days}\n"
+        if promo.type == PromoCodeType.TRIAL_SUBSCRIPTION.value:
+            traffic_text = (
+                "безлимит" if not promo.subscription_traffic_gb else f"{promo.subscription_traffic_gb} ГБ"
+            )
+            text += f"• Трафик: {traffic_text}\n"
+            if promo.subscription_device_limit:
+                text += f"• Устройства: {promo.subscription_device_limit}\n"
+            if promo.traffic_reset_strategy:
+                text += f"• Сброс: {_format_reset_strategy(promo.traffic_reset_strategy)}\n"
+            if promo.subscription_squads:
+                text += f"• Сквады: {len(promo.subscription_squads)}\n"
     
     text += f"• Использований: {promo.current_uses}/{promo.max_uses}\n"
     
@@ -538,14 +614,221 @@ async def process_promocode_value(
             return
         
         await state.update_data(promocode_value=value)
-        
-        await message.answer(
-            f"📊 Введите количество использований промокода (или 0 для безлимита):"
-        )
-        await state.set_state(AdminStates.setting_promocode_uses)
-        
+
+        if promo_type == "trial":
+            await state.set_state(AdminStates.setting_promocode_trial_devices)
+            await message.answer(
+                (
+                    "📱 Введите лимит устройств для триальной подписки "
+                    f"(1-{settings.MAX_DEVICES_LIMIT}):"
+                )
+            )
+        else:
+            await message.answer(
+                "📊 Введите количество использований промокода (или 0 для безлимита):"
+            )
+            await state.set_state(AdminStates.setting_promocode_uses)
+
     except ValueError:
         await message.answer("❌ Введите корректное число")
+
+
+@admin_required
+@error_handler
+async def process_promocode_trial_devices(
+    message: types.Message,
+    db_user: User,
+    state: FSMContext,
+    db: AsyncSession,
+):
+    try:
+        devices = int(message.text.strip())
+    except ValueError:
+        await message.answer("❌ Введите целое число устройств")
+        return
+
+    if devices < 1 or devices > settings.MAX_DEVICES_LIMIT:
+        await message.answer(
+            f"❌ Количество устройств должно быть от 1 до {settings.MAX_DEVICES_LIMIT}"
+        )
+        return
+
+    await state.update_data(promocode_trial_devices=devices)
+    await state.set_state(AdminStates.setting_promocode_trial_traffic)
+    await message.answer(
+        "📶 Введите лимит трафика в ГБ (0 — безлимит):"
+    )
+
+
+@admin_required
+@error_handler
+async def process_promocode_trial_traffic(
+    message: types.Message,
+    db_user: User,
+    state: FSMContext,
+    db: AsyncSession,
+):
+    try:
+        traffic = int(message.text.strip())
+    except ValueError:
+        await message.answer("❌ Введите целое число для лимита трафика")
+        return
+
+    if traffic < 0 or traffic > 100000:
+        await message.answer("❌ Лимит трафика должен быть от 0 до 100000 ГБ")
+        return
+
+    await state.update_data(promocode_trial_traffic=traffic)
+    await state.set_state(AdminStates.setting_promocode_trial_reset)
+
+    keyboard = types.InlineKeyboardMarkup(inline_keyboard=[
+        [
+            types.InlineKeyboardButton(
+                text="🔁 Без сброса",
+                callback_data="promo_trial_reset_NO_RESET"
+            ),
+            types.InlineKeyboardButton(
+                text="📅 Ежедневно",
+                callback_data="promo_trial_reset_DAY"
+            ),
+        ],
+        [
+            types.InlineKeyboardButton(
+                text="📆 Еженедельно",
+                callback_data="promo_trial_reset_WEEK"
+            ),
+            types.InlineKeyboardButton(
+                text="🗓️ Ежемесячно",
+                callback_data="promo_trial_reset_MONTH"
+            ),
+        ],
+        [
+            types.InlineKeyboardButton(
+                text="❌ Отмена",
+                callback_data="admin_promocodes"
+            )
+        ]
+    ])
+
+    await message.answer(
+        "🔄 Выберите режим сброса трафика:",
+        reply_markup=keyboard
+    )
+
+
+@admin_required
+@error_handler
+async def select_promocode_trial_reset(
+    callback: types.CallbackQuery,
+    db_user: User,
+    state: FSMContext,
+    db: AsyncSession,
+):
+    reset_mode = callback.data.split("_")[-1]
+    allowed = {"NO_RESET", "DAY", "WEEK", "MONTH"}
+
+    if reset_mode not in allowed:
+        await callback.answer("❌ Неизвестный режим", show_alert=True)
+        return
+
+    await state.update_data(promocode_trial_reset=reset_mode)
+
+    servers, _ = await get_all_server_squads(db, available_only=False)
+
+    if not servers:
+        await state.update_data(promocode_trial_squads=[])
+        await state.set_state(AdminStates.setting_promocode_uses)
+        await callback.message.edit_text(
+            (
+                "⚠️ Доступные сквады не найдены."
+                "\n\n📊 Введите количество использований промокода (или 0 для безлимита):"
+            )
+        )
+        await callback.answer("Режим выбран")
+        return
+
+    data = await state.get_data()
+    selected = list(data.get("promocode_trial_squads", []))
+
+    default_squad = getattr(settings, "TRIAL_SQUAD_UUID", None)
+    if not selected and default_squad:
+        if any(server.squad_uuid == default_squad for server in servers):
+            selected.append(default_squad)
+
+    await state.update_data(promocode_trial_squads=selected)
+    await state.set_state(AdminStates.selecting_promocode_trial_squads)
+
+    keyboard = _build_trial_squads_keyboard(servers, selected)
+    text = (
+        "🌍 Выберите сквады для триальной подписки."
+        "\n\nНажимайте на названия, чтобы добавить или убрать."
+        "\nПосле выбора нажмите «Продолжить»."
+    )
+
+    await callback.message.edit_text(text, reply_markup=keyboard)
+    await callback.answer(f"Сброс: {_format_reset_strategy(reset_mode)}")
+
+
+@admin_required
+@error_handler
+async def toggle_promocode_trial_squad(
+    callback: types.CallbackQuery,
+    db_user: User,
+    state: FSMContext,
+    db: AsyncSession,
+):
+    try:
+        server_id = int(callback.data.split("_")[-1])
+    except (ValueError, IndexError):
+        await callback.answer("❌ Неверный идентификатор", show_alert=True)
+        return
+
+    server = await get_server_squad_by_id(db, server_id)
+    if not server:
+        await callback.answer("❌ Сервер не найден", show_alert=True)
+        return
+
+    data = await state.get_data()
+    selected = list(data.get("promocode_trial_squads", []))
+
+    if server.squad_uuid in selected:
+        selected.remove(server.squad_uuid)
+        action = "Удалено"
+    else:
+        selected.append(server.squad_uuid)
+        action = "Добавлено"
+
+    await state.update_data(promocode_trial_squads=selected)
+
+    servers, _ = await get_all_server_squads(db, available_only=False)
+    keyboard = _build_trial_squads_keyboard(servers, selected)
+    await callback.message.edit_reply_markup(reply_markup=keyboard)
+    await callback.answer(f"{action}: {server.display_name}")
+
+
+@admin_required
+@error_handler
+async def finalize_promocode_trial_squads(
+    callback: types.CallbackQuery,
+    db_user: User,
+    state: FSMContext,
+    db: AsyncSession,
+):
+    data = await state.get_data()
+    selected = list(data.get("promocode_trial_squads", []))
+
+    if not selected:
+        await callback.answer("❗ Выберите хотя бы один сквад", show_alert=True)
+        return
+
+    await state.set_state(AdminStates.setting_promocode_uses)
+    await callback.message.edit_text(
+        (
+            f"✅ Сквады выбраны: {len(selected)}"
+            "\n\n📊 Введите количество использований промокода (или 0 для безлимита):"
+        )
+    )
+    await callback.answer("Сохранено")
 
 
 async def handle_edit_value(
@@ -712,7 +995,18 @@ async def process_promocode_expiry(
         valid_until = None
         if expiry_days > 0:
             valid_until = datetime.utcnow() + timedelta(days=expiry_days)
-        
+
+        subscription_traffic = None
+        subscription_devices = None
+        subscription_squads = []
+        traffic_reset_strategy = None
+
+        if promo_type == "trial":
+            subscription_traffic = data.get('promocode_trial_traffic')
+            subscription_devices = data.get('promocode_trial_devices')
+            subscription_squads = data.get('promocode_trial_squads', [])
+            traffic_reset_strategy = data.get('promocode_trial_reset')
+
         type_map = {
             "balance": PromoCodeType.BALANCE,
             "days": PromoCodeType.SUBSCRIPTION_DAYS,
@@ -725,6 +1019,10 @@ async def process_promocode_expiry(
             type=type_map[promo_type],
             balance_bonus_kopeks=value * 100 if promo_type == "balance" else 0,
             subscription_days=value if promo_type in ["days", "trial"] else 0,
+            subscription_traffic_gb=subscription_traffic if promo_type == "trial" else None,
+            subscription_device_limit=subscription_devices if promo_type == "trial" else None,
+            subscription_squads=subscription_squads if promo_type == "trial" else None,
+            traffic_reset_strategy=traffic_reset_strategy if promo_type == "trial" else None,
             max_uses=max_uses,
             valid_until=valid_until,
             created_by=db_user.id
@@ -736,23 +1034,39 @@ async def process_promocode_expiry(
             "trial": "Тестовая подписка"
         }
         
+        uses_text = (
+            "безлимит" if promocode.max_uses == 999999 else str(promocode.max_uses)
+        )
+
         summary_text = f"""
 ✅ <b>Промокод создан!</b>
 
 🎫 <b>Код:</b> <code>{promocode.code}</code>
 📝 <b>Тип:</b> {type_names.get(promo_type)}
+📊 <b>Использований:</b> {uses_text}
 """
-        
+
         if promo_type == "balance":
             summary_text += f"💰 <b>Сумма:</b> {settings.format_price(promocode.balance_bonus_kopeks)}\n"
         elif promo_type in ["days", "trial"]:
             summary_text += f"📅 <b>Дней:</b> {promocode.subscription_days}\n"
-        
-        summary_text += f"📊 <b>Использований:</b> {promocode.max_uses}\n"
-        
+        if promo_type == "trial":
+            traffic_value = promocode.subscription_traffic_gb or 0
+            traffic_text = "Безлимит" if traffic_value == 0 else f"{traffic_value} ГБ"
+            if promocode.subscription_device_limit:
+                summary_text += f"📱 <b>Устройства:</b> {promocode.subscription_device_limit}\n"
+            summary_text += f"📶 <b>Трафик:</b> {traffic_text}\n"
+            if promocode.traffic_reset_strategy:
+                summary_text += (
+                    "🔄 <b>Сброс:</b> "
+                    f"{_format_reset_strategy(promocode.traffic_reset_strategy)}\n"
+                )
+            if promocode.subscription_squads:
+                summary_text += f"🌐 <b>Сквады:</b> {len(promocode.subscription_squads)}\n"
+
         if promocode.valid_until:
             summary_text += f"⏰ <b>Действует до:</b> {format_datetime(promocode.valid_until)}\n"
-        
+
         await message.answer(
             summary_text,
             reply_markup=types.InlineKeyboardMarkup(inline_keyboard=[
@@ -1007,7 +1321,10 @@ def register_handlers(dp: Dispatcher):
     dp.callback_query.register(show_promocodes_list, F.data == "admin_promo_list")
     dp.callback_query.register(start_promocode_creation, F.data == "admin_promo_create")
     dp.callback_query.register(select_promocode_type, F.data.startswith("promo_type_"))
-    
+    dp.callback_query.register(select_promocode_trial_reset, F.data.startswith("promo_trial_reset_"))
+    dp.callback_query.register(toggle_promocode_trial_squad, F.data.startswith("promo_trial_squad_"))
+    dp.callback_query.register(finalize_promocode_trial_squads, F.data == "promo_trial_squads_save")
+
     dp.callback_query.register(show_promocode_management, F.data.startswith("promo_manage_"))
     dp.callback_query.register(toggle_promocode_status, F.data.startswith("promo_toggle_"))
     dp.callback_query.register(show_promocode_stats, F.data.startswith("promo_stats_"))
@@ -1028,6 +1345,8 @@ def register_handlers(dp: Dispatcher):
     
     dp.message.register(process_promocode_code, AdminStates.creating_promocode)
     dp.message.register(process_promocode_value, AdminStates.setting_promocode_value)
+    dp.message.register(process_promocode_trial_devices, AdminStates.setting_promocode_trial_devices)
+    dp.message.register(process_promocode_trial_traffic, AdminStates.setting_promocode_trial_traffic)
     dp.message.register(process_promocode_uses, AdminStates.setting_promocode_uses)
     dp.message.register(process_promocode_expiry, AdminStates.setting_promocode_expiry)
     

@@ -38,9 +38,10 @@ def _resolve_discount_percent(
 
     return 0
 
-def get_traffic_reset_strategy():
+def get_traffic_reset_strategy(strategy_name: Optional[str] = None):
     from app.config import settings
-    strategy = settings.DEFAULT_TRAFFIC_RESET_STRATEGY.upper()
+    base_strategy = strategy_name or settings.DEFAULT_TRAFFIC_RESET_STRATEGY
+    strategy = base_strategy.upper()
     
     strategy_mapping = {
         'NO_RESET': 'NO_RESET',
@@ -50,7 +51,9 @@ def get_traffic_reset_strategy():
     }
     
     mapped_strategy = strategy_mapping.get(strategy, 'NO_RESET')
-    logger.info(f"🔄 Стратегия сброса трафика из конфига: {strategy} -> {mapped_strategy}")
+    logger.info(
+        f"🔄 Стратегия сброса трафика: {strategy} -> {mapped_strategy}"
+    )
     return getattr(TrafficLimitStrategy, mapped_strategy)
 
 
@@ -100,7 +103,9 @@ class SubscriptionService:
                         status=UserStatus.ACTIVE,
                         expire_at=subscription.end_date,
                         traffic_limit_bytes=self._gb_to_bytes(subscription.traffic_limit_gb),
-                        traffic_limit_strategy=get_traffic_reset_strategy(),
+                        traffic_limit_strategy=get_traffic_reset_strategy(
+                            subscription.traffic_reset_strategy
+                        ),
                         hwid_device_limit=subscription.device_limit,
                         description=settings.format_remnawave_user_description(
                             full_name=user.full_name,
@@ -118,7 +123,9 @@ class SubscriptionService:
                         expire_at=subscription.end_date,
                         status=UserStatus.ACTIVE,
                         traffic_limit_bytes=self._gb_to_bytes(subscription.traffic_limit_gb),
-                        traffic_limit_strategy=get_traffic_reset_strategy(),
+                        traffic_limit_strategy=get_traffic_reset_strategy(
+                            subscription.traffic_reset_strategy
+                        ),
                         telegram_id=user.telegram_id,
                         hwid_device_limit=subscription.device_limit,
                         description=settings.format_remnawave_user_description(
@@ -137,7 +144,10 @@ class SubscriptionService:
                 
                 logger.info(f"✅ Создан/обновлен RemnaWave пользователь для подписки {subscription.id}")
                 logger.info(f"🔗 Ссылка на подписку: {updated_user.subscription_url}")
-                strategy_name = settings.DEFAULT_TRAFFIC_RESET_STRATEGY
+                strategy_name = (
+                    subscription.traffic_reset_strategy
+                    or settings.DEFAULT_TRAFFIC_RESET_STRATEGY
+                )
                 logger.info(f"📊 Стратегия сброса трафика: {strategy_name}")
                 return updated_user
                 
@@ -179,7 +189,9 @@ class SubscriptionService:
                     status=UserStatus.ACTIVE if is_actually_active else UserStatus.EXPIRED,
                     expire_at=subscription.end_date,
                     traffic_limit_bytes=self._gb_to_bytes(subscription.traffic_limit_gb),
-                    traffic_limit_strategy=get_traffic_reset_strategy(),
+                    traffic_limit_strategy=get_traffic_reset_strategy(
+                        subscription.traffic_reset_strategy
+                    ),
                     hwid_device_limit=subscription.device_limit,
                     description=settings.format_remnawave_user_description(
                         full_name=user.full_name,
@@ -194,7 +206,10 @@ class SubscriptionService:
                 
                 status_text = "активным" if is_actually_active else "истёкшим"
                 logger.info(f"✅ Обновлен RemnaWave пользователь {user.remnawave_uuid} со статусом {status_text}")
-                strategy_name = settings.DEFAULT_TRAFFIC_RESET_STRATEGY
+                strategy_name = (
+                    subscription.traffic_reset_strategy
+                    or settings.DEFAULT_TRAFFIC_RESET_STRATEGY
+                )
                 logger.info(f"📊 Стратегия сброса трафика: {strategy_name}")
                 return updated_user
                 

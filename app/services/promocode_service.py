@@ -122,22 +122,66 @@ class PromoCodeService:
         if promocode.type == PromoCodeType.TRIAL_SUBSCRIPTION.value:
             from app.database.crud.subscription import create_trial_subscription
             from app.config import settings
-            
+
             subscription = await get_subscription_by_user_id(db, user.id)
-            
+
             if not subscription:
                 trial_days = promocode.subscription_days if promocode.subscription_days > 0 else settings.TRIAL_DURATION_DAYS
-                
-                trial_subscription = await create_trial_subscription(
-                    db, 
-                    user.id, 
-                    duration_days=trial_days 
+                traffic_limit = (
+                    promocode.subscription_traffic_gb
+                    if promocode.subscription_traffic_gb is not None
+                    else settings.TRIAL_TRAFFIC_LIMIT_GB
                 )
-                
+                device_limit = (
+                    promocode.subscription_device_limit
+                    if promocode.subscription_device_limit is not None
+                    else settings.TRIAL_DEVICE_LIMIT
+                )
+                traffic_reset_strategy = (
+                    promocode.traffic_reset_strategy
+                    if promocode.traffic_reset_strategy
+                    else settings.DEFAULT_TRAFFIC_RESET_STRATEGY
+                )
+                squad_uuids = (
+                    list(promocode.subscription_squads or [])
+                    if promocode.subscription_squads
+                    else ([settings.TRIAL_SQUAD_UUID] if getattr(settings, "TRIAL_SQUAD_UUID", None) else [])
+                )
+
+                trial_subscription = await create_trial_subscription(
+                    db,
+                    user.id,
+                    duration_days=trial_days,
+                    traffic_limit_gb=traffic_limit,
+                    device_limit=device_limit,
+                    squad_uuids=squad_uuids,
+                    traffic_reset_strategy=traffic_reset_strategy,
+                )
+
                 await self.subscription_service.create_remnawave_user(db, trial_subscription)
-                
-                effects.append(f"🎁 Активирована тестовая подписка на {trial_days} дней")
-                logger.info(f"✅ Создана триал подписка для пользователя {user.telegram_id} на {trial_days} дней")
+
+                effects.append(
+                    "🎁 Активирована тестовая подписка на {days} дней\n"
+                    "📱 Устройства: {devices}\n"
+                    "🌐 Сквады: {squads}\n"
+                    "📶 Трафик: {traffic}\n"
+                    "🔄 Сброс: {reset}".format(
+                        days=trial_days,
+                        devices=device_limit,
+                        squads=len(squad_uuids),
+                        traffic=("Безлимит" if traffic_limit == 0 else f"{traffic_limit} ГБ"),
+                        reset=traffic_reset_strategy,
+                    )
+                )
+                logger.info(
+                    "✅ Создана триал подписка для пользователя %s на %s дней: devices=%s, traffic=%s, reset=%s, squads=%s",
+                    user.telegram_id,
+                    trial_days,
+                    device_limit,
+                    traffic_limit,
+                    traffic_reset_strategy,
+                    squad_uuids,
+                )
             else:
                 effects.append("ℹ️ У вас уже есть активная подписка")
         
