@@ -42,10 +42,6 @@ class AdminStates(StatesGroup):
     setting_promocode_value = State()
     setting_promocode_uses = State()
     setting_promocode_expiry = State()
-    setting_promocode_trial_traffic = State()
-    setting_promocode_trial_devices = State()
-    setting_promocode_trial_reset = State()
-    selecting_promocode_trial_squads = State()
 
     creating_campaign_name = State()
     creating_campaign_start = State()

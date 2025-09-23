@@ -41,28 +41,16 @@ async def create_trial_subscription(
     duration_days: int = None,
     traffic_limit_gb: int = None,
     device_limit: int = None,
-    squad_uuid: str = None,
-    connected_squads: Optional[List[str]] = None,
-    traffic_reset_strategy: Optional[str] = None
+    squad_uuid: str = None
 ) -> Subscription:
-
-    duration_days = settings.TRIAL_DURATION_DAYS if duration_days is None else duration_days
-    traffic_limit_gb = settings.TRIAL_TRAFFIC_LIMIT_GB if traffic_limit_gb is None else traffic_limit_gb
-    device_limit = settings.TRIAL_DEVICE_LIMIT if device_limit is None else device_limit
-    default_squad = squad_uuid or settings.TRIAL_SQUAD_UUID
-
-    squads: List[str] = []
-    if connected_squads is not None:
-        squads = [uuid for uuid in connected_squads if uuid]
-    elif default_squad:
-        squads = [default_squad]
-
-    reset_strategy = (traffic_reset_strategy or settings.DEFAULT_TRAFFIC_RESET_STRATEGY or "NO_RESET").upper()
-    if reset_strategy not in {"NO_RESET", "DAY", "WEEK", "MONTH"}:
-        reset_strategy = "NO_RESET"
-
+    
+    duration_days = duration_days or settings.TRIAL_DURATION_DAYS
+    traffic_limit_gb = traffic_limit_gb or settings.TRIAL_TRAFFIC_LIMIT_GB
+    device_limit = device_limit or settings.TRIAL_DEVICE_LIMIT
+    squad_uuid = squad_uuid or settings.TRIAL_SQUAD_UUID
+    
     end_date = datetime.utcnow() + timedelta(days=duration_days)
-
+    
     subscription = Subscription(
         user_id=user_id,
         status=SubscriptionStatus.ACTIVE.value,
@@ -71,8 +59,7 @@ async def create_trial_subscription(
         end_date=end_date,
         traffic_limit_gb=traffic_limit_gb,
         device_limit=device_limit,
-        connected_squads=squads,
-        traffic_reset_strategy=reset_strategy
+        connected_squads=[squad_uuid] if squad_uuid else []
     )
     
     db.add(subscription)
@@ -102,8 +89,7 @@ async def create_paid_subscription(
         end_date=end_date,
         traffic_limit_gb=traffic_limit_gb,
         device_limit=device_limit,
-        connected_squads=connected_squads or [],
-        traffic_reset_strategy=settings.DEFAULT_TRAFFIC_RESET_STRATEGY.upper()
+        connected_squads=connected_squads or []
     )
     
     db.add(subscription)
