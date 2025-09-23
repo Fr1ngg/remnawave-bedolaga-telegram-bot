@@ -55,7 +55,7 @@ def get_traffic_reset_strategy():
 
 
 class SubscriptionService:
-
+    
     def __init__(self):
         auth_params = settings.get_remnawave_auth_params()
         self.api = RemnaWaveAPI(
@@ -65,24 +65,10 @@ class SubscriptionService:
             username=auth_params["username"],
             password=auth_params["password"]
         )
-
-    @staticmethod
-    def _resolve_subscription_traffic_strategy(subscription: Subscription) -> TrafficLimitStrategy:
-        strategy_value = getattr(subscription, "traffic_reset_strategy", None)
-        if strategy_value:
-            normalized_value = str(strategy_value).upper()
-            try:
-                return TrafficLimitStrategy(normalized_value)
-            except ValueError:
-                try:
-                    return TrafficLimitStrategy[normalized_value]
-                except KeyError:
-                    logger.warning(f"⚠️ Неизвестная стратегия сброса трафика: {strategy_value}, используется значение по умолчанию")
-        return get_traffic_reset_strategy()
-
+    
     async def create_remnawave_user(
-        self,
-        db: AsyncSession,
+        self, 
+        db: AsyncSession, 
         subscription: Subscription
     ) -> Optional[RemnaWaveUser]:
         
@@ -96,9 +82,7 @@ class SubscriptionService:
             if not validation_success:
                 logger.error(f"Ошибка валидации подписки для пользователя {user.telegram_id}")
                 return None
-
-            traffic_strategy = self._resolve_subscription_traffic_strategy(subscription)
-
+            
             async with self.api as api:
                 existing_users = await api.get_user_by_telegram_id(user.telegram_id)
                 if existing_users:
@@ -110,13 +94,13 @@ class SubscriptionService:
                         logger.info(f"🔧 Сброшены HWID устройства для пользователя {user.telegram_id}")
                     except Exception as hwid_error:
                         logger.warning(f"⚠️ Не удалось сбросить HWID: {hwid_error}")
-
+                    
                     updated_user = await api.update_user(
                         uuid=remnawave_user.uuid,
                         status=UserStatus.ACTIVE,
                         expire_at=subscription.end_date,
                         traffic_limit_bytes=self._gb_to_bytes(subscription.traffic_limit_gb),
-                        traffic_limit_strategy=traffic_strategy,
+                        traffic_limit_strategy=get_traffic_reset_strategy(),
                         hwid_device_limit=subscription.device_limit,
                         description=settings.format_remnawave_user_description(
                             full_name=user.full_name,
@@ -134,7 +118,7 @@ class SubscriptionService:
                         expire_at=subscription.end_date,
                         status=UserStatus.ACTIVE,
                         traffic_limit_bytes=self._gb_to_bytes(subscription.traffic_limit_gb),
-                        traffic_limit_strategy=traffic_strategy,
+                        traffic_limit_strategy=get_traffic_reset_strategy(),
                         telegram_id=user.telegram_id,
                         hwid_device_limit=subscription.device_limit,
                         description=settings.format_remnawave_user_description(
@@ -146,14 +130,14 @@ class SubscriptionService:
                     )
                 
                 subscription.remnawave_short_uuid = updated_user.short_uuid
-                subscription.subscription_url = updated_user.subscription_url
+                subscription.subscription_url = updated_user.subscription_url 
                 user.remnawave_uuid = updated_user.uuid
-
+                
                 await db.commit()
-
+                
                 logger.info(f"✅ Создан/обновлен RemnaWave пользователь для подписки {subscription.id}")
                 logger.info(f"🔗 Ссылка на подписку: {updated_user.subscription_url}")
-                strategy_name = traffic_strategy.value
+                strategy_name = settings.DEFAULT_TRAFFIC_RESET_STRATEGY
                 logger.info(f"📊 Стратегия сброса трафика: {strategy_name}")
                 return updated_user
                 
@@ -190,13 +174,12 @@ class SubscriptionService:
                 logger.info(f"🔔 Статус подписки {subscription.id} автоматически изменен на 'expired'")
             
             async with self.api as api:
-                traffic_strategy = self._resolve_subscription_traffic_strategy(subscription)
                 updated_user = await api.update_user(
                     uuid=user.remnawave_uuid,
                     status=UserStatus.ACTIVE if is_actually_active else UserStatus.EXPIRED,
                     expire_at=subscription.end_date,
                     traffic_limit_bytes=self._gb_to_bytes(subscription.traffic_limit_gb),
-                    traffic_limit_strategy=traffic_strategy,
+                    traffic_limit_strategy=get_traffic_reset_strategy(),
                     hwid_device_limit=subscription.device_limit,
                     description=settings.format_remnawave_user_description(
                         full_name=user.full_name,
@@ -208,10 +191,10 @@ class SubscriptionService:
                 
                 subscription.subscription_url = updated_user.subscription_url
                 await db.commit()
-
+                
                 status_text = "активным" if is_actually_active else "истёкшим"
                 logger.info(f"✅ Обновлен RemnaWave пользователь {user.remnawave_uuid} со статусом {status_text}")
-                strategy_name = traffic_strategy.value
+                strategy_name = settings.DEFAULT_TRAFFIC_RESET_STRATEGY
                 logger.info(f"📊 Стратегия сброса трафика: {strategy_name}")
                 return updated_user
                 
