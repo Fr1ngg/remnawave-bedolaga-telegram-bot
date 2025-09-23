@@ -53,9 +53,18 @@ async def create_trial_subscription(
 
     squads: List[str] = []
     if connected_squads is not None:
-        squads = [uuid for uuid in connected_squads if uuid]
+        candidates = [uuid for uuid in connected_squads if uuid]
     elif default_squad:
-        squads = [default_squad]
+        candidates = [default_squad]
+    else:
+        candidates = []
+
+    squads = []
+    seen = set()
+    for uuid in candidates:
+        if uuid not in seen:
+            seen.add(uuid)
+            squads.append(uuid)
 
     reset_strategy = (traffic_reset_strategy or settings.DEFAULT_TRAFFIC_RESET_STRATEGY or "NO_RESET").upper()
     if reset_strategy not in {"NO_RESET", "DAY", "WEEK", "MONTH"}:
@@ -114,10 +123,30 @@ async def create_paid_subscription(
     return subscription
 
 
+def _normalize_reset_strategy(value: Optional[str]) -> Optional[str]:
+    if value is None:
+        return None
+
+    normalized = str(value).upper()
+    if normalized not in {"NO_RESET", "DAY", "WEEK", "MONTH"}:
+        logger.warning(
+            "⚠️ Неизвестная стратегия сброса трафика %s, используется NO_RESET",
+            value,
+        )
+        return "NO_RESET"
+    return normalized
+
+
 async def extend_subscription(
     db: AsyncSession,
     subscription: Subscription,
-    days: int
+    days: int,
+    *,
+    traffic_limit_gb: Optional[int] = None,
+    device_limit: Optional[int] = None,
+    connected_squads: Optional[List[str]] = None,
+    traffic_reset_strategy: Optional[str] = None,
+    mark_trial: Optional[bool] = None,
 ) -> Subscription:
     current_time = datetime.utcnow()
     
@@ -135,6 +164,56 @@ async def extend_subscription(
         subscription.status = SubscriptionStatus.ACTIVE.value
         logger.info(f"🔄 Статус изменён с EXPIRED на ACTIVE")
     
+    if traffic_limit_gb is not None:
+        subscription.traffic_limit_gb = traffic_limit_gb
+        logger.info(
+            "📶 Лимит трафика обновлен до %s ГБ для подписки %s",
+            traffic_limit_gb,
+            subscription.id,
+        )
+
+    if device_limit is not None:
+        subscription.device_limit = device_limit
+        logger.info(
+            "📱 Лимит устройств обновлен до %s для подписки %s",
+            device_limit,
+            subscription.id,
+        )
+
+    if connected_squads is not None:
+        squads = [uuid for uuid in connected_squads if uuid]
+        # Исключаем дубли, сохраняя порядок
+        seen = set()
+        unique_squads = []
+        for squad in squads:
+            if squad not in seen:
+                seen.add(squad)
+                unique_squads.append(squad)
+
+        subscription.connected_squads = unique_squads
+        logger.info(
+            "🌍 Список сквадов обновлен для подписки %s: %s",
+            subscription.id,
+            unique_squads,
+        )
+
+    normalized_strategy = _normalize_reset_strategy(traffic_reset_strategy)
+    if normalized_strategy is not None:
+        subscription.traffic_reset_strategy = normalized_strategy
+        logger.info(
+            "🔁 Стратегия сброса трафика обновлена до %s для подписки %s",
+            normalized_strategy,
+            subscription.id,
+        )
+
+    if mark_trial is not None:
+        subscription.is_trial = mark_trial
+        logger.info(
+            "🎁 Флаг триальной подписки установлен в %s для подписки %s",
+            mark_trial,
+            subscription.id,
+        )
+
     subscription.updated_at = current_time
     
     await db.commit()
@@ -142,7 +221,15 @@ async def extend_subscription(
     await clear_notifications(db, subscription.id)
 
     logger.info(f"✅ Подписка продлена до: {subscription.end_date}")
-    logger.info(f"📊 Новые параметры: статус={subscription.status}, окончание={subscription.end_date}")
+    logger.info(
+        "📊 Новые параметры: статус=%s, окончание=%s, трафик=%s ГБ, устройства=%s, сквады=%s, сброс=%s",
+        subscription.status,
+        subscription.end_date,
+        subscription.traffic_limit_gb,
+        subscription.device_limit,
+        subscription.connected_squads,
+        subscription.traffic_reset_strategy,
+    )
 
     return subscription
 
