@@ -101,10 +101,7 @@ async def show_rules(
 
 
 def register_handlers(dp: Dispatcher):
-
-    async def _ignore_forum_topics(message: types.Message):
-        return None
-
+    
     dp.callback_query.register(
         show_rules,
         F.data == "menu_rules"
@@ -123,11 +120,6 @@ def register_handlers(dp: Dispatcher):
     dp.callback_query.register(
         handle_cancel,
         F.data.in_(["cancel", "subscription_cancel"])
-    )
-
-    dp.message.register(
-        _ignore_forum_topics,
-        F.is_topic_message.is_(True)
     )
 
     # Самый последний: ловим любые неизвестные текстовые сообщения
