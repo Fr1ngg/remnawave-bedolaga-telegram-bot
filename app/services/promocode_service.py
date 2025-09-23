@@ -127,17 +127,29 @@ class PromoCodeService:
             
             if not subscription:
                 trial_days = promocode.subscription_days if promocode.subscription_days > 0 else settings.TRIAL_DURATION_DAYS
-                
+
                 trial_subscription = await create_trial_subscription(
-                    db, 
-                    user.id, 
-                    duration_days=trial_days 
+                    db,
+                    user.id,
+                    duration_days=trial_days,
+                    traffic_limit_gb=promocode.trial_traffic_limit_gb,
+                    device_limit=promocode.trial_device_limit,
+                    connected_squads=promocode.trial_squad_uuids,
+                    traffic_reset_strategy=promocode.trial_traffic_reset_strategy
                 )
-                
+
                 await self.subscription_service.create_remnawave_user(db, trial_subscription)
-                
+
                 effects.append(f"🎁 Активирована тестовая подписка на {trial_days} дней")
-                logger.info(f"✅ Создана триал подписка для пользователя {user.telegram_id} на {trial_days} дней")
+                logger.info(
+                    "✅ Создана триал подписка для пользователя %s на %s дней (трафик=%s ГБ, устройства=%s, сброс=%s, сквады=%s)",
+                    user.telegram_id,
+                    trial_days,
+                    trial_subscription.traffic_limit_gb,
+                    trial_subscription.device_limit,
+                    trial_subscription.traffic_reset_strategy,
+                    trial_subscription.connected_squads,
+                )
             else:
                 effects.append("ℹ️ У вас уже есть активная подписка")
         

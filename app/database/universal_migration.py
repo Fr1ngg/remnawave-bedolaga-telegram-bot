@@ -839,6 +839,79 @@ async def add_ticket_sla_columns():
         logger.error(f"Ошибка добавления SLA колонки в tickets: {e}")
         return False
 
+
+async def add_promocode_trial_columns():
+    logger.info("=== ДОБАВЛЕНИЕ ПОЛЕЙ ДЛЯ ТРИАЛЬНЫХ ПРОМОКОДОВ ===")
+
+    try:
+        db_type = await get_database_type()
+
+        if not await check_column_exists('promocodes', 'trial_device_limit'):
+            async with engine.begin() as conn:
+                column_type = 'INTEGER NULL' if db_type != 'mysql' else 'INT NULL'
+                await conn.execute(text(f"ALTER TABLE promocodes ADD COLUMN trial_device_limit {column_type}"))
+                logger.info("✅ Добавлена колонка promocodes.trial_device_limit")
+
+        if not await check_column_exists('promocodes', 'trial_traffic_limit_gb'):
+            async with engine.begin() as conn:
+                column_type = 'INTEGER NULL' if db_type != 'mysql' else 'INT NULL'
+                await conn.execute(text(f"ALTER TABLE promocodes ADD COLUMN trial_traffic_limit_gb {column_type}"))
+                logger.info("✅ Добавлена колонка promocodes.trial_traffic_limit_gb")
+
+        if not await check_column_exists('promocodes', 'trial_traffic_reset_strategy'):
+            async with engine.begin() as conn:
+                if db_type == 'sqlite':
+                    column_type = 'TEXT NULL'
+                else:
+                    column_type = 'VARCHAR(50) NULL'
+                await conn.execute(text(f"ALTER TABLE promocodes ADD COLUMN trial_traffic_reset_strategy {column_type}"))
+                logger.info("✅ Добавлена колонка promocodes.trial_traffic_reset_strategy")
+
+        if not await check_column_exists('promocodes', 'trial_squad_uuids'):
+            async with engine.begin() as conn:
+                if db_type == 'sqlite':
+                    await conn.execute(text("ALTER TABLE promocodes ADD COLUMN trial_squad_uuids TEXT DEFAULT '[]'"))
+                elif db_type == 'postgresql':
+                    await conn.execute(text("ALTER TABLE promocodes ADD COLUMN trial_squad_uuids JSONB DEFAULT '[]'::jsonb"))
+                elif db_type == 'mysql':
+                    await conn.execute(text("ALTER TABLE promocodes ADD COLUMN trial_squad_uuids JSON DEFAULT (JSON_ARRAY())"))
+                else:
+                    logger.error(f"Неподдерживаемый тип БД для trial_squad_uuids: {db_type}")
+                    return False
+                logger.info("✅ Добавлена колонка promocodes.trial_squad_uuids")
+
+        return True
+
+    except Exception as e:
+        logger.error(f"Ошибка добавления триальных колонок в promocodes: {e}")
+        return False
+
+
+async def add_subscription_reset_column():
+    logger.info("=== ДОБАВЛЕНИЕ СТОЛБЦА СТРАТЕГИИ СБРОСА ТРАФИКА В SUBSCRIPTIONS ===")
+
+    try:
+        if await check_column_exists('subscriptions', 'traffic_reset_strategy'):
+            return True
+
+        db_type = await get_database_type()
+        async with engine.begin() as conn:
+            if db_type == 'sqlite':
+                await conn.execute(text("ALTER TABLE subscriptions ADD COLUMN traffic_reset_strategy TEXT NULL"))
+            elif db_type in ('postgresql', 'mysql'):
+                await conn.execute(text("ALTER TABLE subscriptions ADD COLUMN traffic_reset_strategy VARCHAR(50) NULL"))
+            else:
+                logger.error(f"Неподдерживаемый тип БД для traffic_reset_strategy: {db_type}")
+                return False
+
+        logger.info("✅ Добавлена колонка subscriptions.traffic_reset_strategy")
+        return True
+
+    except Exception as e:
+        logger.error(f"Ошибка добавления traffic_reset_strategy в subscriptions: {e}")
+        return False
+
+
 async def fix_foreign_keys_for_user_deletion():
     try:
         async with engine.begin() as conn:
@@ -1137,6 +1210,18 @@ async def run_universal_migration():
             logger.info("✅ Поля SLA в tickets готовы")
         else:
             logger.warning("⚠️ Проблемы с добавлением полей SLA в tickets")
+
+        promo_trial_cols_added = await add_promocode_trial_columns()
+        if promo_trial_cols_added:
+            logger.info("✅ Поля триальных промокодов готовы")
+        else:
+            logger.warning("⚠️ Проблемы с добавлением полей триальных промокодов")
+
+        subscription_reset_added = await add_subscription_reset_column()
+        if subscription_reset_added:
+            logger.info("✅ Колонка traffic_reset_strategy в subscriptions готова")
+        else:
+            logger.warning("⚠️ Проблемы с добавлением traffic_reset_strategy в subscriptions")
 
         logger.info("=== СОЗДАНИЕ ТАБЛИЦЫ АУДИТА ПОДДЕРЖКИ ===")
         try:
