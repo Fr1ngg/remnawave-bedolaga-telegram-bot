@@ -68,12 +68,9 @@ async def handle_unknown_message(
     message: types.Message,
     db_user: User
 ):
-
-    if getattr(message, "is_topic_message", False):
-        return
-
+    
     texts = get_texts(db_user.language if db_user else "ru")
-
+    
     await message.answer(
         texts.t(
             "UNKNOWN_COMMAND_MESSAGE",
