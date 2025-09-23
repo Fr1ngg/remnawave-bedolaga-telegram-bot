@@ -1,6 +1,6 @@
 import logging
 from datetime import datetime
-from typing import Dict, Any, List
+from typing import Dict, Any
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database.crud.promocode import (
@@ -122,31 +122,9 @@ class PromoCodeService:
         if promocode.type == PromoCodeType.TRIAL_SUBSCRIPTION.value:
             from app.database.crud.subscription import create_trial_subscription
             from app.config import settings
-
+            
             subscription = await get_subscription_by_user_id(db, user.id)
-            trial_days = promocode.subscription_days if promocode.subscription_days > 0 else settings.TRIAL_DURATION_DAYS
-
-            trial_traffic = promocode.trial_traffic_limit_gb
-            if trial_traffic is None:
-                trial_traffic = settings.TRIAL_TRAFFIC_LIMIT_GB
-
-            trial_devices = promocode.trial_device_limit
-            if trial_devices is None:
-                trial_devices = settings.TRIAL_DEVICE_LIMIT
-
-            raw_reset = promocode.trial_traffic_reset_strategy or settings.DEFAULT_TRAFFIC_RESET_STRATEGY
-            trial_reset = str(raw_reset).upper()
-            if trial_reset not in {"NO_RESET", "DAY", "WEEK", "MONTH"}:
-                logger.warning("⚠️ Некорректная стратегия сброса %s, используется NO_RESET", raw_reset)
-                trial_reset = "NO_RESET"
-
-            selected_squads: List[str] = []
-            if promocode.trial_squad_uuids:
-                selected_squads = [uuid for uuid in promocode.trial_squad_uuids if uuid]
-
-            if not selected_squads and getattr(settings, "TRIAL_SQUAD_UUID", None):
-                selected_squads = [settings.TRIAL_SQUAD_UUID]
-
+            
             if not subscription:
                 trial_days = promocode.subscription_days if promocode.subscription_days > 0 else settings.TRIAL_DURATION_DAYS
 
@@ -154,10 +132,6 @@ class PromoCodeService:
                     db,
                     user.id,
                     duration_days=trial_days,
-                    traffic_limit_gb=trial_traffic,
-                    device_limit=trial_devices,
-                    connected_squads=selected_squads,
-                    traffic_reset_strategy=trial_reset
                     traffic_limit_gb=promocode.trial_traffic_limit_gb,
                     device_limit=promocode.trial_device_limit,
                     connected_squads=promocode.trial_squad_uuids,
@@ -177,28 +151,6 @@ class PromoCodeService:
                     trial_subscription.connected_squads,
                 )
             else:
-                updated_subscription = await extend_subscription(
-                    db,
-                    subscription,
-                    trial_days,
-                    traffic_limit_gb=trial_traffic,
-                    device_limit=trial_devices,
-                    connected_squads=selected_squads,
-                    traffic_reset_strategy=trial_reset,
-                    mark_trial=True,
-                )
-
-                await self.subscription_service.update_remnawave_user(db, updated_subscription)
-
-                effects.append(f"🎁 Параметры тестовой подписки обновлены и продлены на {trial_days} дней")
-                logger.info(
-                    "✅ Обновлена триальная подписка пользователя %s (дни=%s, трафик=%s ГБ, устройства=%s, сброс=%s, сквады=%s)",
-                    user.telegram_id,
-                    trial_days,
-                    updated_subscription.traffic_limit_gb,
-                    updated_subscription.device_limit,
-                    updated_subscription.traffic_reset_strategy,
-                    updated_subscription.connected_squads,
-                )
+                effects.append("ℹ️ У вас уже есть активная подписка")
         
         return "\n".join(effects) if effects else "✅ Промокод активирован"
