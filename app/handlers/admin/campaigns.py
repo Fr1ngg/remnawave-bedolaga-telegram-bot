@@ -333,6 +333,35 @@ async def show_campaign_detail(
         f"• Выдано баланса: <b>{texts.format_price(stats['balance_issued'])}</b>"
     )
     text.append(f"• Выдано подписок: <b>{stats['subscription_issued']}</b>")
+    text.append(
+        f"• Доход: <b>{texts.format_price(stats['total_revenue_kopeks'])}</b>"
+    )
+    text.append(
+        "• Получили триал: "
+        f"<b>{stats['trial_users_count']}</b>"
+        f" (активно: {stats['active_trials_count']})"
+    )
+    text.append(
+        "• Конверсий в оплату: "
+        f"<b>{stats['conversion_count']}</b>"
+        f" / пользователей с оплатой: {stats['paid_users_count']}"
+    )
+    text.append(
+        "• Конверсия в оплату: "
+        f"<b>{stats['conversion_rate']:.1f}%</b>"
+    )
+    text.append(
+        "• Конверсия триала: "
+        f"<b>{stats['trial_conversion_rate']:.1f}%</b>"
+    )
+    text.append(
+        "• Средний доход на пользователя: "
+        f"<b>{texts.format_price(stats['avg_revenue_per_user_kopeks'])}</b>"
+    )
+    text.append(
+        "• Средний первый платеж: "
+        f"<b>{texts.format_price(stats['avg_first_payment_kopeks'])}</b>"
+    )
     if stats["last_registration"]:
         text.append(
             f"• Последняя: {stats['last_registration'].strftime('%d.%m.%Y %H:%M')}"

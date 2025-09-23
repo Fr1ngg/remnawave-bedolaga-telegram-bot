@@ -8,7 +8,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.states import AdminStates
 from app.database.models import User, UserStatus, Subscription, SubscriptionStatus, TransactionType 
-from app.database.crud.user import get_user_by_id 
+from app.database.crud.user import get_user_by_id
+from app.database.crud.campaign import (
+    get_campaign_registration_by_user,
+    get_campaign_statistics,
+)
 from app.keyboards.admin import (
     get_admin_users_keyboard, get_user_management_keyboard,
     get_admin_pagination_keyboard, get_confirmation_keyboard,
@@ -1214,6 +1218,10 @@ async def show_user_statistics(
     subscription = profile["subscription"]
     
     referral_stats = await get_detailed_referral_stats(db, user.id)
+    campaign_registration = await get_campaign_registration_by_user(db, user.id)
+    campaign_stats = None
+    if campaign_registration:
+        campaign_stats = await get_campaign_statistics(db, campaign_registration.campaign_id)
     
     text = f"📊 <b>Статистика пользователя</b>\n\n"
     text += f"👤 {user.full_name} (ID: <code>{user.telegram_id}</code>)\n\n"
@@ -1236,17 +1244,80 @@ async def show_user_statistics(
         text += f"• Отсутствует\n"
     
     text += f"\n<b>Реферальная программа:</b>\n"
-    
+
     if user.referred_by_id:
         referrer = await get_user_by_id(db, user.referred_by_id)
         if referrer:
             text += f"• Пришел по реферальной ссылке от <b>{referrer.full_name}</b>\n"
         else:
-            text += f"• Пришел по реферальной ссылке (реферер не найден)\n"
+            text += "• Пришел по реферальной ссылке (реферер не найден)\n"
+        if campaign_registration and campaign_registration.campaign:
+            text += (
+                "• Дополнительно зарегистрирован через кампанию "
+                f"<b>{campaign_registration.campaign.name}</b>\n"
+            )
+    elif campaign_registration and campaign_registration.campaign:
+        text += (
+            "• Регистрация через рекламную кампанию "
+            f"<b>{campaign_registration.campaign.name}</b>\n"
+        )
+        if campaign_registration.created_at:
+            text += (
+                "• Дата регистрации по кампании: "
+                f"{campaign_registration.created_at.strftime('%d.%m.%Y %H:%M')}\n"
+            )
     else:
-        text += f"• Прямая регистрация\n"
-    
+        text += "• Прямая регистрация\n"
+
     text += f"• Реферальный код: <code>{user.referral_code}</code>\n\n"
+
+    if campaign_registration and campaign_registration.campaign and campaign_stats:
+        text += "<b>Рекламная кампания:</b>\n"
+        text += (
+            "• Название: "
+            f"<b>{campaign_registration.campaign.name}</b>"
+        )
+        if campaign_registration.campaign.start_parameter:
+            text += (
+                " (параметр: "
+                f"<code>{campaign_registration.campaign.start_parameter}</code>)"
+            )
+        text += "\n"
+        text += (
+            "• Всего регистраций: "
+            f"{campaign_stats['registrations']}\n"
+        )
+        text += (
+            "• Суммарный доход: "
+            f"{settings.format_price(campaign_stats['total_revenue_kopeks'])}\n"
+        )
+        text += (
+            "• Получили триал: "
+            f"{campaign_stats['trial_users_count']}"
+            f" (активно: {campaign_stats['active_trials_count']})\n"
+        )
+        text += (
+            "• Конверсий в оплату: "
+            f"{campaign_stats['conversion_count']}"
+            f" (оплативших пользователей: {campaign_stats['paid_users_count']})\n"
+        )
+        text += (
+            "• Конверсия в оплату: "
+            f"{campaign_stats['conversion_rate']:.1f}%\n"
+        )
+        text += (
+            "• Конверсия триала: "
+            f"{campaign_stats['trial_conversion_rate']:.1f}%\n"
+        )
+        text += (
+            "• Средний доход на пользователя: "
+            f"{settings.format_price(campaign_stats['avg_revenue_per_user_kopeks'])}\n"
+        )
+        text += (
+            "• Средний первый платеж: "
+            f"{settings.format_price(campaign_stats['avg_first_payment_kopeks'])}\n"
+        )
+        text += "\n"
     
     if referral_stats['invited_count'] > 0:
         text += f"<b>Доходы от рефералов:</b>\n"
