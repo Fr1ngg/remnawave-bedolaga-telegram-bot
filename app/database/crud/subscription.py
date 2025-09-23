@@ -65,6 +65,9 @@ async def create_trial_subscription(
         if uuid not in seen:
             seen.add(uuid)
             squads.append(uuid)
+        squads = [uuid for uuid in connected_squads if uuid]
+    elif default_squad:
+        squads = [default_squad]
 
     reset_strategy = (traffic_reset_strategy or settings.DEFAULT_TRAFFIC_RESET_STRATEGY or "NO_RESET").upper()
     if reset_strategy not in {"NO_RESET", "DAY", "WEEK", "MONTH"}:

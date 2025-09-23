@@ -148,6 +148,8 @@ class PromoCodeService:
                 selected_squads = [settings.TRIAL_SQUAD_UUID]
 
             if not subscription:
+                trial_days = promocode.subscription_days if promocode.subscription_days > 0 else settings.TRIAL_DURATION_DAYS
+
                 trial_subscription = await create_trial_subscription(
                     db,
                     user.id,
@@ -156,6 +158,10 @@ class PromoCodeService:
                     device_limit=trial_devices,
                     connected_squads=selected_squads,
                     traffic_reset_strategy=trial_reset
+                    traffic_limit_gb=promocode.trial_traffic_limit_gb,
+                    device_limit=promocode.trial_device_limit,
+                    connected_squads=promocode.trial_squad_uuids,
+                    traffic_reset_strategy=promocode.trial_traffic_reset_strategy
                 )
 
                 await self.subscription_service.create_remnawave_user(db, trial_subscription)
