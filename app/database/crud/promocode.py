@@ -25,16 +25,24 @@ async def create_promocode(
     type: PromoCodeType,
     balance_bonus_kopeks: int = 0,
     subscription_days: int = 0,
+    subscription_traffic_gb: Optional[int] = None,
+    subscription_device_limit: Optional[int] = None,
+    subscription_squads: Optional[List[str]] = None,
+    traffic_reset_strategy: Optional[str] = None,
     max_uses: int = 1,
     valid_until: Optional[datetime] = None,
     created_by: Optional[int] = None
 ) -> PromoCode:
-    
+
     promocode = PromoCode(
         code=code.upper(),
         type=type.value,
         balance_bonus_kopeks=balance_bonus_kopeks,
         subscription_days=subscription_days,
+        subscription_traffic_gb=subscription_traffic_gb,
+        subscription_device_limit=subscription_device_limit,
+        subscription_squads=subscription_squads or [],
+        traffic_reset_strategy=traffic_reset_strategy,
         max_uses=max_uses,
         valid_until=valid_until,
         created_by=created_by
