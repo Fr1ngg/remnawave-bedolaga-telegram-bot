@@ -269,6 +269,7 @@ class Subscription(Base):
     device_limit = Column(Integer, default=1)
     
     connected_squads = Column(JSON, default=list)
+    traffic_reset_strategy = Column(String(50), nullable=True)
     
     autopay_enabled = Column(Boolean, default=False)
     autopay_days_before = Column(Integer, default=3)
@@ -473,8 +474,13 @@ class PromoCode(Base):
     code = Column(String(50), unique=True, nullable=False, index=True)
     type = Column(String(50), nullable=False)
     
-    balance_bonus_kopeks = Column(Integer, default=0)  
-    subscription_days = Column(Integer, default=0) 
+    balance_bonus_kopeks = Column(Integer, default=0)
+    subscription_days = Column(Integer, default=0)
+
+    trial_device_limit = Column(Integer, nullable=True)
+    trial_traffic_limit_gb = Column(Integer, nullable=True)
+    trial_traffic_reset_strategy = Column(String(50), nullable=True)
+    trial_squad_uuids = Column(JSON, default=list)
     
     max_uses = Column(Integer, default=1)  
     current_uses = Column(Integer, default=0)

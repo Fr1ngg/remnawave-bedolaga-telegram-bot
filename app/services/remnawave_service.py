@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 
 
 class RemnaWaveService:
-    
+
     def __init__(self):
         auth_params = settings.get_remnawave_auth_params()
         self.api = RemnaWaveAPI(
@@ -31,6 +31,21 @@ class RemnaWaveService:
             username=auth_params["username"],
             password=auth_params["password"]
         )
+
+    @staticmethod
+    def _resolve_subscription_strategy(subscription) -> TrafficLimitStrategy:
+        value = getattr(subscription, "traffic_reset_strategy", None)
+        if value:
+            normalized = str(value).upper()
+            try:
+                return TrafficLimitStrategy(normalized)
+            except ValueError:
+                logger.warning(f"⚠️ Неизвестная стратегия сброса трафика в подписке {subscription.id}: {value}")
+        default_value = getattr(settings, "DEFAULT_TRAFFIC_RESET_STRATEGY", "NO_RESET")
+        try:
+            return TrafficLimitStrategy(default_value.upper())
+        except ValueError:
+            return TrafficLimitStrategy.NO_RESET
 
     def _parse_remnawave_date(self, date_str: str) -> datetime:
         if not date_str:
@@ -770,14 +785,16 @@ class RemnaWaveService:
                     
                     try:
                         subscription = user.subscription
-                        
+
+                        traffic_strategy = self._resolve_subscription_strategy(subscription)
+
                         if user.remnawave_uuid:
                             await api.update_user(
                                 uuid=user.remnawave_uuid,
                                 status=UserStatus.ACTIVE if subscription.is_active else UserStatus.EXPIRED,
                                 expire_at=subscription.end_date,
                                 traffic_limit_bytes=subscription.traffic_limit_gb * (1024**3) if subscription.traffic_limit_gb > 0 else 0,
-                                traffic_limit_strategy=TrafficLimitStrategy.MONTH,
+                                traffic_limit_strategy=traffic_strategy,
                                 hwid_device_limit=subscription.device_limit,
                                 description=settings.format_remnawave_user_description(
                                     full_name=user.full_name,
@@ -795,7 +812,7 @@ class RemnaWaveService:
                                 expire_at=subscription.end_date,
                                 status=UserStatus.ACTIVE if subscription.is_active else UserStatus.EXPIRED,
                                 traffic_limit_bytes=subscription.traffic_limit_gb * (1024**3) if subscription.traffic_limit_gb > 0 else 0,
-                                traffic_limit_strategy=TrafficLimitStrategy.MONTH,
+                                traffic_limit_strategy=traffic_strategy,
                                 telegram_id=user.telegram_id,
                                 hwid_device_limit=subscription.device_limit,
                                 description=settings.format_remnawave_user_description(
