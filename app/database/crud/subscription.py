@@ -442,6 +442,8 @@ async def add_subscription_servers(
     server_squad_ids: List[int],
     paid_prices: List[int] = None
 ) -> Subscription:
+    await db.refresh(subscription)
+    
     if paid_prices is None:
         months_remaining = get_remaining_months(subscription.end_date)
         paid_prices = []
@@ -458,7 +460,7 @@ async def add_subscription_servers(
     
     for i, server_id in enumerate(server_squad_ids):
         subscription_server = SubscriptionServer(
-            subscription_id=subscription.id,
+            subscription_id=subscription.id,  
             server_squad_id=server_id,
             paid_price_kopeks=paid_prices[i] if i < len(paid_prices) else 0
         )
@@ -467,7 +469,7 @@ async def add_subscription_servers(
     await db.commit()
     await db.refresh(subscription)
     
-    logger.info(f"🌍 К подписке {subscription.id} добавлено {len(server_squad_ids)} серверов с ценами: {paid_prices}")
+    logger.info(f"🌐 К подписке {subscription.id} добавлено {len(server_squad_ids)} серверов с ценами: {paid_prices}")
     return subscription
 
 async def get_server_monthly_price(
@@ -533,9 +535,12 @@ async def calculate_subscription_total_cost(
     
     logger.info(f"📊 Расчет стоимости подписки на {period_days} дней ({months_in_period} мес):")
     logger.info(f"   Базовый период: {base_price/100}₽")
-    logger.info(f"   Трафик: {traffic_price_per_month/100}₽/мес × {months_in_period} = {total_traffic_price/100}₽")
-    logger.info(f"   Серверы: {servers_price_per_month/100}₽/мес × {months_in_period} = {total_servers_price/100}₽")
-    logger.info(f"   Устройства: {devices_price_per_month/100}₽/мес × {months_in_period} = {total_devices_price/100}₽")
+    if total_traffic_price > 0:
+        logger.info(f"   Трафик: {traffic_price_per_month/100}₽/мес × {months_in_period} = {total_traffic_price/100}₽")
+    if total_servers_price > 0:
+        logger.info(f"   Серверы: {servers_price_per_month/100}₽/мес × {months_in_period} = {total_servers_price/100}₽")
+    if total_devices_price > 0:
+        logger.info(f"   Устройства: {devices_price_per_month/100}₽/мес × {months_in_period} = {total_devices_price/100}₽")
     logger.info(f"   ИТОГО: {total_cost/100}₽")
     
     return total_cost, details
@@ -646,9 +651,12 @@ async def get_subscription_renewal_cost(
         
         logger.info(f"💰 Расчет продления подписки {subscription_id} на {period_days} дней ({months_in_period} мес):")
         logger.info(f"   📅 Период: {base_price/100}₽")
-        logger.info(f"   🌍 Серверы: {servers_price_per_month/100}₽/мес × {months_in_period} = {total_servers_cost/100}₽")
-        logger.info(f"   📊 Трафик: {traffic_price_per_month/100}₽/мес × {months_in_period} = {total_traffic_cost/100}₽")
-        logger.info(f"   📱 Устройства: {devices_price_per_month/100}₽/мес × {months_in_period} = {total_devices_cost/100}₽")
+        if total_servers_cost > 0:
+            logger.info(f"   🌍 Серверы: {servers_price_per_month/100}₽/мес × {months_in_period} = {total_servers_cost/100}₽")
+        if total_traffic_cost > 0:
+            logger.info(f"   📊 Трафик: {traffic_price_per_month/100}₽/мес × {months_in_period} = {total_traffic_cost/100}₽")
+        if total_devices_cost > 0:
+            logger.info(f"   📱 Устройства: {devices_price_per_month/100}₽/мес × {months_in_period} = {total_devices_cost/100}₽")
         logger.info(f"   💎 ИТОГО: {total_cost/100}₽")
         
         return total_cost

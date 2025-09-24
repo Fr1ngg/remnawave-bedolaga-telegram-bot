@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.states import AdminStates
-from app.database.models import User, UserStatus, Subscription 
+from app.database.models import User, UserStatus, Subscription, SubscriptionStatus, TransactionType 
 from app.database.crud.user import get_user_by_id 
 from app.keyboards.admin import (
     get_admin_users_keyboard, get_user_management_keyboard,
@@ -18,6 +18,7 @@ from app.services.user_service import UserService
 from app.utils.decorators import admin_required, error_handler
 from app.utils.formatters import format_datetime, format_time_ago
 from app.services.remnawave_service import RemnaWaveService
+from app.external.remnawave_api import TrafficLimitStrategy
 from app.database.crud.server_squad import get_all_server_squads, get_server_squad_by_uuid, get_server_squad_by_id
 
 logger = logging.getLogger(__name__)
@@ -324,6 +325,10 @@ async def show_user_subscription(
                 types.InlineKeyboardButton(
                     text="🔄 Тип подписки", 
                     callback_data=f"admin_sub_change_type_{user_id}"
+                ),
+                types.InlineKeyboardButton(
+                    text="💳 Купить подписку", 
+                    callback_data=f"admin_sub_buy_{user_id}"
                 )
             ]
         ]
@@ -685,7 +690,8 @@ async def process_balance_edit(
             description = f"Списание администратором: {int(amount_rubles)} ₽"
         
         success = await user_service.update_user_balance(
-            db, user_id, amount_kopeks, description, db_user.id
+            db, user_id, amount_kopeks, description, db_user.id,
+            bot=message.bot, admin_name=db_user.full_name
         )
         
         if success:
@@ -2326,6 +2332,289 @@ async def change_subscription_type(
     )
     await callback.answer()
 
+@admin_required
+@error_handler
+async def admin_buy_subscription(
+    callback: types.CallbackQuery,
+    db_user: User,
+    db: AsyncSession
+):
+    user_id = int(callback.data.split('_')[-1])
+    
+    user_service = UserService()
+    profile = await user_service.get_user_profile(db, user_id)
+    
+    if not profile:
+        await callback.answer("❌ Пользователь не найден", show_alert=True)
+        return
+    
+    target_user = profile["user"]
+    subscription = profile["subscription"]
+    
+    if not subscription:
+        await callback.answer("❌ У пользователя нет подписки", show_alert=True)
+        return
+    
+    available_periods = settings.get_available_subscription_periods()
+    
+    period_buttons = []
+    for period in available_periods:
+        price_attr = f"PRICE_{period}_DAYS"
+        if hasattr(settings, price_attr):
+            price_kopeks = getattr(settings, price_attr)
+            price_rubles = price_kopeks // 100
+            period_buttons.append([
+                types.InlineKeyboardButton(
+                    text=f"{period} дней ({price_rubles} ₽)",
+                    callback_data=f"admin_buy_sub_confirm_{user_id}_{period}_{price_kopeks}"
+                )
+            ])
+    
+    period_buttons.append([
+        types.InlineKeyboardButton(
+            text="❌ Отмена",
+            callback_data=f"admin_user_subscription_{user_id}"
+        )
+    ])
+    
+    text = f"💳 <b>Покупка подписки для пользователя</b>\n\n"
+    text += f"👤 {target_user.full_name} (ID: {target_user.telegram_id})\n"
+    text += f"💰 Баланс пользователя: {settings.format_price(target_user.balance_kopeks)}\n\n"
+    text += "Выберите период подписки:\n"
+    
+    await callback.message.edit_text(
+        text,
+        reply_markup=types.InlineKeyboardMarkup(inline_keyboard=period_buttons)
+    )
+    await callback.answer()
+
+
+@admin_required
+@error_handler
+async def admin_buy_subscription_confirm(
+    callback: types.CallbackQuery,
+    db_user: User,
+    db: AsyncSession
+):
+    parts = callback.data.split('_')
+    user_id = int(parts[4])
+    period_days = int(parts[5])
+    price_kopeks = int(parts[6])
+    
+    user_service = UserService()
+    profile = await user_service.get_user_profile(db, user_id)
+    
+    if not profile:
+        await callback.answer("❌ Пользователь не найден", show_alert=True)
+        return
+    
+    target_user = profile["user"]
+    subscription = profile["subscription"]
+    
+    if target_user.balance_kopeks < price_kopeks:
+        missing_kopeks = price_kopeks - target_user.balance_kopeks
+        await callback.message.edit_text(
+            f"❌ Недостаточно средств на балансе пользователя\n\n"
+            f"💰 Баланс пользователя: {settings.format_price(target_user.balance_kopeks)}\n"
+            f"💳 Стоимость подписки: {settings.format_price(price_kopeks)}\n"
+            f"📉 Не хватает: {settings.format_price(missing_kopeks)}\n\n"
+            f"Пополните баланс пользователя перед покупкой.",
+            reply_markup=types.InlineKeyboardMarkup(inline_keyboard=[
+                [types.InlineKeyboardButton(
+                    text="⬅️ Назад к подписке",
+                    callback_data=f"admin_user_subscription_{user_id}"
+                )]
+            ])
+        )
+        await callback.answer()
+        return
+    
+    price_rubles = price_kopeks // 100
+    text = f"💳 <b>Подтверждение покупки подписки</b>\n\n"
+    text += f"👤 {target_user.full_name} (ID: {target_user.telegram_id})\n"
+    text += f"📅 Период подписки: {period_days} дней\n"
+    text += f"💰 Стоимость: {settings.format_price(price_kopeks)}\n"
+    text += f"💰 Баланс пользователя: {settings.format_price(target_user.balance_kopeks)}\n\n"
+    text += "Вы уверены, что хотите купить подписку для этого пользователя?"
+    
+    keyboard = [
+        [
+            types.InlineKeyboardButton(
+                text="✅ Подтвердить",
+                callback_data=f"admin_buy_sub_execute_{user_id}_{period_days}_{price_kopeks}"
+            )
+        ],
+        [
+            types.InlineKeyboardButton(
+                text="❌ Отмена",
+                callback_data=f"admin_sub_buy_{user_id}"
+            )
+        ]
+    ]
+    
+    await callback.message.edit_text(
+        text,
+        reply_markup=types.InlineKeyboardMarkup(inline_keyboard=keyboard)
+    )
+    await callback.answer()
+
+
+@admin_required
+@error_handler
+async def admin_buy_subscription_execute(
+    callback: types.CallbackQuery,
+    db_user: User,
+    db: AsyncSession
+):
+    parts = callback.data.split('_')
+    user_id = int(parts[4])
+    period_days = int(parts[5])
+    price_kopeks = int(parts[6])
+    
+    user_service = UserService()
+    profile = await user_service.get_user_profile(db, user_id)
+    
+    if not profile:
+        await callback.answer("❌ Пользователь не найден", show_alert=True)
+        return
+    
+    target_user = profile["user"]
+    subscription = profile["subscription"]
+    
+    if target_user.balance_kopeks < price_kopeks:
+        await callback.answer("❌ Недостаточно средств на балансе пользователя", show_alert=True)
+        return
+    
+    try:
+        from app.database.crud.user import subtract_user_balance
+        success = await subtract_user_balance(
+            db, target_user, price_kopeks,
+            f"Покупка подписки на {period_days} дней (администратор)"
+        )
+        
+        if not success:
+            await callback.answer("❌ Ошибка списания средств", show_alert=True)
+            return
+        
+        if subscription:
+            current_time = datetime.utcnow()
+            
+            if subscription.end_date <= current_time:
+                subscription.start_date = current_time
+                
+            subscription.end_date = current_time + timedelta(days=period_days)
+            subscription.status = SubscriptionStatus.ACTIVE.value
+            subscription.updated_at = current_time
+            
+            if subscription.is_trial or not subscription.is_active:
+                subscription.is_trial = False  
+                if subscription.traffic_limit_gb != 0: 
+                    subscription.traffic_limit_gb = 0
+                subscription.device_limit = settings.DEFAULT_DEVICE_LIMIT
+                if subscription.is_trial:
+                    subscription.traffic_used_gb = 0.0
+            
+            await db.commit()
+            await db.refresh(subscription)
+            
+            from app.database.crud.transaction import create_transaction
+            transaction = await create_transaction(
+                db=db,
+                user_id=target_user.id,
+                type=TransactionType.SUBSCRIPTION_PAYMENT,
+                amount_kopeks=price_kopeks,
+                description=f"Продление подписки на {period_days} дней (администратор)"
+            )
+            
+            try:
+                from app.services.remnawave_service import RemnaWaveService
+                from app.external.remnawave_api import UserStatus, TrafficLimitStrategy
+                remnawave_service = RemnaWaveService()
+                
+                if target_user.remnawave_uuid:
+                    async with remnawave_service.api as api:
+                        remnawave_user = await api.update_user(
+                            uuid=target_user.remnawave_uuid,
+                            status=UserStatus.ACTIVE if subscription.is_active else UserStatus.EXPIRED,
+                            expire_at=subscription.end_date,
+                            traffic_limit_bytes=subscription.traffic_limit_gb * (1024**3) if subscription.traffic_limit_gb > 0 else 0,
+                            traffic_limit_strategy=TrafficLimitStrategy.MONTH,
+                            hwid_device_limit=subscription.device_limit,
+                            description=settings.format_remnawave_user_description(
+                                full_name=target_user.full_name,
+                                username=target_user.username,
+                                telegram_id=target_user.telegram_id
+                            ),
+                            active_internal_squads=subscription.connected_squads
+                        )
+                else:
+                    username = f"user_{target_user.telegram_id}"
+                    async with remnawave_service.api as api:
+                        remnawave_user = await api.create_user(
+                            username=username,
+                            expire_at=subscription.end_date,
+                            status=UserStatus.ACTIVE if subscription.is_active else UserStatus.EXPIRED,
+                            traffic_limit_bytes=subscription.traffic_limit_gb * (1024**3) if subscription.traffic_limit_gb > 0 else 0,
+                            traffic_limit_strategy=TrafficLimitStrategy.MONTH,
+                            telegram_id=target_user.telegram_id,
+                            hwid_device_limit=subscription.device_limit,
+                            description=settings.format_remnawave_user_description(
+                                full_name=target_user.full_name,
+                                username=target_user.username,
+                                telegram_id=target_user.telegram_id
+                            ),
+                            active_internal_squads=subscription.connected_squads
+                        )
+                    
+                    if remnawave_user and hasattr(remnawave_user, 'uuid'):
+                        target_user.remnawave_uuid = remnawave_user.uuid
+                        await db.commit()
+                
+                if remnawave_user:
+                    logger.info(f"Пользователь {target_user.telegram_id} успешно обновлен в RemnaWave")
+                else:
+                    logger.error(f"Ошибка обновления пользователя {target_user.telegram_id} в RemnaWave")
+            except Exception as e:
+                logger.error(f"Ошибка работы с RemnaWave для пользователя {target_user.telegram_id}: {e}")
+            
+            message = f"✅ Подписка пользователя продлена на {period_days} дней"
+        else:
+            message = "❌ Ошибка: у пользователя нет существующей подписки"
+        
+        await callback.message.edit_text(
+            f"{message}\n\n"
+            f"👤 {target_user.full_name} (ID: {target_user.telegram_id})\n"
+            f"💰 Списано: {settings.format_price(price_kopeks)}\n"
+            f"📅 Подписка действительна до: {format_datetime(subscription.end_date)}",
+            reply_markup=types.InlineKeyboardMarkup(inline_keyboard=[
+                [types.InlineKeyboardButton(
+                    text="⬅️ Назад к подписке",
+                    callback_data=f"admin_user_subscription_{user_id}"
+                )]
+            ])
+        )
+        
+        try:
+            if callback.bot:
+                await callback.bot.send_message(
+                    chat_id=target_user.telegram_id,
+                    text=f"💳 <b>Администратор продлил вашу подписку</b>\n\n"
+                         f"📅 Подписка продлена на {period_days} дней\n"
+                         f"💰 Списано с баланса: {settings.format_price(price_kopeks)}\n"
+                         f"📅 Подписка действительна до: {format_datetime(subscription.end_date)}",
+                    parse_mode="HTML"
+                )
+        except Exception as e:
+            logger.error(f"Ошибка отправки уведомления пользователю {target_user.telegram_id}: {e}")
+        
+        await callback.answer()
+        
+    except Exception as e:
+        logger.error(f"Ошибка покупки подписки администратором: {e}")
+        await callback.answer("❌ Ошибка при покупке подписки", show_alert=True)
+        
+        await db.rollback()
+
 
 @admin_required
 @error_handler
@@ -2632,3 +2921,23 @@ def register_handlers(dp: Dispatcher):
         change_subscription_type_confirm,
         F.data.startswith("admin_sub_type_")
     )
+    
+    # Регистрация обработчика покупки подписки администратором
+    dp.callback_query.register(
+        admin_buy_subscription,
+        F.data.startswith("admin_sub_buy_")
+    )
+    
+    # Регистрация дополнительных обработчиков для покупки подписки
+    dp.callback_query.register(
+        admin_buy_subscription_confirm,
+        F.data.startswith("admin_buy_sub_confirm_")
+    )
+    
+    dp.callback_query.register(
+        admin_buy_subscription_execute,
+        F.data.startswith("admin_buy_sub_execute_")
+    )
+
+
+

@@ -119,7 +119,7 @@ class RussianTexts(Texts):
     MENU_BUY_SUBSCRIPTION = "💎 Купить подписку"
     MENU_EXTEND_SUBSCRIPTION = "⏰ Продлить подписку"
     MENU_PROMOCODE = "🎫 Промокод"
-    MENU_REFERRALS = "🤝 Рефералы"
+    MENU_REFERRALS = "🤝 Партнерка"
     MENU_SUPPORT = "🛠️ Техподдержка"
     MENU_RULES = "📋 Правила сервиса"
     MENU_LANGUAGE = "🌐 Язык"
@@ -253,6 +253,8 @@ class RussianTexts(Texts):
     <b>Пополните баланс на {amount} и попробуйте снова.</b>
     """
     GO_TO_BALANCE_TOP_UP = "💳 Перейти к пополнению баланса"
+    RETURN_TO_SUBSCRIPTION_CHECKOUT = "↩️ Вернуться к оформлению"
+    NO_SAVED_SUBSCRIPTION_ORDER = "❌ Сохраненный заказ не найден. Соберите подписку заново."
     SUBSCRIPTION_PURCHASED = "🎉 Подписка успешно приобретена!"
     
     BALANCE_INFO = """
@@ -397,7 +399,7 @@ class RussianTexts(Texts):
 
 По всем вопросам обращайтесь к нашей поддержке:
 
-👤 {settings.SUPPORT_USERNAME}
+👤 {settings.get_support_contact_display_html()}
 
 Мы поможем с:
 • Настройкой подключения
@@ -421,7 +423,7 @@ class RussianTexts(Texts):
     ADMIN_PROMOCODES = "🎫 Промокоды"
     ADMIN_MESSAGES = "📨 Рассылки"
     ADMIN_MONITORING = "🔍 Мониторинг"
-    ADMIN_REFERRALS = "🤝 Рефералы"
+    ADMIN_REFERRALS = "🤝 Партнерка"
     ADMIN_RULES = "📋 Правила"
     ADMIN_REMNAWAVE = "🖥️ Remnawave"
     ADMIN_STATISTICS = "📊 Статистика"
@@ -541,6 +543,8 @@ To get started, select interface language:
     
     Top up {amount} and try again."""
     GO_TO_BALANCE_TOP_UP = "💳 Go to balance top up"
+    RETURN_TO_SUBSCRIPTION_CHECKOUT = "↩️ Back to checkout"
+    NO_SAVED_SUBSCRIPTION_ORDER = "❌ Saved subscription order not found. Please configure it again."
     
 
 LANGUAGES = {

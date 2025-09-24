@@ -203,13 +203,18 @@ class UserCache:
     
     @staticmethod
     async def set_user_session(
-        user_id: int, 
-        session_key: str, 
-        data: Any, 
+        user_id: int,
+        session_key: str,
+        data: Any,
         expire: int = 1800
     ) -> bool:
         key = cache_key("session", user_id, session_key)
         return await cache.set(key, data, expire)
+
+    @staticmethod
+    async def delete_user_session(user_id: int, session_key: str) -> bool:
+        key = cache_key("session", user_id, session_key)
+        return await cache.delete(key)
 
 
 class SystemCache:

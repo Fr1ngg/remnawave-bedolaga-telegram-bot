@@ -225,7 +225,7 @@ def get_admin_statistics_keyboard(language: str = "ru") -> InlineKeyboardMarkup:
         ],
         [
             InlineKeyboardButton(text="💰 Доходы", callback_data="admin_stats_revenue"),
-            InlineKeyboardButton(text="🤝 Рефералы", callback_data="admin_stats_referrals")
+            InlineKeyboardButton(text="🤝 Партнерка", callback_data="admin_stats_referrals")
         ],
         [
             InlineKeyboardButton(text="📊 Общая сводка", callback_data="admin_stats_summary")
@@ -913,22 +913,30 @@ def get_welcome_text_keyboard(language: str = "ru", is_enabled: bool = True) -> 
     
     return InlineKeyboardMarkup(inline_keyboard=keyboard)
 
+DEFAULT_BROADCAST_BUTTONS = ("home",)
+
+BROADCAST_BUTTONS = {
+    "balance": {"text": "💰 Пополнить баланс", "callback": "balance_topup"},
+    "referrals": {"text": "🤝 Партнерка", "callback": "menu_referrals"},
+    "promocode": {"text": "🎫 Промокод", "callback": "menu_promocode"},
+    "connect": {"text": "🔗 Подключиться", "callback": "subscription_connect"},
+    "subscription": {"text": "📱 Подписка", "callback": "menu_subscription"},
+    "support": {"text": "🛠️ Техподдержка", "callback": "menu_support"},
+    "home": {"text": "🏠 На главную", "callback": "back_to_menu"},
+}
+
+BROADCAST_BUTTON_ROWS: tuple[tuple[str, ...], ...] = (
+    ("balance", "referrals"),
+    ("promocode", "connect"),
+    ("subscription", "support"),
+    ("home",),
+)
+
+BROADCAST_BUTTON_LABELS = {key: value["text"] for key, value in BROADCAST_BUTTONS.items()}
+
+
 def get_message_buttons_selector_keyboard(language: str = "ru") -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(inline_keyboard=[
-        [
-            InlineKeyboardButton(text="💰 Пополнить баланс", callback_data="btn_balance"),
-            InlineKeyboardButton(text="🤝 Рефералы", callback_data="btn_referrals")
-        ],
-        [
-            InlineKeyboardButton(text="🎫 Промокод", callback_data="btn_promocode")
-        ],
-        [
-            InlineKeyboardButton(text="✅ Продолжить", callback_data="buttons_confirm")
-        ],
-        [
-            InlineKeyboardButton(text="❌ Отмена", callback_data="admin_messages")
-        ]
-    ])
+    return get_updated_message_buttons_selector_keyboard_with_media(list(DEFAULT_BROADCAST_BUTTONS), False, language)
 
 def get_broadcast_media_keyboard(language: str = "ru") -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
@@ -958,25 +966,33 @@ def get_media_confirm_keyboard(language: str = "ru") -> InlineKeyboardMarkup:
     ])
 
 def get_updated_message_buttons_selector_keyboard_with_media(selected_buttons: list, has_media: bool = False, language: str = "ru") -> InlineKeyboardMarkup:
-    balance_text = "✅ Пополнить баланс" if "balance" in selected_buttons else "💰 Пополнить баланс"
-    referrals_text = "✅ Рефералы" if "referrals" in selected_buttons else "🤝 Рефералы"
-    promocode_text = "✅ Промокод" if "promocode" in selected_buttons else "🎫 Промокод"
-    
-    keyboard = [
-        [
-            InlineKeyboardButton(text=balance_text, callback_data="btn_balance"),
-            InlineKeyboardButton(text=referrals_text, callback_data="btn_referrals")
-        ],
-        [
-            InlineKeyboardButton(text=promocode_text, callback_data="btn_promocode")
-        ]
-    ]
-    
+    selected_buttons = selected_buttons or []
+
+    keyboard: list[list[InlineKeyboardButton]] = []
+
+    for row in BROADCAST_BUTTON_ROWS:
+        row_buttons: list[InlineKeyboardButton] = []
+        for button_key in row:
+            button_config = BROADCAST_BUTTONS[button_key]
+            base_text = button_config["text"]
+            if button_key in selected_buttons:
+                if " " in base_text:
+                    toggle_text = f"✅ {base_text.split(' ', 1)[1]}"
+                else:
+                    toggle_text = f"✅ {base_text}"
+            else:
+                toggle_text = base_text
+            row_buttons.append(
+                InlineKeyboardButton(text=toggle_text, callback_data=f"btn_{button_key}")
+            )
+        if row_buttons:
+            keyboard.append(row_buttons)
+
     if has_media:
         keyboard.append([
             InlineKeyboardButton(text="🖼️ Изменить медиа", callback_data="change_media")
         ])
-    
+
     keyboard.extend([
         [
             InlineKeyboardButton(text="✅ Продолжить", callback_data="buttons_confirm")
@@ -985,5 +1001,5 @@ def get_updated_message_buttons_selector_keyboard_with_media(selected_buttons: l
             InlineKeyboardButton(text="❌ Отмена", callback_data="admin_messages")
         ]
     ])
-    
+
     return InlineKeyboardMarkup(inline_keyboard=keyboard)

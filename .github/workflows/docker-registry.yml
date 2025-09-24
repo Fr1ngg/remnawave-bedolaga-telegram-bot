@@ -24,18 +24,15 @@ jobs:
       packages: write
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0  
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
-        with:
-          driver-opts: |
-            network=host
 
       - name: Log in to Container Registry
-        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+        if: github.event_name != 'pull_request'
         uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
@@ -50,31 +47,26 @@ jobs:
           
           if [[ $GITHUB_REF == refs/tags/* ]]; then
             VERSION=${GITHUB_REF#refs/tags/}
-            echo "🏷️ Собираем релизную версию: $VERSION"
+            echo "🏷️ Building release version: $VERSION"
           elif [[ $GITHUB_REF == refs/heads/main ]]; then
-            VERSION="v2.3.3"
-            echo "🚀 Собираем версию из main: $VERSION"
+            VERSION="v2.3.5-$(git rev-parse --short HEAD)"
+            echo "🚀 Building main version: $VERSION"
           elif [[ $GITHUB_REF == refs/heads/dev ]]; then
-            VERSION="v2.3.3-dev-$(git rev-parse --short HEAD)"
-            echo "🧪 Собираем dev версию: $VERSION"
+            VERSION="v2.3.5-dev-$(git rev-parse --short HEAD)"
+            echo "🧪 Building dev version: $VERSION"
           else
-            VERSION="v2.3.3-pr-$(git rev-parse --short HEAD)"
-            echo "🔀 Собираем PR версию: $VERSION"
+            VERSION="v2.3.5-pr-$(git rev-parse --short HEAD)"
+            echo "🔀 Building PR version: $VERSION"
           fi
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           
           # Определяем, нужно ли пушить образ
           if [[ "${{ github.event_name }}" == "pull_request" ]]; then
-            if [[ "${{ github.event.pull_request.head.repo.full_name }}" == "${{ github.repository }}" ]]; then
-              echo "should_push=true" >> $GITHUB_OUTPUT
-              echo "✅ PR из того же репозитория - будем пушить"
-            else
-              echo "should_push=false" >> $GITHUB_OUTPUT
-              echo "⚠️ PR из внешнего форка - только build без push"
-            fi
+            echo "should_push=false" >> $GITHUB_OUTPUT
+            echo "⚠️ PR - only build without push"
           else
             echo "should_push=true" >> $GITHUB_OUTPUT
-            echo "✅ Push/Tag - будем пушить"
+            echo "✅ Push/Tag - will push"
           fi
 
       - name: Extract metadata
@@ -93,11 +85,11 @@ jobs:
             type=raw,value=${{ steps.version.outputs.version }}
 
       - name: Build and push Docker image
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: .
           file: ./Dockerfile
-          platforms: linux/amd64
+          platforms: linux/amd64,linux/arm64
           push: ${{ steps.version.outputs.should_push }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
@@ -105,18 +97,12 @@ jobs:
             VERSION=${{ steps.version.outputs.version }}
             BUILD_DATE=${{ steps.version.outputs.build_date }}
             VCS_REF=${{ steps.version.outputs.short_sha }}
-          cache-from: |
-            type=gha
-            type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache
-          cache-to: |
-            type=gha,mode=max
-            type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache,mode=max
-          build-contexts: |
-            alpine=docker-image://alpine:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
       - name: Generate security report
         uses: docker/scout-action@v1
-        if: github.event_name == 'pull_request' && steps.version.outputs.should_push == 'true'
+        if: github.event_name == 'pull_request'
         with:
           command: quickview,compare
           image: ${{ steps.meta.outputs.tags }}
@@ -125,30 +111,31 @@ jobs:
           only-severities: critical,high
           write-comment: true
           github-token: ${{ secrets.GITHUB_TOKEN }}
+        continue-on-error: true
 
       - name: Build Summary
         if: steps.version.outputs.should_push == 'true'
         run: |
           echo "## 🚀 Docker Build Summary" >> $GITHUB_STEP_SUMMARY
-          echo "| Параметр | Значение |" >> $GITHUB_STEP_SUMMARY
+          echo "| Parameter | Value |" >> $GITHUB_STEP_SUMMARY
           echo "|----------|----------|" >> $GITHUB_STEP_SUMMARY
-          echo "| **Версия** | \`${{ steps.version.outputs.version }}\` |" >> $GITHUB_STEP_SUMMARY
-          echo "| **Коммит** | \`${{ steps.version.outputs.short_sha }}\` |" >> $GITHUB_STEP_SUMMARY
-          echo "| **Дата сборки** | \`${{ steps.version.outputs.build_date }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Version** | \`${{ steps.version.outputs.version }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Commit** | \`${{ steps.version.outputs.short_sha }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Build Date** | \`${{ steps.version.outputs.build_date }}\` |" >> $GITHUB_STEP_SUMMARY
           echo "| **Registry** | \`${{ env.REGISTRY }}\` |" >> $GITHUB_STEP_SUMMARY
-          echo "| **Образ** | \`${{ env.IMAGE_NAME }}\` |" >> $GITHUB_STEP_SUMMARY
-          echo "| **Ветка** | \`${{ github.ref_name }}\` |" >> $GITHUB_STEP_SUMMARY
-          echo "| **Статус** | ✅ Опубликован |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Image** | \`${{ env.IMAGE_NAME }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Branch** | \`${{ github.ref_name }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Status** | ✅ Published |" >> $GITHUB_STEP_SUMMARY
 
       - name: Build Summary (No Push)
         if: steps.version.outputs.should_push == 'false'
         run: |
           echo "## 🔨 Docker Build Summary (Test Only)" >> $GITHUB_STEP_SUMMARY
-          echo "| Параметр | Значение |" >> $GITHUB_STEP_SUMMARY
+          echo "| Parameter | Value |" >> $GITHUB_STEP_SUMMARY
           echo "|----------|----------|" >> $GITHUB_STEP_SUMMARY
-          echo "| **Версия** | \`${{ steps.version.outputs.version }}\` |" >> $GITHUB_STEP_SUMMARY
-          echo "| **Коммит** | \`${{ steps.version.outputs.short_sha }}\` |" >> $GITHUB_STEP_SUMMARY
-          echo "| **Дата сборки** | \`${{ steps.version.outputs.build_date }}\` |" >> $GITHUB_STEP_SUMMARY
-          echo "| **Статус** | ✅ Собран успешно (без публикации) |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Version** | \`${{ steps.version.outputs.version }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Commit** | \`${{ steps.version.outputs.short_sha }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Build Date** | \`${{ steps.version.outputs.build_date }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Status** | ✅ Built successfully (without publishing) |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "⚠️ **Примечание:** Образ собран но не опубликован, так как это PR из внешнего форка." >> $GITHUB_STEP_SUMMARY
+          echo "⚠️ **Note:** Image built but not published as this is a pull request." >> $GITHUB_STEP_SUMMARY

@@ -56,7 +56,8 @@ def get_main_menu_keyboard(
     has_active_subscription: bool = False,
     subscription_is_active: bool = False,
     balance_kopeks: int = 0,
-    subscription=None
+    subscription=None,
+    show_resume_checkout: bool = False,
 ) -> InlineKeyboardMarkup:
     texts = get_texts(language)
     
@@ -131,7 +132,15 @@ def get_main_menu_keyboard(
             keyboard.append(subscription_buttons)
         else:
             keyboard.append([subscription_buttons[0]])
-    
+
+    if show_resume_checkout:
+        keyboard.append([
+            InlineKeyboardButton(
+                text=texts.RETURN_TO_SUBSCRIPTION_CHECKOUT,
+                callback_data="subscription_resume_checkout",
+            )
+        ])
+
     keyboard.extend([
         [
             InlineKeyboardButton(text=texts.MENU_PROMOCODE, callback_data="menu_promocode"),
@@ -166,17 +175,31 @@ def get_back_keyboard(language: str = "ru") -> InlineKeyboardMarkup:
     ])
 
 
-def get_insufficient_balance_keyboard(language: str = "ru") -> InlineKeyboardMarkup:
+def get_insufficient_balance_keyboard(
+    language: str = "ru",
+    resume_callback: str | None = None,
+) -> InlineKeyboardMarkup:
     texts = get_texts(language)
-    return InlineKeyboardMarkup(inline_keyboard=[
+    keyboard: list[list[InlineKeyboardButton]] = [
         [
             InlineKeyboardButton(
                 text=texts.GO_TO_BALANCE_TOP_UP,
                 callback_data="balance_topup",
             )
-        ],
-        [InlineKeyboardButton(text=texts.BACK, callback_data="back_to_menu")],
-    ])
+        ]
+    ]
+
+    if resume_callback:
+        keyboard.append([
+            InlineKeyboardButton(
+                text=texts.RETURN_TO_SUBSCRIPTION_CHECKOUT,
+                callback_data=resume_callback,
+            )
+        ])
+
+    keyboard.append([InlineKeyboardButton(text=texts.BACK, callback_data="back_to_menu")])
+
+    return InlineKeyboardMarkup(inline_keyboard=keyboard)
 
 
 def get_subscription_keyboard(
@@ -475,6 +498,14 @@ def get_payment_methods_keyboard(amount_kopeks: int, language: str = "ru") -> In
                 callback_data="topup_yookassa"
             )
         ])
+        
+        if settings.YOOKASSA_SBP_ENABLED:
+            keyboard.append([
+                InlineKeyboardButton(
+                    text="🏦 Оплатить по СБП (YooKassa)", 
+                    callback_data="topup_yookassa_sbp"
+                )
+            ])
     
     if settings.TRIBUTE_ENABLED:
         keyboard.append([
@@ -626,7 +657,10 @@ def get_support_keyboard(language: str = "ru") -> InlineKeyboardMarkup:
     texts = get_texts(language)
     return InlineKeyboardMarkup(inline_keyboard=[
         [
-            InlineKeyboardButton(text=texts.CONTACT_SUPPORT, url=f"https://t.me/{settings.SUPPORT_USERNAME.lstrip('@')}")
+            InlineKeyboardButton(
+                text=texts.CONTACT_SUPPORT,
+                url=settings.get_support_contact_url() or "https://t.me/"
+            )
         ],
         [
             InlineKeyboardButton(text=texts.BACK, callback_data="back_to_menu")

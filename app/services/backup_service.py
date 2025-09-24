@@ -330,78 +330,25 @@ class BackupService:
                     
                     models_by_table = {model.__tablename__: model for model in self.backup_models_ordered}
                     
-                    restore_order = []
+                    await self._restore_users_without_referrals(db, backup_data, models_by_table)
+                    
                     for model in self.backup_models_ordered:
                         table_name = model.__tablename__
-                        if table_name in backup_data and backup_data[table_name]:
-                            restore_order.append(table_name)
-                    
-                    for table_name in restore_order:
-                        records = backup_data[table_name]
-                        if not records:
-                            continue
                         
-                        model = models_by_table.get(table_name)
-                        if not model:
-                            logger.warning(f"⚠️ Модель для таблицы {table_name} не найдена, пропускаем")
+                        if table_name == "users":
+                            continue
+                            
+                        records = backup_data.get(table_name, [])
+                        if not records:
                             continue
                         
                         logger.info(f"🔥 Восстанавливаем таблицу {table_name} ({len(records)} записей)")
                         
                         for record_data in records:
                             try:
-                                processed_data = {}
-                                for key, value in record_data.items():
-                                    if value is None:
-                                        processed_data[key] = None
-                                        continue
-                                    
-                                    column = getattr(model.__table__.columns, key, None)
-                                    if column is None:
-                                        logger.warning(f"Колонка {key} не найдена в модели {table_name}")
-                                        continue
-                                    
-                                    column_type_str = str(column.type).upper()
-                                    
-                                    if ('DATETIME' in column_type_str or 'TIMESTAMP' in column_type_str) and isinstance(value, str):
-                                        try:
-                                            if 'T' in value:
-                                                processed_data[key] = datetime.fromisoformat(value.replace('Z', '+00:00'))
-                                            else:
-                                                processed_data[key] = datetime.strptime(value, '%Y-%m-%d %H:%M:%S')
-                                        except (ValueError, TypeError) as e:
-                                            logger.warning(f"Не удалось парсить дату {value} для поля {key}: {e}")
-                                            processed_data[key] = datetime.utcnow()
-                                    elif ('BOOLEAN' in column_type_str or 'BOOL' in column_type_str) and isinstance(value, str):
-                                        processed_data[key] = value.lower() in ('true', '1', 'yes', 'on')
-                                    elif ('INTEGER' in column_type_str or 'INT' in column_type_str or 'BIGINT' in column_type_str) and isinstance(value, str):
-                                        try:
-                                            processed_data[key] = int(value)
-                                        except ValueError:
-                                            processed_data[key] = 0
-                                    elif ('FLOAT' in column_type_str or 'REAL' in column_type_str or 'NUMERIC' in column_type_str) and isinstance(value, str):
-                                        try:
-                                            processed_data[key] = float(value)
-                                        except ValueError:
-                                            processed_data[key] = 0.0
-                                    elif 'JSON' in column_type_str:
-                                        if isinstance(value, str) and value.strip():
-                                            try:
-                                                processed_data[key] = json_lib.loads(value)
-                                            except (ValueError, TypeError):
-                                                processed_data[key] = value
-                                        elif isinstance(value, (list, dict)):
-                                            processed_data[key] = value
-                                        else:
-                                            processed_data[key] = None
-                                    else:
-                                        processed_data[key] = value
+                                processed_data = self._process_record_data(record_data, model, table_name)
                                 
-                                primary_key_col = None
-                                for col in model.__table__.columns:
-                                    if col.primary_key:
-                                        primary_key_col = col.name
-                                        break
+                                primary_key_col = self._get_primary_key_column(model)
                                 
                                 if primary_key_col and primary_key_col in processed_data:
                                     existing_record = await db.execute(
@@ -413,7 +360,7 @@ class BackupService:
                                     
                                     if existing and not clear_existing:
                                         for key, value in processed_data.items():
-                                            if key != primary_key_col:  
+                                            if key != primary_key_col:
                                                 setattr(existing, key, value)
                                         logger.debug(f"Обновлена существующая запись {primary_key_col}={processed_data[primary_key_col]} в {table_name}")
                                     else:
@@ -428,10 +375,13 @@ class BackupService:
                             except Exception as e:
                                 logger.error(f"Ошибка восстановления записи в {table_name}: {e}")
                                 logger.error(f"Проблемные данные: {record_data}")
-                                continue
+                                await db.rollback()
+                                raise e
                         
                         restored_tables += 1
                         logger.info(f"✅ Таблица {table_name} восстановлена")
+                    
+                    await self._update_user_referrals(db, backup_data)
                     
                     await db.commit()
                     
@@ -464,6 +414,140 @@ class BackupService:
                 await self._send_backup_notification("restore_error", error_msg)
             
             return False, error_msg
+
+    async def _restore_users_without_referrals(self, db: AsyncSession, backup_data: dict, models_by_table: dict):
+        users_data = backup_data.get("users", [])
+        if not users_data:
+            return
+        
+        logger.info(f"👥 Восстанавливаем {len(users_data)} пользователей без реферальных связей")
+        
+        User = models_by_table["users"]
+        
+        for user_data in users_data:
+            try:
+                processed_data = self._process_record_data(user_data, User, "users")
+                processed_data['referred_by_id'] = None 
+                
+                if 'id' in processed_data:
+                    existing_user = await db.execute(
+                        select(User).where(User.id == processed_data['id'])
+                    )
+                    existing = existing_user.scalar_one_or_none()
+                    
+                    if existing:
+                        for key, value in processed_data.items():
+                            if key != 'id':
+                                setattr(existing, key, value)
+                    else:
+                        instance = User(**processed_data)
+                        db.add(instance)
+                else:
+                    instance = User(**processed_data)
+                    db.add(instance)
+                
+            except Exception as e:
+                logger.error(f"Ошибка при восстановлении пользователя: {e}")
+                await db.rollback()
+                raise e
+        
+        await db.commit()
+        logger.info("✅ Пользователи без реферальных связей восстановлены")
+
+    async def _update_user_referrals(self, db: AsyncSession, backup_data: dict):
+        users_data = backup_data.get("users", [])
+        if not users_data:
+            return
+        
+        logger.info("🔗 Обновляем реферальные связи пользователей")
+        
+        for user_data in users_data:
+            try:
+                referred_by_id = user_data.get('referred_by_id')
+                user_id = user_data.get('id')
+                
+                if referred_by_id and user_id:
+                    referrer_result = await db.execute(
+                        select(User).where(User.id == referred_by_id)
+                    )
+                    referrer = referrer_result.scalar_one_or_none()
+                    
+                    if referrer:
+                        user_result = await db.execute(
+                            select(User).where(User.id == user_id)
+                        )
+                        user = user_result.scalar_one_or_none()
+                        
+                        if user:
+                            user.referred_by_id = referred_by_id
+                        else:
+                            logger.warning(f"Пользователь {user_id} не найден для обновления реферальной связи")
+                    else:
+                        logger.warning(f"Реферер {referred_by_id} не найден для пользователя {user_id}")
+                        
+            except Exception as e:
+                logger.error(f"Ошибка при обновлении реферальной связи: {e}")
+                continue
+        
+        await db.commit()
+        logger.info("✅ Реферальные связи обновлены")
+
+    def _process_record_data(self, record_data: dict, model, table_name: str) -> dict:
+        processed_data = {}
+        
+        for key, value in record_data.items():
+            if value is None:
+                processed_data[key] = None
+                continue
+            
+            column = getattr(model.__table__.columns, key, None)
+            if column is None:
+                logger.warning(f"Колонка {key} не найдена в модели {table_name}")
+                continue
+            
+            column_type_str = str(column.type).upper()
+            
+            if ('DATETIME' in column_type_str or 'TIMESTAMP' in column_type_str) and isinstance(value, str):
+                try:
+                    if 'T' in value:
+                        processed_data[key] = datetime.fromisoformat(value.replace('Z', '+00:00'))
+                    else:
+                        processed_data[key] = datetime.strptime(value, '%Y-%m-%d %H:%M:%S')
+                except (ValueError, TypeError) as e:
+                    logger.warning(f"Не удалось парсить дату {value} для поля {key}: {e}")
+                    processed_data[key] = datetime.utcnow()
+            elif ('BOOLEAN' in column_type_str or 'BOOL' in column_type_str) and isinstance(value, str):
+                processed_data[key] = value.lower() in ('true', '1', 'yes', 'on')
+            elif ('INTEGER' in column_type_str or 'INT' in column_type_str or 'BIGINT' in column_type_str) and isinstance(value, str):
+                try:
+                    processed_data[key] = int(value)
+                except ValueError:
+                    processed_data[key] = 0
+            elif ('FLOAT' in column_type_str or 'REAL' in column_type_str or 'NUMERIC' in column_type_str) and isinstance(value, str):
+                try:
+                    processed_data[key] = float(value)
+                except ValueError:
+                    processed_data[key] = 0.0
+            elif 'JSON' in column_type_str:
+                if isinstance(value, str) and value.strip():
+                    try:
+                        processed_data[key] = json_lib.loads(value)
+                    except (ValueError, TypeError):
+                        processed_data[key] = value
+                elif isinstance(value, (list, dict)):
+                    processed_data[key] = value
+                else:
+                    processed_data[key] = None
+            else:
+                processed_data[key] = value
+        
+        return processed_data
+
+    def _get_primary_key_column(self, model) -> Optional[str]:
+        for col in model.__table__.columns:
+            if col.primary_key:
+                return col.name
+        return None
 
     async def _clear_database_tables(self, db: AsyncSession):
         tables_order = [

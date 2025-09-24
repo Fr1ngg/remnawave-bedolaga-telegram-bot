@@ -3,7 +3,7 @@ import secrets
 import string
 from datetime import datetime, timedelta
 from typing import Optional, Dict, List
-from sqlalchemy import select, func, and_
+from sqlalchemy import select, func, and_, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -28,25 +28,31 @@ async def generate_unique_referral_code(db: AsyncSession, telegram_id: int) -> s
     return f"ref{timestamp}"
 
 
-async def mark_user_as_had_paid_subscription(db: AsyncSession, user_id: int) -> bool:
+async def mark_user_as_had_paid_subscription(db: AsyncSession, user: User) -> bool:
     try:
-        from app.database.crud.user import get_user_by_id
+        if user.has_had_paid_subscription:
+            logger.debug(f"Пользователь {user.id} уже отмечен как имевший платную подписку")
+            return True
         
-        user = await get_user_by_id(db, user_id)
-        if not user:
-            logger.error(f"Пользователь {user_id} не найден")
-            return False
+        await db.execute(
+            update(User)
+            .where(User.id == user.id)
+            .values(
+                has_had_paid_subscription=True,
+                updated_at=datetime.utcnow()
+            )
+        )
         
-        if not user.has_had_paid_subscription:
-            user.has_had_paid_subscription = True
-            user.updated_at = datetime.utcnow()
-            await db.commit()
-            logger.info(f"✅ Пользователь {user_id} отмечен как имевший платную подписку")
-        
+        await db.commit()
+        logger.info(f"✅ Пользователь {user.id} отмечен как имевший платную подписку")
         return True
         
     except Exception as e:
-        logger.error(f"Ошибка отметки пользователя {user_id} как имевшего платную подписку: {e}")
+        logger.error(f"Ошибка отметки пользователя {user.id} как имевшего платную подписку: {e}")
+        try:
+            await db.rollback()
+        except Exception as rollback_error:
+            logger.error(f"Ошибка отката транзакции: {rollback_error}")
         return False
 
 

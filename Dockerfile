@@ -1,4 +1,4 @@
-FROM python:3.11-slim AS builder
+FROM python:3.13-slim AS builder
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
@@ -12,9 +12,9 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt
 
-FROM python:3.11-slim
+FROM python:3.13-slim
 
-ARG VERSION="v2.3.3"
+ARG VERSION="v2.3.5"
 ARG BUILD_DATE
 ARG VCS_REF
 

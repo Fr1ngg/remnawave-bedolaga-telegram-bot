@@ -14,7 +14,9 @@ from app.keyboards.admin import (
     get_admin_messages_keyboard, get_broadcast_target_keyboard,
     get_custom_criteria_keyboard, get_broadcast_history_keyboard,
     get_admin_pagination_keyboard, get_broadcast_media_keyboard,
-    get_media_confirm_keyboard, get_updated_message_buttons_selector_keyboard_with_media
+    get_media_confirm_keyboard, get_updated_message_buttons_selector_keyboard_with_media,
+    BROADCAST_BUTTONS, BROADCAST_BUTTON_ROWS, DEFAULT_BROADCAST_BUTTONS,
+    BROADCAST_BUTTON_LABELS
 )
 from app.localization.texts import get_texts
 from app.database.crud.user import get_users_list
@@ -23,69 +25,42 @@ from app.utils.decorators import admin_required, error_handler
 
 logger = logging.getLogger(__name__)
 
+BUTTON_CONFIG = BROADCAST_BUTTONS
+BUTTON_ROWS = BROADCAST_BUTTON_ROWS
+DEFAULT_SELECTED_BUTTONS = DEFAULT_BROADCAST_BUTTONS
+BUTTON_LABELS = BROADCAST_BUTTON_LABELS
+
 
 def get_message_buttons_selector_keyboard(language: str = "ru") -> types.InlineKeyboardMarkup:
-    return types.InlineKeyboardMarkup(inline_keyboard=[
-        [
-            types.InlineKeyboardButton(text="💰 Пополнить баланс", callback_data="btn_balance"),
-            types.InlineKeyboardButton(text="🤝 Рефералы", callback_data="btn_referrals")
-        ],
-        [
-            types.InlineKeyboardButton(text="🎫 Промокод", callback_data="btn_promocode")
-        ],
-        [
-            types.InlineKeyboardButton(text="✅ Продолжить", callback_data="buttons_confirm")
-        ],
-        [
-            types.InlineKeyboardButton(text="❌ Отмена", callback_data="admin_messages")
-        ]
-    ])
+    return get_updated_message_buttons_selector_keyboard(list(DEFAULT_SELECTED_BUTTONS), language)
 
 
 def get_updated_message_buttons_selector_keyboard(selected_buttons: list, language: str = "ru") -> types.InlineKeyboardMarkup:
-    balance_text = "✅ Пополнить баланс" if "balance" in selected_buttons else "💰 Пополнить баланс"
-    referrals_text = "✅ Рефералы" if "referrals" in selected_buttons else "🤝 Рефералы"
-    promocode_text = "✅ Промокод" if "promocode" in selected_buttons else "🎫 Промокод"
-    
-    return types.InlineKeyboardMarkup(inline_keyboard=[
-        [
-            types.InlineKeyboardButton(text=balance_text, callback_data="btn_balance"),
-            types.InlineKeyboardButton(text=referrals_text, callback_data="btn_referrals")
-        ],
-        [
-            types.InlineKeyboardButton(text=promocode_text, callback_data="btn_promocode")
-        ],
-        [
-            types.InlineKeyboardButton(text="✅ Продолжить", callback_data="buttons_confirm")
-        ],
-        [
-            types.InlineKeyboardButton(text="❌ Отмена", callback_data="admin_messages")
-        ]
-    ])
+    return get_updated_message_buttons_selector_keyboard_with_media(selected_buttons, False, language)
 
 
-def create_broadcast_keyboard(selected_buttons: list) -> types.InlineKeyboardMarkup:
-    keyboard = []
-    
-    button_row = []
-    if "balance" in selected_buttons:
-        button_row.append(types.InlineKeyboardButton(text="💰 Пополнить баланс", callback_data="balance_topup"))
-    
-    if "referrals" in selected_buttons:
-        button_row.append(types.InlineKeyboardButton(text="🤝 Рефералы", callback_data="menu_referrals"))
-        
-    if "promocode" in selected_buttons:
-        button_row.append(types.InlineKeyboardButton(text="🎫 Промокод", callback_data="menu_promocode"))
-    
-    if len(button_row) > 2:
-        keyboard.append(button_row[:2])
-        if len(button_row) > 2:
-            keyboard.append(button_row[2:])
-    elif button_row:
-        keyboard.append(button_row)
-    
-    keyboard.append([types.InlineKeyboardButton(text="🏠 На главную", callback_data="back_to_menu")])
-    
+def create_broadcast_keyboard(selected_buttons: list) -> Optional[types.InlineKeyboardMarkup]:
+    selected_buttons = selected_buttons or []
+    keyboard: list[list[types.InlineKeyboardButton]] = []
+
+    for row in BUTTON_ROWS:
+        row_buttons: list[types.InlineKeyboardButton] = []
+        for button_key in row:
+            if button_key not in selected_buttons:
+                continue
+            button_config = BUTTON_CONFIG[button_key]
+            row_buttons.append(
+                types.InlineKeyboardButton(
+                    text=button_config["text"],
+                    callback_data=button_config["callback"]
+                )
+            )
+        if row_buttons:
+            keyboard.append(row_buttons)
+
+    if not keyboard:
+        return None
+
     return types.InlineKeyboardMarkup(inline_keyboard=keyboard)
 
 
@@ -495,7 +470,11 @@ async def show_button_selector_callback(
 ):
     data = await state.get_data()
     has_media = data.get('has_media', False)
-    selected_buttons = data.get('selected_buttons', [])
+    selected_buttons = data.get('selected_buttons')
+
+    if selected_buttons is None:
+        selected_buttons = list(DEFAULT_SELECTED_BUTTONS)
+        await state.update_data(selected_buttons=selected_buttons)
     
     media_info = ""
     if has_media:
@@ -507,11 +486,14 @@ async def show_button_selector_callback(
 
 Выберите кнопки, которые будут добавлены к сообщению рассылки:
 
-💰 <b>Пополнить баланс</b> - откроет методы пополнения
-🤝 <b>Рефералы</b> - откроет реферальную программу
-🎫 <b>Промокод</b> - откроет форму ввода промокода
+💰 <b>Пополнить баланс</b> — откроет методы пополнения
+🤝 <b>Партнерка</b> — откроет реферальную программу
+🎫 <b>Промокод</b> — откроет форму ввода промокода
+🔗 <b>Подключиться</b> — поможет подключить приложение
+📱 <b>Подписка</b> — покажет состояние подписки
+🛠️ <b>Техподдержка</b> — свяжет с поддержкой
 
-Кнопка "🏠 На главную" добавляется автоматически внизу.{media_info}
+🏠 <b>Кнопка "На главную"</b> включена по умолчанию, но вы можете отключить её при необходимости.{media_info}
 
 Выберите нужные кнопки и нажмите "Продолжить":
 """
@@ -535,28 +517,38 @@ async def show_button_selector(
     db_user: User,
     state: FSMContext
 ):
+    data = await state.get_data()
+    selected_buttons = data.get('selected_buttons')
+    if selected_buttons is None:
+        selected_buttons = list(DEFAULT_SELECTED_BUTTONS)
+        await state.update_data(selected_buttons=selected_buttons)
+
+    has_media = data.get('has_media', False)
+
     text = """
 📘 <b>Выбор дополнительных кнопок</b>
 
 Выберите кнопки, которые будут добавлены к сообщению рассылки:
 
-💰 <b>Пополнить баланс</b> - откроет методы пополнения
-🤝 <b>Рефералы</b> - откроет реферальную программу
-🎫 <b>Промокод</b> - откроет форму ввода промокода
+💰 <b>Пополнить баланс</b> — откроет методы пополнения
+🤝 <b>Партнерка</b> — откроет реферальную программу
+🎫 <b>Промокод</b> — откроет форму ввода промокода
+🔗 <b>Подключиться</b> — поможет подключить приложение
+📱 <b>Подписка</b> — покажет состояние подписки
+🛠️ <b>Техподдержка</b> — свяжет с поддержкой
 
-Кнопка "🏠 На главную" добавляется автоматически внизу.
+🏠 <b>Кнопка "На главную"</b> включена по умолчанию, но вы можете отключить её при необходимости.
 
 Выберите нужные кнопки и нажмите "Продолжить":
 """
-    
-    data = await state.get_data()
-    if 'selected_buttons' not in data:
-        data['selected_buttons'] = []
-        await state.set_data(data)
-    
+
+    keyboard = get_updated_message_buttons_selector_keyboard_with_media(
+        selected_buttons, has_media, db_user.language
+    )
+
     await message.answer(
         text,
-        reply_markup=get_message_buttons_selector_keyboard(db_user.language),
+        reply_markup=keyboard,
         parse_mode="HTML"
     )
 
@@ -570,18 +562,24 @@ async def toggle_button_selection(
 ):
     button_type = callback.data.replace('btn_', '')
     data = await state.get_data()
-    selected_buttons = data.get('selected_buttons', [])
-    
+    selected_buttons = data.get('selected_buttons')
+    if selected_buttons is None:
+        selected_buttons = list(DEFAULT_SELECTED_BUTTONS)
+    else:
+        selected_buttons = list(selected_buttons)
+
     if button_type in selected_buttons:
         selected_buttons.remove(button_type)
     else:
         selected_buttons.append(button_type)
-    
-    data['selected_buttons'] = selected_buttons
-    await state.set_data(data)
-    
-    keyboard = get_updated_message_buttons_selector_keyboard(selected_buttons, db_user.language)
-    
+
+    await state.update_data(selected_buttons=selected_buttons)
+
+    has_media = data.get('has_media', False)
+    keyboard = get_updated_message_buttons_selector_keyboard_with_media(
+        selected_buttons, has_media, db_user.language
+    )
+
     await callback.message.edit_reply_markup(reply_markup=keyboard)
     await callback.answer()
 
@@ -597,7 +595,10 @@ async def confirm_button_selection(
     data = await state.get_data()
     target = data.get('broadcast_target')
     message_text = data.get('broadcast_message')
-    selected_buttons = data.get('selected_buttons', [])
+    selected_buttons = data.get('selected_buttons')
+    if selected_buttons is None:
+        selected_buttons = list(DEFAULT_SELECTED_BUTTONS)
+        await state.update_data(selected_buttons=selected_buttons)
     has_media = data.get('has_media', False)
     media_type = data.get('media_type')
     
@@ -613,18 +614,12 @@ async def confirm_button_selection(
         }
         media_info = f"\n🖼️ <b>Медиафайл:</b> {media_type_names.get(media_type, media_type)}"
     
-    buttons_info = ""
-    if selected_buttons:
-        buttons_list = []
-        if "balance" in selected_buttons:
-            buttons_list.append("💰 Пополнить баланс")
-        if "referrals" in selected_buttons:
-            buttons_list.append("🤝 Рефералы")
-        if "promocode" in selected_buttons:
-            buttons_list.append("🎫 Промокод")
-        buttons_info = f"\n📘 <b>Дополнительные кнопки:</b> {', '.join(buttons_list)}"
-    
-    buttons_info += "\n🏠 <b>Основная кнопка:</b> На главную"
+    ordered_keys = [button_key for row in BUTTON_ROWS for button_key in row]
+    selected_names = [BUTTON_LABELS[key] for key in ordered_keys if key in selected_buttons]
+    if selected_names:
+        buttons_info = f"\n📘 <b>Кнопки:</b> {', '.join(selected_names)}"
+    else:
+        buttons_info = "\n📘 <b>Кнопки:</b> отсутствуют"
     
     preview_text = f"""
 📨 <b>Предварительный просмотр рассылки</b>
@@ -685,42 +680,6 @@ async def confirm_button_selection(
         )
     
     await callback.answer()
-
-
-@admin_required
-@error_handler
-async def show_button_selector_callback(
-    callback: types.CallbackQuery,
-    db_user: User,
-    state: FSMContext
-):
-    text = """
-📘 <b>Выбор дополнительных кнопок</b>
-
-Выберите кнопки, которые будут добавлены к сообщению рассылки:
-
-💰 <b>Пополнить баланс</b> - откроет методы пополнения
-🤝 <b>Рефералы</b> - откроет реферальную программу
-🎫 <b>Промокод</b> - откроет форму ввода промокода
-
-Кнопка "🏠 На главную" добавляется автоматически внизу.
-
-Выберите нужные кнопки и нажмите "Продолжить":
-"""
-    
-    data = await state.get_data()
-    selected_buttons = data.get('selected_buttons', [])
-    
-    keyboard = get_updated_message_buttons_selector_keyboard(selected_buttons, db_user.language)
-    
-    await callback.message.edit_text(
-        text,
-        reply_markup=keyboard,
-        parse_mode="HTML"
-    )
-    await callback.answer()
-
-
 @admin_required
 @error_handler
 async def confirm_broadcast(
@@ -732,7 +691,9 @@ async def confirm_broadcast(
     data = await state.get_data()
     target = data.get('broadcast_target')
     message_text = data.get('broadcast_message')
-    selected_buttons = data.get('selected_buttons', [])
+    selected_buttons = data.get('selected_buttons')
+    if selected_buttons is None:
+        selected_buttons = list(DEFAULT_SELECTED_BUTTONS)
     has_media = data.get('has_media', False)
     media_type = data.get('media_type')
     media_file_id = data.get('media_file_id')
@@ -771,7 +732,7 @@ async def confirm_broadcast(
     sent_count = 0
     failed_count = 0
     
-    broadcast_keyboard = create_broadcast_keyboard(selected_buttons) if selected_buttons else None
+    broadcast_keyboard = create_broadcast_keyboard(selected_buttons)
     
     for user in users:
         try:

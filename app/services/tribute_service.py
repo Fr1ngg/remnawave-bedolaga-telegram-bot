@@ -5,8 +5,6 @@ from datetime import datetime
 
 from aiogram import Bot
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-from sqlalchemy.ext.asyncio import AsyncSession
-
 from app.config import settings
 from app.database.database import get_db
 from app.database.models import Transaction, TransactionType, PaymentMethod
@@ -15,7 +13,7 @@ from app.database.crud.transaction import (
 )
 from app.database.crud.user import get_user_by_telegram_id, add_user_balance
 from app.external.tribute import TributeService as TributeAPI
-from app.localization.texts import get_texts
+from app.services.payment_service import PaymentService
 
 logger = logging.getLogger(__name__)
 
@@ -216,7 +214,7 @@ class TributeService:
             logger.error(f"Ошибка обработки возврата Tribute: {e}")
     
     async def _send_success_notification(self, user_id: int, amount_kopeks: int):
-        
+
         try:
             amount_rubles = amount_kopeks / 100
 
@@ -224,34 +222,8 @@ class TributeService:
                 user = await get_user_by_telegram_id(session, user_id)
                 break
 
-            user_language = user.language if user else "ru"
-            texts = get_texts(user_language)
-
-            has_active_subscription = (
-                user
-                and user.subscription
-                and not user.subscription.is_trial
-                and user.subscription.is_active
-            )
-
-            first_button = InlineKeyboardButton(
-                text=(
-                    texts.MENU_EXTEND_SUBSCRIPTION
-                    if has_active_subscription
-                    else texts.MENU_BUY_SUBSCRIPTION
-                ),
-                callback_data=(
-                    "subscription_extend" if has_active_subscription else "menu_buy"
-                )
-            )
-
-            keyboard = InlineKeyboardMarkup(
-                inline_keyboard=[
-                    [first_button],
-                    [InlineKeyboardButton(text="💰 Мой баланс", callback_data="menu_balance")],
-                    [InlineKeyboardButton(text="🏠 Главное меню", callback_data="back_to_menu")]
-                ]
-            )
+            payment_service = PaymentService(self.bot)
+            keyboard = await payment_service.build_topup_success_keyboard(user)
 
             text = (
                 f"✅ **Платеж успешно получен!**\n\n"
@@ -267,10 +239,11 @@ class TributeService:
                 reply_markup=keyboard,
                 parse_mode="Markdown"
             )
-            
+
         except Exception as e:
             logger.error(f"Ошибка отправки уведомления об успешном платеже: {e}")
-    
+
+
     async def _send_failure_notification(self, user_id: int):
         
         try:

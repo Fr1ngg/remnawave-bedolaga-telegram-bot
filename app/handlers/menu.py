@@ -11,29 +11,36 @@ from app.localization.texts import get_texts
 from app.database.models import User
 from app.utils.user_utils import mark_user_as_had_paid_subscription
 from app.database.crud.user_message import get_random_active_message
+from app.services.subscription_checkout_service import (
+    has_subscription_checkout_draft,
+    should_offer_checkout_resume,
+)
 
 logger = logging.getLogger(__name__)
 
 
 async def show_main_menu(
-    callback: types.CallbackQuery, 
-    db_user: User, 
+    callback: types.CallbackQuery,
+    db_user: User,
     db: AsyncSession
 ):
     texts = get_texts(db_user.language)
-    
+
     from datetime import datetime
     db_user.last_activity = datetime.utcnow()
     await db.commit()
-    
+
     has_active_subscription = bool(db_user.subscription)
     subscription_is_active = False
-    
+
     if db_user.subscription:
         subscription_is_active = db_user.subscription.is_active
-    
+
     menu_text = await get_main_menu_text(db_user, texts, db)
-    
+
+    draft_exists = await has_subscription_checkout_draft(db_user.id)
+    show_resume_checkout = should_offer_checkout_resume(db_user, draft_exists)
+
     await callback.message.edit_text(
         menu_text,
         reply_markup=get_main_menu_keyboard(
@@ -44,10 +51,12 @@ async def show_main_menu(
             subscription_is_active=subscription_is_active,
             balance_kopeks=db_user.balance_kopeks,
             subscription=db_user.subscription,
+            show_resume_checkout=show_resume_checkout,
         ),
         parse_mode="HTML"
     )
     await callback.answer()
+
 
 async def mark_user_as_had_paid_subscription(
     db: AsyncSession,
@@ -101,17 +110,20 @@ async def handle_back_to_menu(
     db: AsyncSession
 ):
     await state.clear()
-    
+
     texts = get_texts(db_user.language)
-    
+
     has_active_subscription = db_user.subscription is not None
     subscription_is_active = False
-    
+
     if db_user.subscription:
         subscription_is_active = db_user.subscription.is_active
-    
+
     menu_text = await get_main_menu_text(db_user, texts, db)
-    
+
+    draft_exists = await has_subscription_checkout_draft(db_user.id)
+    show_resume_checkout = should_offer_checkout_resume(db_user, draft_exists)
+
     await callback.message.edit_text(
         menu_text,
         reply_markup=get_main_menu_keyboard(
@@ -121,12 +133,12 @@ async def handle_back_to_menu(
             has_active_subscription=has_active_subscription,
             subscription_is_active=subscription_is_active,
             balance_kopeks=db_user.balance_kopeks,
-            subscription=db_user.subscription
+            subscription=db_user.subscription,
+            show_resume_checkout=show_resume_checkout,
         ),
         parse_mode="HTML"
     )
     await callback.answer()
-
 
 def _get_subscription_status(user: User, texts) -> str:
     if not user.subscription:

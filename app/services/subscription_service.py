@@ -19,6 +19,21 @@ from app.utils.pricing_utils import (
 
 logger = logging.getLogger(__name__)
 
+def get_traffic_reset_strategy():
+    from app.config import settings
+    strategy = settings.DEFAULT_TRAFFIC_RESET_STRATEGY.upper()
+    
+    strategy_mapping = {
+        'NO_RESET': 'NO_RESET',
+        'DAY': 'DAY', 
+        'WEEK': 'WEEK',
+        'MONTH': 'MONTH'
+    }
+    
+    mapped_strategy = strategy_mapping.get(strategy, 'NO_RESET')
+    logger.info(f"🔄 Стратегия сброса трафика из конфига: {strategy} -> {mapped_strategy}")
+    return getattr(TrafficLimitStrategy, mapped_strategy)
+
 
 class SubscriptionService:
     
@@ -66,7 +81,7 @@ class SubscriptionService:
                         status=UserStatus.ACTIVE,
                         expire_at=subscription.end_date,
                         traffic_limit_bytes=self._gb_to_bytes(subscription.traffic_limit_gb),
-                        traffic_limit_strategy=TrafficLimitStrategy.MONTH,
+                        traffic_limit_strategy=get_traffic_reset_strategy(),
                         hwid_device_limit=subscription.device_limit,
                         description=settings.format_remnawave_user_description(
                             full_name=user.full_name,
@@ -84,7 +99,7 @@ class SubscriptionService:
                         expire_at=subscription.end_date,
                         status=UserStatus.ACTIVE,
                         traffic_limit_bytes=self._gb_to_bytes(subscription.traffic_limit_gb),
-                        traffic_limit_strategy=TrafficLimitStrategy.MONTH,
+                        traffic_limit_strategy=get_traffic_reset_strategy(),
                         telegram_id=user.telegram_id,
                         hwid_device_limit=subscription.device_limit,
                         description=settings.format_remnawave_user_description(
@@ -103,7 +118,8 @@ class SubscriptionService:
                 
                 logger.info(f"✅ Создан/обновлен RemnaWave пользователь для подписки {subscription.id}")
                 logger.info(f"🔗 Ссылка на подписку: {updated_user.subscription_url}")
-                logger.info(f"📊 Стратегия сброса трафика: MONTH") 
+                strategy_name = settings.DEFAULT_TRAFFIC_RESET_STRATEGY
+                logger.info(f"📊 Стратегия сброса трафика: {strategy_name}")
                 return updated_user
                 
         except RemnaWaveAPIError as e:
@@ -144,7 +160,7 @@ class SubscriptionService:
                     status=UserStatus.ACTIVE if is_actually_active else UserStatus.EXPIRED,
                     expire_at=subscription.end_date,
                     traffic_limit_bytes=self._gb_to_bytes(subscription.traffic_limit_gb),
-                    traffic_limit_strategy=TrafficLimitStrategy.MONTH,
+                    traffic_limit_strategy=get_traffic_reset_strategy(),
                     hwid_device_limit=subscription.device_limit,
                     description=settings.format_remnawave_user_description(
                         full_name=user.full_name,
@@ -159,7 +175,8 @@ class SubscriptionService:
                 
                 status_text = "активным" if is_actually_active else "истёкшим"
                 logger.info(f"✅ Обновлен RemnaWave пользователь {user.remnawave_uuid} со статусом {status_text}")
-                logger.info(f"📊 Стратегия сброса трафика: MONTH") 
+                strategy_name = settings.DEFAULT_TRAFFIC_RESET_STRATEGY
+                logger.info(f"📊 Стратегия сброса трафика: {strategy_name}")
                 return updated_user
                 
         except RemnaWaveAPIError as e:
@@ -283,9 +300,12 @@ class SubscriptionService:
         
         logger.info(f"Расчет стоимости новой подписки:")
         logger.info(f"   Период {period_days} дней: {base_price/100}₽")
-        logger.info(f"   Трафик {traffic_gb} ГБ: {traffic_price/100}₽")
-        logger.info(f"   Серверы ({len(server_squad_ids)}): {total_servers_price/100}₽")
-        logger.info(f"   Устройства ({devices}): {devices_price/100}₽")
+        if traffic_price > 0:
+            logger.info(f"   Трафик {traffic_gb} ГБ: {traffic_price/100}₽")
+        if total_servers_price > 0:
+            logger.info(f"   Серверы ({len(server_squad_ids)}): {total_servers_price/100}₽")
+        if devices_price > 0:
+            logger.info(f"   Устройства ({devices}): {devices_price/100}₽")
         logger.info(f"   ИТОГО: {total_price/100}₽")
         
         return total_price, server_prices
@@ -313,9 +333,12 @@ class SubscriptionService:
             
             logger.info(f"💰 Расчет стоимости продления для подписки {subscription.id} (по текущим ценам):")
             logger.info(f"   📅 Период {period_days} дней: {base_price/100}₽")
-            logger.info(f"   🌍 Серверы ({len(subscription.connected_squads)}) по текущим ценам: {servers_price/100}₽")
-            logger.info(f"   📱 Устройства ({subscription.device_limit}): {devices_price/100}₽")
-            logger.info(f"   📊 Трафик ({subscription.traffic_limit_gb} ГБ): {traffic_price/100}₽")
+            if servers_price > 0:
+                logger.info(f"   🌍 Серверы ({len(subscription.connected_squads)}) по текущим ценам: {servers_price/100}₽")
+            if devices_price > 0:
+                logger.info(f"   📱 Устройства ({subscription.device_limit}): {devices_price/100}₽")
+            if traffic_price > 0:
+                logger.info(f"   📊 Трафик ({subscription.traffic_limit_gb} ГБ): {traffic_price/100}₽")
             logger.info(f"   💎 ИТОГО: {total_price/100}₽")
             
             return total_price
@@ -458,9 +481,16 @@ class SubscriptionService:
         
         logger.info(f"Расчет стоимости новой подписки на {period_days} дней ({months_in_period} мес):")
         logger.info(f"   Период {period_days} дней: {base_price/100}₽")
-        logger.info(f"   Трафик {traffic_gb} ГБ: {traffic_price_per_month/100}₽/мес x {months_in_period} = {total_traffic_price/100}₽")
-        logger.info(f"   Серверы ({len(server_squad_ids)}): {total_servers_price/100}₽")
-        logger.info(f"   Устройства ({additional_devices}): {devices_price_per_month/100}₽/мес x {months_in_period} = {total_devices_price/100}₽")
+        if total_traffic_price > 0:
+            logger.info(
+                f"   Трафик {traffic_gb} ГБ: {traffic_price_per_month/100}₽/мес x {months_in_period} = {total_traffic_price/100}₽"
+            )
+        if total_servers_price > 0:
+            logger.info(f"   Серверы ({len(server_squad_ids)}): {total_servers_price/100}₽")
+        if total_devices_price > 0:
+            logger.info(
+                f"   Устройства ({additional_devices}): {devices_price_per_month/100}₽/мес x {months_in_period} = {total_devices_price/100}₽"
+            )
         logger.info(f"   ИТОГО: {total_price/100}₽")
         
         return total_price, server_prices
@@ -494,9 +524,18 @@ class SubscriptionService:
             
             logger.info(f"💰 Расчет стоимости продления подписки {subscription.id} на {period_days} дней ({months_in_period} мес):")
             logger.info(f"   📅 Период {period_days} дней: {base_price/100}₽")
-            logger.info(f"   🌍 Серверы: {servers_price_per_month/100}₽/мес x {months_in_period} = {total_servers_price/100}₽")
-            logger.info(f"   📱 Устройства: {devices_price_per_month/100}₽/мес x {months_in_period} = {total_devices_price/100}₽")
-            logger.info(f"   📊 Трафик: {traffic_price_per_month/100}₽/мес x {months_in_period} = {total_traffic_price/100}₽")
+            if total_servers_price > 0:
+                logger.info(
+                    f"   🌍 Серверы: {servers_price_per_month/100}₽/мес x {months_in_period} = {total_servers_price/100}₽"
+                )
+            if total_devices_price > 0:
+                logger.info(
+                    f"   📱 Устройства: {devices_price_per_month/100}₽/мес x {months_in_period} = {total_devices_price/100}₽"
+                )
+            if total_traffic_price > 0:
+                logger.info(
+                    f"   📊 Трафик: {traffic_price_per_month/100}₽/мес x {months_in_period} = {total_traffic_price/100}₽"
+                )
             logger.info(f"   💎 ИТОГО: {total_price/100}₽")
             
             return total_price

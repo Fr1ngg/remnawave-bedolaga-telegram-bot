@@ -3,6 +3,8 @@ from datetime import datetime, timedelta
 from typing import Optional, List, Dict, Any
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import delete, select, update
+from aiogram import Bot
+from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError
 from app.database.crud.user import (
     get_user_by_id, get_user_by_telegram_id, get_users_list,
     get_users_count, get_users_statistics, get_inactive_users,
@@ -22,6 +24,59 @@ logger = logging.getLogger(__name__)
 
 
 class UserService:
+    
+    async def _send_balance_notification(
+        self,
+        bot: Bot,
+        user: User,
+        amount_kopeks: int,
+        admin_name: str
+    ) -> bool:
+        """Отправляет уведомление пользователю о пополнении/списании баланса"""
+        try:
+            if amount_kopeks > 0:
+                # Пополнение
+                emoji = "💰"
+                action = "пополнен"
+                amount_text = f"+{settings.format_price(amount_kopeks)}"
+                message = (
+                    f"{emoji} <b>Баланс пополнен!</b>\n\n"
+                    f"💵 <b>Сумма:</b> {amount_text}\n"
+                    f"👤 <b>Администратор:</b> {admin_name}\n"
+                    f"💳 <b>Текущий баланс:</b> {settings.format_price(user.balance_kopeks)}\n\n"
+                    f"Спасибо за использование нашего сервиса! 🎉"
+                )
+            else:
+                # Списание
+                emoji = "💸"
+                action = "списан"
+                amount_text = f"-{settings.format_price(abs(amount_kopeks))}"
+                message = (
+                    f"{emoji} <b>Средства списаны с баланса</b>\n\n"
+                    f"💵 <b>Сумма:</b> {amount_text}\n"
+                    f"👤 <b>Администратор:</b> {admin_name}\n"
+                    f"💳 <b>Текущий баланс:</b> {settings.format_price(user.balance_kopeks)}\n\n"
+                    f"Если у вас есть вопросы, обратитесь в поддержку."
+                )
+
+            await bot.send_message(
+                chat_id=user.telegram_id,
+                text=message,
+                parse_mode="HTML"
+            )
+            
+            logger.info(f"✅ Уведомление о изменении баланса отправлено пользователю {user.telegram_id}")
+            return True
+            
+        except TelegramForbiddenError:
+            logger.warning(f"⚠️ Пользователь {user.telegram_id} заблокировал бота")
+            return False
+        except TelegramBadRequest as e:
+            logger.error(f"❌ Ошибка Telegram API при отправке уведомления пользователю {user.telegram_id}: {e}")
+            return False
+        except Exception as e:
+            logger.error(f"❌ Неожиданная ошибка при отправке уведомления пользователю {user.telegram_id}: {e}")
+            return False
     
     async def get_user_profile(
         self, 
@@ -128,22 +183,41 @@ class UserService:
         user_id: int,
         amount_kopeks: int,
         description: str,
-        admin_id: int
+        admin_id: int,
+        bot: Optional[Bot] = None,
+        admin_name: Optional[str] = None
     ) -> bool:
         try:
             user = await get_user_by_id(db, user_id)
             if not user:
                 return False
             
+            # Сохраняем старый баланс для уведомления
+            old_balance = user.balance_kopeks
+            
             if amount_kopeks > 0:
                 await add_user_balance(db, user, amount_kopeks, description=description)
                 logger.info(f"Админ {admin_id} пополнил баланс пользователя {user_id} на {amount_kopeks/100}₽")
-                return True
+                success = True
             else:
                 success = await subtract_user_balance(db, user, abs(amount_kopeks), description)
                 if success:
                     logger.info(f"Админ {admin_id} списал с баланса пользователя {user_id} {abs(amount_kopeks)/100}₽")
-                return success
+            
+            # Отправляем уведомление пользователю, если операция прошла успешно
+            if success and bot:
+                # Обновляем пользователя для получения нового баланса
+                await db.refresh(user)
+                
+                # Получаем имя администратора
+                if not admin_name:
+                    admin_user = await get_user_by_id(db, admin_id)
+                    admin_name = admin_user.full_name if admin_user else f"Админ #{admin_id}"
+                
+                # Отправляем уведомление (не блокируем операцию если не удалось отправить)
+                await self._send_balance_notification(bot, user, amount_kopeks, admin_name)
+            
+            return success
             
         except Exception as e:
             logger.error(f"Ошибка изменения баланса пользователя: {e}")
@@ -239,13 +313,39 @@ class UserService:
             logger.info(f"🗑️ Начинаем полное удаление пользователя {user_id} (Telegram ID: {user.telegram_id})")
             
             if user.remnawave_uuid:
+                from app.config import settings
+                delete_mode = settings.get_remnawave_user_delete_mode()
+                
                 try:
-                    from app.services.subscription_service import SubscriptionService
-                    subscription_service = SubscriptionService()
-                    await subscription_service.disable_remnawave_user(user.remnawave_uuid)
-                    logger.info(f"✅ RemnaWave пользователь {user.remnawave_uuid} деактивирован")
+                    from app.services.remnawave_service import RemnaWaveService
+                    remnawave_service = RemnaWaveService()
+                    
+                    if delete_mode == "delete":
+                        # Удаляем пользователя из панели Remnawave
+                        async with remnawave_service.api as api:
+                            delete_success = await api.delete_user(user.remnawave_uuid)
+                            if delete_success:
+                                logger.info(f"✅ RemnaWave пользователь {user.remnawave_uuid} удален из панели")
+                            else:
+                                logger.warning(f"⚠️ Не удалось удалить пользователя {user.remnawave_uuid} из панели Remnawave")
+                    else:
+                        # Деактивируем пользователя в панели Remnawave
+                        from app.services.subscription_service import SubscriptionService
+                        subscription_service = SubscriptionService()
+                        await subscription_service.disable_remnawave_user(user.remnawave_uuid)
+                        logger.info(f"✅ RemnaWave пользователь {user.remnawave_uuid} деактивирован (режим: {delete_mode})")
+                    
                 except Exception as e:
-                    logger.warning(f"⚠️ Ошибка деактивации RemnaWave: {e}")
+                    logger.warning(f"⚠️ Ошибка обработки пользователя в Remnawave (режим: {delete_mode}): {e}")
+                    # Если основное действие не удалось, попытаемся хотя бы деактивировать
+                    if delete_mode == "delete":
+                        try:
+                            from app.services.subscription_service import SubscriptionService
+                            subscription_service = SubscriptionService()
+                            await subscription_service.disable_remnawave_user(user.remnawave_uuid)
+                            logger.info(f"✅ RemnaWave пользователь {user.remnawave_uuid} деактивирован как fallback")
+                        except Exception as fallback_e:
+                            logger.error(f"❌ Ошибка деактивации RemnaWave как fallback: {fallback_e}")
             
             try:
                 sent_notifications_result = await db.execute(

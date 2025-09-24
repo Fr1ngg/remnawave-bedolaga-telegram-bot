@@ -22,6 +22,10 @@ from app.external.cryptobot import CryptoBotService
 from app.utils.currency_converter import currency_converter
 from app.database.database import get_db
 from app.localization.texts import get_texts
+from app.services.subscription_checkout_service import (
+    has_subscription_checkout_draft,
+    should_offer_checkout_resume,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +37,49 @@ class PaymentService:
         self.yookassa_service = YooKassaService() if settings.is_yookassa_enabled() else None
         self.stars_service = TelegramStarsService(bot) if bot else None
         self.cryptobot_service = CryptoBotService() if settings.is_cryptobot_enabled() else None
-    
+
+    async def build_topup_success_keyboard(self, user) -> InlineKeyboardMarkup:
+        texts = get_texts(user.language if user else "ru")
+
+        has_active_subscription = (
+            user
+            and user.subscription
+            and not user.subscription.is_trial
+            and user.subscription.is_active
+        )
+
+        first_button = InlineKeyboardButton(
+            text=(
+                texts.MENU_EXTEND_SUBSCRIPTION
+                if has_active_subscription
+                else texts.MENU_BUY_SUBSCRIPTION
+            ),
+            callback_data=(
+                "subscription_extend" if has_active_subscription else "menu_buy"
+            ),
+        )
+
+        keyboard_rows: list[list[InlineKeyboardButton]] = [[first_button]]
+
+        if user:
+            draft_exists = await has_subscription_checkout_draft(user.id)
+            if should_offer_checkout_resume(user, draft_exists):
+                keyboard_rows.append([
+                    InlineKeyboardButton(
+                        text=texts.RETURN_TO_SUBSCRIPTION_CHECKOUT,
+                        callback_data="subscription_resume_checkout",
+                    )
+                ])
+
+        keyboard_rows.append([
+            InlineKeyboardButton(text="💰 Мой баланс", callback_data="menu_balance")
+        ])
+        keyboard_rows.append([
+            InlineKeyboardButton(text="🏠 Главное меню", callback_data="back_to_menu")
+        ])
+
+        return InlineKeyboardMarkup(inline_keyboard=keyboard_rows)
+
     async def create_stars_invoice(
         self,
         amount_kopeks: int,
@@ -124,33 +170,7 @@ class PaymentService:
                 
                 if self.bot:
                     try:
-                        user_language = user.language if user else "ru"
-                        texts = get_texts(user_language)
-                        has_active_subscription = (
-                            user
-                            and user.subscription
-                            and not user.subscription.is_trial
-                            and user.subscription.is_active
-                        )
-
-                        first_button = InlineKeyboardButton(
-                            text=(
-                                texts.MENU_EXTEND_SUBSCRIPTION
-                                if has_active_subscription
-                                else texts.MENU_BUY_SUBSCRIPTION
-                            ),
-                            callback_data=(
-                                "subscription_extend" if has_active_subscription else "menu_buy"
-                            ),
-                        )
-
-                        keyboard = InlineKeyboardMarkup(
-                            inline_keyboard=[
-                                [first_button],
-                                [InlineKeyboardButton(text="💰 Мой баланс", callback_data="menu_balance")],
-                                [InlineKeyboardButton(text="🏠 Главное меню", callback_data="back_to_menu")],
-                            ]
-                        )
+                        keyboard = await self.build_topup_success_keyboard(user)
 
                         await self.bot.send_message(
                             user.telegram_id,
@@ -261,6 +281,94 @@ class PaymentService:
         except Exception as e:
             logger.error(f"Ошибка создания платежа YooKassa: {e}")
             return None
+
+    async def create_yookassa_sbp_payment(
+        self,
+        db: AsyncSession,
+        user_id: int,
+        amount_kopeks: int,
+        description: str,
+        receipt_email: Optional[str] = None,
+        receipt_phone: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None
+    ) -> Optional[Dict[str, Any]]:
+        
+        if not self.yookassa_service:
+            logger.error("YooKassa сервис не инициализирован")
+            return None
+        
+        try:
+            amount_rubles = amount_kopeks / 100
+            
+            payment_metadata = metadata or {}
+            payment_metadata.update({
+                "user_id": str(user_id),
+                "amount_kopeks": str(amount_kopeks),
+                "type": "balance_topup_sbp" 
+            })
+            
+            yookassa_response = await self.yookassa_service.create_sbp_payment(
+                amount=amount_rubles,
+                currency="RUB",
+                description=description,
+                metadata=payment_metadata,
+                receipt_email=receipt_email,
+                receipt_phone=receipt_phone
+            )
+            
+            if not yookassa_response or yookassa_response.get("error"):
+                logger.error(f"Ошибка создания платежа YooKassa СБП: {yookassa_response}")
+                return None
+            
+            yookassa_created_at = None
+            if yookassa_response.get("created_at"):
+                try:
+                    dt_with_tz = datetime.fromisoformat(
+                        yookassa_response["created_at"].replace('Z', '+00:00')
+                    )
+                    yookassa_created_at = dt_with_tz.replace(tzinfo=None)
+                except Exception as e:
+                    logger.warning(f"Не удалось парсить created_at: {e}")
+                    yookassa_created_at = None
+            
+            confirmation_token = None
+            if yookassa_response.get("confirmation"):
+                confirmation_token = yookassa_response["confirmation"].get("confirmation_token")
+            
+            if confirmation_token:
+                payment_metadata["confirmation_token"] = confirmation_token
+            
+            local_payment = await create_yookassa_payment(
+                db=db,
+                user_id=user_id,
+                yookassa_payment_id=yookassa_response["id"],
+                amount_kopeks=amount_kopeks,
+                currency="RUB",
+                description=description,
+                status=yookassa_response["status"],
+                confirmation_url=yookassa_response.get("confirmation_url"),
+                metadata_json=payment_metadata,
+                payment_method_type="bank_card",  
+                yookassa_created_at=yookassa_created_at, 
+                test_mode=yookassa_response.get("test_mode", False)
+            )
+            
+            logger.info(f"Создан платеж YooKassa СБП {yookassa_response['id']} на {amount_rubles}₽ для пользователя {user_id}")
+            
+            return {
+                "local_payment_id": local_payment.id,
+                "yookassa_payment_id": yookassa_response["id"],
+                "confirmation_url": yookassa_response.get("confirmation_url"),
+                "confirmation_token": confirmation_token,
+                "amount_kopeks": amount_kopeks,
+                "amount_rubles": amount_rubles,
+                "status": yookassa_response["status"],
+                "created_at": local_payment.created_at
+            }
+            
+        except Exception as e:
+            logger.error(f"Ошибка создания платежа YooKassa СБП: {e}")
+            return None
     
     async def process_yookassa_webhook(self, db: AsyncSession, webhook_data: dict) -> bool:
         try:
@@ -344,33 +452,7 @@ class PaymentService:
                     
                     if self.bot:
                         try:
-                            user_language = user.language if user else "ru"
-                            texts = get_texts(user_language)
-                            has_active_subscription = (
-                                user
-                                and user.subscription
-                                and not user.subscription.is_trial
-                                and user.subscription.is_active
-                            )
-
-                            first_button = InlineKeyboardButton(
-                                text=(
-                                    texts.MENU_EXTEND_SUBSCRIPTION
-                                    if has_active_subscription
-                                    else texts.MENU_BUY_SUBSCRIPTION
-                                ),
-                                callback_data=(
-                                    "subscription_extend" if has_active_subscription else "menu_buy"
-                                ),
-                            )
-
-                            keyboard = InlineKeyboardMarkup(
-                                inline_keyboard=[
-                                    [first_button],
-                                    [InlineKeyboardButton(text="💰 Мой баланс", callback_data="menu_balance")],
-                                    [InlineKeyboardButton(text="🏠 Главное меню", callback_data="back_to_menu")],
-                                ]
-                            )
+                            keyboard = await self.build_topup_success_keyboard(user)
 
                             await self.bot.send_message(
                                 user.telegram_id,
@@ -457,33 +539,7 @@ class PaymentService:
                 user = await get_user_by_telegram_id(db, telegram_id)
                 break
 
-            user_language = user.language if user else "ru"
-            texts = get_texts(user_language)
-            has_active_subscription = (
-                user
-                and user.subscription
-                and not user.subscription.is_trial
-                and user.subscription.is_active
-            )
-
-            first_button = InlineKeyboardButton(
-                text=(
-                    texts.MENU_EXTEND_SUBSCRIPTION
-                    if has_active_subscription
-                    else texts.MENU_BUY_SUBSCRIPTION
-                ),
-                callback_data=(
-                    "subscription_extend" if has_active_subscription else "menu_buy"
-                ),
-            )
-
-            keyboard = InlineKeyboardMarkup(
-                inline_keyboard=[
-                    [first_button],
-                    [InlineKeyboardButton(text="💰 Мой баланс", callback_data="menu_balance")],
-                    [InlineKeyboardButton(text="🏠 Главное меню", callback_data="back_to_menu")],
-                ]
-            )
+            keyboard = await self.build_topup_success_keyboard(user)
 
             message = (
                 f"✅ <b>Платеж успешно завершен!</b>\n\n"
@@ -679,10 +735,8 @@ class PaymentService:
             )
             
             if not updated_payment.transaction_id:
-                # Получаем сумму в USD из платежа
                 amount_usd = updated_payment.amount_float
                 
-                # Конвертируем в рубли по текущему курсу с улучшенной обработкой ошибок
                 try:
                     amount_rubles = await currency_converter.usd_to_rub(amount_usd)
                     amount_kopeks = int(amount_rubles * 100)
@@ -694,7 +748,6 @@ class PaymentService:
                     amount_kopeks = int(amount_usd * 100)
                     conversion_rate = 1.0
                 
-                # Проверяем корректность конвертированной суммы
                 if amount_kopeks <= 0:
                     logger.error(f"Некорректная сумма после конвертации: {amount_kopeks} копеек для платежа {invoice_id}")
                     return False
@@ -742,33 +795,7 @@ class PaymentService:
                     
                     if self.bot:
                         try:
-                            user_language = user.language if user else "ru"
-                            texts = get_texts(user_language)
-                            has_active_subscription = (
-                                user
-                                and user.subscription
-                                and not user.subscription.is_trial
-                                and user.subscription.is_active
-                            )
-
-                            first_button = InlineKeyboardButton(
-                                text=(
-                                    texts.MENU_EXTEND_SUBSCRIPTION
-                                    if has_active_subscription
-                                    else texts.MENU_BUY_SUBSCRIPTION
-                                ),
-                                callback_data=(
-                                    "subscription_extend" if has_active_subscription else "menu_buy"
-                                ),
-                            )
-
-                            keyboard = InlineKeyboardMarkup(
-                                inline_keyboard=[
-                                    [first_button],
-                                    [InlineKeyboardButton(text="💰 Мой баланс", callback_data="menu_balance")],
-                                    [InlineKeyboardButton(text="🏠 Главное меню", callback_data="back_to_menu")],
-                                ]
-                            )
+                            keyboard = await self.build_topup_success_keyboard(user)
 
                             await self.bot.send_message(
                                 user.telegram_id,
