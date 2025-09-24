@@ -43,8 +43,6 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-    env_file:
-      - .env
     environment:
       DOCKER_ENV: "true"
       DATABASE_MODE: "auto"
@@ -62,6 +60,7 @@ services:
       - ./logs:/app/logs:rw
       # Данные приложения (для SQLite в случае переключения)
       - ./data:/app/data:rw
+      - ./settings.json:/app/settings.json:ro
       # Конфигурация приложения
       # - ./app-config.json:/app/app-config.json:ro
       # Timezone

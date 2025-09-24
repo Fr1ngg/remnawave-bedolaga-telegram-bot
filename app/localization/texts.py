@@ -70,7 +70,7 @@ class Texts:
 
 
 class RussianTexts(Texts):
-    
+
     def __init__(self):
         super().__init__("ru")
     
@@ -220,20 +220,68 @@ class RussianTexts(Texts):
     SELECT_COUNTRIES = "Выберите страны:"
     SELECT_DEVICES = "Количество устройств:"
     
-    PERIOD_14_DAYS = f"📅 14 дней - {settings.format_price(settings.PRICE_14_DAYS)}"
-    PERIOD_30_DAYS = f"📅 30 дней - {settings.format_price(settings.PRICE_30_DAYS)}"
-    PERIOD_60_DAYS = f"📅 60 дней - {settings.format_price(settings.PRICE_60_DAYS)}"
-    PERIOD_90_DAYS = f"📅 90 дней - {settings.format_price(settings.PRICE_90_DAYS)}"
-    PERIOD_180_DAYS = f"📅 180 дней - {settings.format_price(settings.PRICE_180_DAYS)}"
-    PERIOD_360_DAYS = f"📅 360 дней - {settings.format_price(settings.PRICE_360_DAYS)}"
-    
-    TRAFFIC_5GB = f"📊 5 ГБ - {settings.format_price(settings.PRICE_TRAFFIC_5GB)}"
-    TRAFFIC_10GB = f"📊 10 ГБ - {settings.format_price(settings.PRICE_TRAFFIC_10GB)}"
-    TRAFFIC_25GB = f"📊 25 ГБ - {settings.format_price(settings.PRICE_TRAFFIC_25GB)}"
-    TRAFFIC_50GB = f"📊 50 ГБ - {settings.format_price(settings.PRICE_TRAFFIC_50GB)}"
-    TRAFFIC_100GB = f"📊 100 ГБ - {settings.format_price(settings.PRICE_TRAFFIC_100GB)}"
-    TRAFFIC_250GB = f"📊 250 ГБ - {settings.format_price(settings.PRICE_TRAFFIC_250GB)}"
-    TRAFFIC_UNLIMITED = f"📊 Безлимит - {settings.format_price(settings.PRICE_TRAFFIC_UNLIMITED)}"
+    def _format_period_option(self, days: int) -> str:
+        current_settings = settings()
+        price = getattr(current_settings, f"PRICE_{days}_DAYS")
+        return f"📅 {days} дней - {current_settings.format_price(price)}"
+
+    def _format_traffic_option(self, gb: int) -> str:
+        current_settings = settings()
+        price = getattr(current_settings, f"PRICE_TRAFFIC_{'UNLIMITED' if gb == 0 else f'{gb}GB'}")
+        label = "Безлимит" if gb == 0 else f"{gb} ГБ"
+        return f"📊 {label} - {current_settings.format_price(price)}"
+
+    @property
+    def PERIOD_14_DAYS(self) -> str:
+        return self._format_period_option(14)
+
+    @property
+    def PERIOD_30_DAYS(self) -> str:
+        return self._format_period_option(30)
+
+    @property
+    def PERIOD_60_DAYS(self) -> str:
+        return self._format_period_option(60)
+
+    @property
+    def PERIOD_90_DAYS(self) -> str:
+        return self._format_period_option(90)
+
+    @property
+    def PERIOD_180_DAYS(self) -> str:
+        return self._format_period_option(180)
+
+    @property
+    def PERIOD_360_DAYS(self) -> str:
+        return self._format_period_option(360)
+
+    @property
+    def TRAFFIC_5GB(self) -> str:
+        return self._format_traffic_option(5)
+
+    @property
+    def TRAFFIC_10GB(self) -> str:
+        return self._format_traffic_option(10)
+
+    @property
+    def TRAFFIC_25GB(self) -> str:
+        return self._format_traffic_option(25)
+
+    @property
+    def TRAFFIC_50GB(self) -> str:
+        return self._format_traffic_option(50)
+
+    @property
+    def TRAFFIC_100GB(self) -> str:
+        return self._format_traffic_option(100)
+
+    @property
+    def TRAFFIC_250GB(self) -> str:
+        return self._format_traffic_option(250)
+
+    @property
+    def TRAFFIC_UNLIMITED(self) -> str:
+        return self._format_traffic_option(0)
     
     SUBSCRIPTION_SUMMARY = """
 📋 <b>Итоговая конфигурация</b>
@@ -394,12 +442,15 @@ class RussianTexts(Texts):
 Пополните баланс и продлите подписку вручную.
 """
     
-    SUPPORT_INFO = f"""
+    @property
+    def SUPPORT_INFO(self) -> str:
+        contact = settings().get_support_contact_display_html()
+        return f"""
 🛠️ <b>Техническая поддержка</b>
 
 По всем вопросам обращайтесь к нашей поддержке:
 
-👤 {settings.get_support_contact_display_html()}
+👤 {contact}
 
 Мы поможем с:
 • Настройкой подключения

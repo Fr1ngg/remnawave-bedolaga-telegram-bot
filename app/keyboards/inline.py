@@ -5,7 +5,7 @@ from datetime import datetime
 from app.database.models import User
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.config import settings, PERIOD_PRICES, TRAFFIC_PRICES
+from app.config import settings, PERIOD_PRICES
 from app.localization.texts import get_texts
 from app.utils.pricing_utils import format_period_description
 import logging

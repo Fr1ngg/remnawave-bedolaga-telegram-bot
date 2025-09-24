@@ -8,7 +8,7 @@ import json
 import os
 from typing import Dict, List, Any, Tuple, Optional
 
-from app.config import settings, PERIOD_PRICES, get_traffic_prices
+from app.config import settings, PERIOD_PRICES
 from app.states import SubscriptionStates
 from app.database.crud.subscription import (
     get_subscription_by_user_id, create_trial_subscription, 
@@ -59,9 +59,6 @@ from app.utils.pricing_utils import (
 from app.utils.pagination import paginate_list
 
 logger = logging.getLogger(__name__)
-
-TRAFFIC_PRICES = get_traffic_prices()
-
 
 async def _prepare_subscription_summary(
     db_user: User,
