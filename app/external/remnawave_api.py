@@ -1,15 +1,17 @@
 import asyncio
+import base64
 import json
-import ssl
-import base64 
-from datetime import datetime, timedelta
-from typing import Dict, List, Optional, Union, Any
-from urllib.parse import urlparse
-import aiohttp
 import logging
+import ssl
 from dataclasses import dataclass
+from datetime import datetime, timedelta
 from enum import Enum
-from urllib.parse import urlparse, urljoin
+from typing import Any, Dict, List, Optional, Union
+from urllib.parse import urljoin, urlparse
+
+import aiohttp
+
+from app.utils.link_utils import normalize_subscription_url
 
 logger = logging.getLogger(__name__)
 
@@ -599,7 +601,7 @@ class RemnaWaveAPI:
             hwid_device_limit=user_data.get('hwidDeviceLimit'),
             description=user_data.get('description'),
             tag=user_data.get('tag'),
-            subscription_url=user_data['subscriptionUrl'],
+            subscription_url=normalize_subscription_url(user_data['subscriptionUrl']),
             active_internal_squads=user_data['activeInternalSquads'],
             created_at=datetime.fromisoformat(user_data['createdAt'].replace('Z', '+00:00')),
             updated_at=datetime.fromisoformat(user_data['updatedAt'].replace('Z', '+00:00')),
@@ -650,7 +652,7 @@ class RemnaWaveAPI:
             user=data.get('user'),
             links=data.get('links', []),
             ss_conf_links=data.get('ssConfLinks', {}),
-            subscription_url=data.get('subscriptionUrl', ''),
+            subscription_url=normalize_subscription_url(data.get('subscriptionUrl', '')),
             happ=data.get('happ')
         )
 

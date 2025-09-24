@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.database.models import Subscription, User, SubscriptionStatus, PromoGroup
 from app.external.remnawave_api import (
-    RemnaWaveAPI, RemnaWaveUser, UserStatus, 
+    RemnaWaveAPI, RemnaWaveUser, UserStatus,
     TrafficLimitStrategy, RemnaWaveAPIError
 )
 from app.database.crud.user import get_user_by_id
@@ -16,6 +16,7 @@ from app.utils.pricing_utils import (
     calculate_prorated_price,
     validate_pricing_calculation
 )
+from app.utils.link_utils import normalize_subscription_url
 
 logger = logging.getLogger(__name__)
 
@@ -130,13 +131,15 @@ class SubscriptionService:
                     )
                 
                 subscription.remnawave_short_uuid = updated_user.short_uuid
-                subscription.subscription_url = updated_user.subscription_url 
+                normalized_url = normalize_subscription_url(updated_user.subscription_url)
+                subscription.subscription_url = normalized_url
+                updated_user.subscription_url = normalized_url
                 user.remnawave_uuid = updated_user.uuid
                 
                 await db.commit()
                 
                 logger.info(f"✅ Создан/обновлен RemnaWave пользователь для подписки {subscription.id}")
-                logger.info(f"🔗 Ссылка на подписку: {updated_user.subscription_url}")
+                logger.info(f"🔗 Ссылка на подписку: {normalized_url}")
                 strategy_name = settings.DEFAULT_TRAFFIC_RESET_STRATEGY
                 logger.info(f"📊 Стратегия сброса трафика: {strategy_name}")
                 return updated_user
@@ -189,7 +192,9 @@ class SubscriptionService:
                     active_internal_squads=subscription.connected_squads
                 )
                 
-                subscription.subscription_url = updated_user.subscription_url
+                normalized_url = normalize_subscription_url(updated_user.subscription_url)
+                subscription.subscription_url = normalized_url
+                updated_user.subscription_url = normalized_url
                 await db.commit()
                 
                 status_text = "активным" if is_actually_active else "истёкшим"
@@ -232,11 +237,13 @@ class SubscriptionService:
                 updated_user = await api.revoke_user_subscription(user.remnawave_uuid)
                 
                 subscription.remnawave_short_uuid = updated_user.short_uuid
-                subscription.subscription_url = updated_user.subscription_url
+                normalized_url = normalize_subscription_url(updated_user.subscription_url)
+                subscription.subscription_url = normalized_url
+                updated_user.subscription_url = normalized_url
                 await db.commit()
-                
+
                 logger.info(f"✅ Обновлена ссылка подписки для пользователя {user.telegram_id}")
-                return updated_user.subscription_url
+                return normalized_url
                 
         except Exception as e:
             logger.error(f"Ошибка обновления ссылки подписки: {e}")

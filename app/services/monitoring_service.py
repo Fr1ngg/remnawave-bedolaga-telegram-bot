@@ -38,6 +38,7 @@ from app.localization.texts import get_texts
 from app.services.notification_settings_service import NotificationSettingsService
 from app.services.payment_service import PaymentService
 from app.services.subscription_service import SubscriptionService
+from app.utils.link_utils import normalize_subscription_url
 
 from app.external.remnawave_api import (
     RemnaWaveAPIError,
@@ -278,7 +279,9 @@ class MonitoringService:
                     active_internal_squads=subscription.connected_squads
                 )
                 
-                subscription.subscription_url = updated_user.subscription_url
+                normalized_url = normalize_subscription_url(updated_user.subscription_url)
+                subscription.subscription_url = normalized_url
+                updated_user.subscription_url = normalized_url
                 await db.commit()
                 
                 status_text = "активным" if is_active else "истёкшим"
