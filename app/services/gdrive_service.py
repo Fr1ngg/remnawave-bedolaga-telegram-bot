@@ -1,13 +1,10 @@
 import asyncio
+import importlib
+import importlib.util
 import json
 import logging
 from pathlib import Path
 from typing import Optional, Tuple, TYPE_CHECKING
-
-from google.oauth2 import service_account
-from googleapiclient.discovery import build
-from googleapiclient.errors import HttpError
-from googleapiclient.http import MediaInMemoryUpload
 
 from app.config import settings
 
@@ -31,13 +28,51 @@ CLIENT_TYPE_EXTENSIONS = {
 }
 
 
+service_account_module = None
+google_discovery_build = None
+google_http_error = None
+google_media_upload = None
+
+
 class GoogleDriveService:
     def __init__(self) -> None:
         if not settings.is_gdrive_enabled():
             raise RuntimeError("Google Drive integration is not enabled")
 
+        self._ensure_google_dependencies()
         self._credentials = None
         self._service = None
+
+    @staticmethod
+    def _ensure_google_dependencies() -> None:
+        global service_account_module, google_discovery_build, google_http_error, google_media_upload
+
+        if service_account_module is not None:
+            return
+
+        required_modules = {
+            "google.oauth2.service_account": "google-auth",
+            "googleapiclient.discovery": "google-api-python-client",
+            "googleapiclient.errors": "google-api-python-client",
+            "googleapiclient.http": "google-api-python-client",
+        }
+
+        missing_packages = []
+        for module_path, package_name in required_modules.items():
+            if importlib.util.find_spec(module_path) is None:
+                missing_packages.append(package_name)
+
+        if missing_packages:
+            formatted = ", ".join(sorted(set(missing_packages)))
+            raise RuntimeError(
+                "Google Drive integration requires additional dependencies: "
+                f"{formatted}. Please install them to enable this feature."
+            )
+
+        service_account_module = importlib.import_module("google.oauth2.service_account")
+        google_discovery_build = importlib.import_module("googleapiclient.discovery").build
+        google_http_error = importlib.import_module("googleapiclient.errors").HttpError
+        google_media_upload = importlib.import_module("googleapiclient.http").MediaInMemoryUpload
 
     def _load_credentials(self):
         if self._credentials is not None:
@@ -49,7 +84,7 @@ class GoogleDriveService:
         if info:
             try:
                 data = json.loads(info)
-                credentials = service_account.Credentials.from_service_account_info(
+                credentials = service_account_module.Credentials.from_service_account_info(
                     data, scopes=SCOPES
                 )
                 logger.debug("Loaded Google Drive credentials from inline JSON info")
@@ -63,7 +98,7 @@ class GoogleDriveService:
                     f"Google Drive service account file not found: {path}"
                 )
 
-            credentials = service_account.Credentials.from_service_account_file(
+            credentials = service_account_module.Credentials.from_service_account_file(
                 str(path), scopes=SCOPES
             )
             logger.debug(f"Loaded Google Drive credentials from file: {path}")
@@ -77,7 +112,7 @@ class GoogleDriveService:
     def _get_service(self):
         if self._service is None:
             credentials = self._load_credentials()
-            self._service = build(
+            self._service = google_discovery_build(
                 "drive",
                 "v3",
                 credentials=credentials,
@@ -122,7 +157,7 @@ class GoogleDriveService:
         extension, mime_type = self._resolve_format(client_type)
         file_name = settings.format_gdrive_file_name(short_uuid, client_type, extension)
 
-        media = MediaInMemoryUpload(content.encode("utf-8"), mimetype=mime_type, resumable=False)
+        media = google_media_upload(content.encode("utf-8"), mimetype=mime_type, resumable=False)
 
         try:
             if existing_file_id:
@@ -172,7 +207,7 @@ class GoogleDriveService:
                 share_link = file_metadata.get("webContentLink") or file_metadata.get("webViewLink")
 
             return file_id, share_link
-        except HttpError as exc:
+        except google_http_error as exc:
             logger.error(f"Google Drive API error: {exc}")
         except Exception as exc:
             logger.error(f"Failed to publish subscription to Google Drive: {exc}")
@@ -190,7 +225,7 @@ class GoogleDriveService:
                 supportsAllDrives=True,
             ).execute()
             logger.debug(f"Granted public read permission for Google Drive file {file_id}")
-        except HttpError as exc:
+        except google_http_error as exc:
             if exc.resp.status == 403:
                 logger.warning(
                     "Insufficient permissions to make Google Drive file public. "
