@@ -13,9 +13,10 @@ from app.external.remnawave_api import (
 from app.database.crud.user import get_users_list, get_user_by_telegram_id, update_user
 from app.database.crud.subscription import get_subscription_by_user_id, update_subscription_usage
 from app.database.models import (
-    User, SubscriptionServer, Transaction, ReferralEarning, 
+    User, SubscriptionServer, Transaction, ReferralEarning,
     PromoCodeUse, SubscriptionStatus
 )
+from app.utils.link_utils import normalize_subscription_url
 
 logger = logging.getLogger(__name__)
 
@@ -634,17 +635,19 @@ class RemnaWaveService:
                     elif isinstance(squad, str):
                         squad_uuids.append(squad)
         
+            panel_subscription_url = normalize_subscription_url(panel_user.get('subscriptionUrl', ''))
+
             subscription_data = {
                 'user_id': user.id,
                 'status': status.value,
-                'is_trial': False, 
+                'is_trial': False,
                 'end_date': expire_at,
                 'traffic_limit_gb': traffic_limit_gb,
                 'traffic_used_gb': traffic_used_gb,
                 'device_limit': panel_user.get('hwidDeviceLimit', 1) or 1,
                 'connected_squads': squad_uuids,
                 'remnawave_short_uuid': panel_user.get('shortUuid'),
-                'subscription_url': panel_user.get('subscriptionUrl', '')
+                'subscription_url': panel_subscription_url
             }
         
             subscription = await create_subscription(db, **subscription_data)
@@ -667,7 +670,7 @@ class RemnaWaveService:
                     device_limit=1,
                     connected_squads=[],
                     remnawave_short_uuid=panel_user.get('shortUuid'),
-                    subscription_url=panel_user.get('subscriptionUrl', '')
+                    subscription_url=panel_subscription_url
                 )
                 logger.info(f"✅ Создана базовая подписка для пользователя {user.telegram_id}")
             except Exception as basic_error:
@@ -730,7 +733,7 @@ class RemnaWaveService:
             if not subscription.remnawave_short_uuid:
                 subscription.remnawave_short_uuid = panel_user.get('shortUuid')
         
-            panel_url = panel_user.get('subscriptionUrl', '')
+            panel_url = normalize_subscription_url(panel_user.get('subscriptionUrl', ''))
             if not subscription.subscription_url or subscription.subscription_url != panel_url:
                 subscription.subscription_url = panel_url
         
@@ -1294,7 +1297,7 @@ class RemnaWaveService:
                                     rw_user = await api.get_user_by_uuid(user.remnawave_uuid)
                                     if rw_user:
                                         subscription.remnawave_short_uuid = rw_user.short_uuid
-                                        subscription.subscription_url = rw_user.subscription_url
+                                        subscription.subscription_url = normalize_subscription_url(rw_user.subscription_url)
                                         logger.info(f"🔧 Восстановлены данные Remnawave для {user.telegram_id}")
                                         issues_fixed += 1
                             except Exception as rw_error:
