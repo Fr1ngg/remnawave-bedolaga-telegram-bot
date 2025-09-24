@@ -4,10 +4,26 @@ import logging
 from pathlib import Path
 from typing import Optional, Tuple, TYPE_CHECKING
 
-from google.oauth2 import service_account
-from googleapiclient.discovery import build
-from googleapiclient.errors import HttpError
-from googleapiclient.http import MediaInMemoryUpload
+try:
+    from google.oauth2 import service_account
+    from googleapiclient.discovery import build
+    from googleapiclient.errors import HttpError
+    from googleapiclient.http import MediaInMemoryUpload
+
+    _GOOGLE_SDK_AVAILABLE = True
+except ModuleNotFoundError:  # pragma: no cover - executed only when dependency missing
+    service_account = None  # type: ignore[assignment]
+    build = None  # type: ignore[assignment]
+    MediaInMemoryUpload = None  # type: ignore[assignment]
+
+    class HttpError(Exception):
+        """Fallback HttpError used when Google SDK is unavailable."""
+
+        def __init__(self, *args, status: Optional[int] = None, **kwargs) -> None:
+            super().__init__(*args)
+            self.resp = type("_Resp", (), {"status": status})()
+
+    _GOOGLE_SDK_AVAILABLE = False
 
 from app.config import settings
 
@@ -35,6 +51,12 @@ class GoogleDriveService:
     def __init__(self) -> None:
         if not settings.is_gdrive_enabled():
             raise RuntimeError("Google Drive integration is not enabled")
+
+        if not _GOOGLE_SDK_AVAILABLE:
+            raise RuntimeError(
+                "Google Drive integration requires optional dependencies: "
+                "google-api-python-client, google-auth, google-auth-httplib2"
+            )
 
         self._credentials = None
         self._service = None
