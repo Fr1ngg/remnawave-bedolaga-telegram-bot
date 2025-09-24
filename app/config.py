@@ -1,15 +1,64 @@
 import os
 import re
+import json
 import html
 from collections import defaultdict
-from typing import List, Optional, Union, Dict
-from pydantic_settings import BaseSettings
-from pydantic import field_validator, Field
+from collections.abc import Mapping, Iterator
+from typing import Any, Dict, List, Optional
+from pydantic import BaseModel, ConfigDict, field_validator
 from pathlib import Path
 
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+SETTINGS_FILE_NAME = "settings.json"
+SETTINGS_FILE_PATH = PROJECT_ROOT / SETTINGS_FILE_NAME
 
-class Settings(BaseSettings):
-    
+
+def _load_settings_data() -> Dict[str, Any]:
+    """Read settings from the JSON configuration file."""
+    if not SETTINGS_FILE_PATH.exists():
+        return {}
+
+    try:
+        raw_content = SETTINGS_FILE_PATH.read_text(encoding="utf-8")
+    except OSError:
+        return {}
+
+    content = raw_content.strip()
+    if not content:
+        return {}
+
+    try:
+        data = json.loads(content)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"Invalid JSON in {SETTINGS_FILE_PATH}: {exc}") from exc
+
+    if not isinstance(data, dict):
+        raise ValueError(
+            f"Expected JSON object in {SETTINGS_FILE_PATH}, got {type(data).__name__}"
+        )
+
+    return data
+
+
+class Settings(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    @classmethod
+    def load(cls) -> "Settings":
+        data = _load_settings_data()
+        env_overrides = {
+            key: os.environ[key]
+            for key in cls.model_fields
+            if key in os.environ
+        }
+        data.update(env_overrides)
+        return cls(**data)
+
+    def model_post_init(self, __context: Any) -> None:
+        original_database_url = self.DATABASE_URL
+        object.__setattr__(self, "_original_database_url", original_database_url)
+        object.__setattr__(self, "DATABASE_URL", self.get_database_url())
+
     BOT_TOKEN: str
     ADMIN_IDS: str = ""
     SUPPORT_USERNAME: str = "@support"
@@ -705,35 +754,102 @@ class Settings(BaseSettings):
         
         return 0
     
-    model_config = {
-        "env_file": ".env",
-        "env_file_encoding": "utf-8",
-        "extra": "ignore"  
-    }
+PERIOD_PRICE_KEYS = (14, 30, 60, 90, 180, 360)
 
 
-settings = Settings()
+class SettingsProxy:
+    """Proxy that re-instantiates Settings on each access."""
 
-PERIOD_PRICES = {
-    14: settings.PRICE_14_DAYS,
-    30: settings.PRICE_30_DAYS,
-    60: settings.PRICE_60_DAYS,
-    90: settings.PRICE_90_DAYS,
-    180: settings.PRICE_180_DAYS,
-    360: settings.PRICE_360_DAYS,
-}
+    def __call__(self) -> Settings:
+        return Settings.load()
+
+    def __getattr__(self, item: str) -> Any:
+        return getattr(self(), item)
+
+    def __setattr__(self, key: str, value: Any) -> None:
+        raise AttributeError(
+            "Settings are read-only; update the JSON configuration file instead"
+        )
+
+    def __repr__(self) -> str:
+        return f"SettingsProxy(path={SETTINGS_FILE_PATH!s})"
+
+    def model_dump(self, *args: Any, **kwargs: Any) -> Dict[str, Any]:
+        return self().model_dump(*args, **kwargs)
+
+
+class PeriodPricesMapping(Mapping[int, int]):
+    """Dynamic mapping that reflects current period prices."""
+
+    def _build(self) -> Dict[int, int]:
+        current_settings = Settings.load()
+        prices: Dict[int, int] = {}
+
+        for period in PERIOD_PRICE_KEYS:
+            attr = f"PRICE_{period}_DAYS"
+            if hasattr(current_settings, attr):
+                prices[period] = getattr(current_settings, attr)
+
+        return prices
+
+    def __getitem__(self, key: int) -> int:
+        prices = self._build()
+        if key not in prices:
+            raise KeyError(key)
+        return prices[key]
+
+    def __iter__(self) -> Iterator[int]:
+        return iter(self._build())
+
+    def __len__(self) -> int:
+        return len(self._build())
+
+    def get(self, key: int, default: Optional[int] = None) -> Optional[int]:
+        return self._build().get(key, default)
+
+    def as_dict(self) -> Dict[int, int]:
+        return self._build()
+
+
+class TrafficPricesMapping(Mapping[int, int]):
+    """Dynamic mapping that reflects current traffic package prices."""
+
+    def _build(self) -> Dict[int, int]:
+        packages = Settings.load().get_traffic_packages()
+        return {package["gb"]: package["price"] for package in packages}
+
+    def __getitem__(self, key: int) -> int:
+        prices = self._build()
+        if key not in prices:
+            raise KeyError(key)
+        return prices[key]
+
+    def __iter__(self) -> Iterator[int]:
+        return iter(self._build())
+
+    def __len__(self) -> int:
+        return len(self._build())
+
+    def get(self, key: int, default: Optional[int] = None) -> Optional[int]:
+        return self._build().get(key, default)
+
+    def as_dict(self) -> Dict[int, int]:
+        return self._build()
+
+    def refresh(self) -> None:
+        """Compatibility helper; dynamic mapping rebuilds on demand."""
+        return None
+
+
+settings = SettingsProxy()
+
+PERIOD_PRICES = PeriodPricesMapping()
+TRAFFIC_PRICES = TrafficPricesMapping()
+
 
 def get_traffic_prices() -> Dict[int, int]:
-    packages = settings.get_traffic_packages()
-    return {package["gb"]: package["price"] for package in packages}
+    return TRAFFIC_PRICES.as_dict()
 
-TRAFFIC_PRICES = get_traffic_prices()
 
-def refresh_traffic_prices():
-    global TRAFFIC_PRICES
-    TRAFFIC_PRICES = get_traffic_prices()
-
-refresh_traffic_prices()
-
-settings._original_database_url = settings.DATABASE_URL
-settings.DATABASE_URL = settings.get_database_url()
+def refresh_traffic_prices() -> None:
+    TRAFFIC_PRICES.refresh()

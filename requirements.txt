@@ -31,3 +31,8 @@ qrcode[pil]==7.4.2
 packaging==23.2
 
 aiofiles==23.2.1
+
+# Testing
+pytest==7.4.4
+pytest-asyncio==0.23.6
+httpx==0.26.0
