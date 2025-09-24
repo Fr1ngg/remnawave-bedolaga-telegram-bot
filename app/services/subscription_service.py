@@ -16,6 +16,7 @@ from app.utils.pricing_utils import (
     calculate_prorated_price,
     validate_pricing_calculation
 )
+from app.services.gdrive_service import sync_subscription_to_gdrive
 
 logger = logging.getLogger(__name__)
 
@@ -65,10 +66,18 @@ class SubscriptionService:
             username=auth_params["username"],
             password=auth_params["password"]
         )
-    
+
+    async def _sync_gdrive_subscription(
+        self,
+        subscription: Subscription,
+        api: RemnaWaveAPI,
+        remnawave_user: RemnaWaveUser,
+    ) -> None:
+        await sync_subscription_to_gdrive(subscription, api, remnawave_user)
+
     async def create_remnawave_user(
-        self, 
-        db: AsyncSession, 
+        self,
+        db: AsyncSession,
         subscription: Subscription
     ) -> Optional[RemnaWaveUser]:
         
@@ -130,11 +139,13 @@ class SubscriptionService:
                     )
                 
                 subscription.remnawave_short_uuid = updated_user.short_uuid
-                subscription.subscription_url = updated_user.subscription_url 
+                subscription.subscription_url = updated_user.subscription_url
                 user.remnawave_uuid = updated_user.uuid
-                
+
+                await self._sync_gdrive_subscription(subscription, api, updated_user)
+
                 await db.commit()
-                
+
                 logger.info(f"✅ Создан/обновлен RemnaWave пользователь для подписки {subscription.id}")
                 logger.info(f"🔗 Ссылка на подписку: {updated_user.subscription_url}")
                 strategy_name = settings.DEFAULT_TRAFFIC_RESET_STRATEGY
@@ -190,6 +201,9 @@ class SubscriptionService:
                 )
                 
                 subscription.subscription_url = updated_user.subscription_url
+
+                await self._sync_gdrive_subscription(subscription, api, updated_user)
+
                 await db.commit()
                 
                 status_text = "активным" if is_actually_active else "истёкшим"
@@ -233,6 +247,7 @@ class SubscriptionService:
                 
                 subscription.remnawave_short_uuid = updated_user.short_uuid
                 subscription.subscription_url = updated_user.subscription_url
+                await self._sync_gdrive_subscription(subscription, api, updated_user)
                 await db.commit()
                 
                 logger.info(f"✅ Обновлена ссылка подписки для пользователя {user.telegram_id}")
@@ -531,11 +546,13 @@ class SubscriptionService:
                 
             if needs_cleanup:
                 logger.info(f"🧹 Очищаем мусорные данные подписки для пользователя {user.telegram_id}")
-                
+
                 subscription.remnawave_short_uuid = None
                 subscription.subscription_url = ""
+                subscription.gdrive_file_id = None
+                subscription.gdrive_link = None
                 subscription.connected_squads = []
-                
+
                 user.remnawave_uuid = None
                 
                 await db.commit()

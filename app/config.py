@@ -209,6 +209,14 @@ class Settings(BaseSettings):
 
     CONNECT_BUTTON_MODE: str = "guide"
     MINIAPP_CUSTOM_URL: str = ""
+    GDRIVE_ENABLED: bool = False
+    GDRIVE_SERVICE_ACCOUNT_FILE: Optional[str] = None
+    GDRIVE_SERVICE_ACCOUNT_INFO: Optional[str] = None
+    GDRIVE_SUBSCRIPTIONS_FOLDER_ID: Optional[str] = None
+    GDRIVE_SUBSCRIPTION_CLIENT_TYPE: str = "clash"
+    GDRIVE_FILE_NAME_TEMPLATE: str = "subscription-{short_uuid}.{extension}"
+    GDRIVE_SHARE_LINK_TEMPLATE: str = "https://drive.google.com/uc?id={file_id}&export=download"
+    GDRIVE_MAKE_PUBLIC: bool = True
     HIDE_SUBSCRIPTION_LINK: bool = False
     ENABLE_LOGO_MODE: bool = True
     LOGO_FILE: str = "vpn_logo.png"
@@ -243,6 +251,39 @@ class Settings(BaseSettings):
     BACKUP_SEND_ENABLED: bool = False
     BACKUP_SEND_CHAT_ID: Optional[str] = None
     BACKUP_SEND_TOPIC_ID: Optional[int] = None
+
+    @field_validator('GDRIVE_SUBSCRIPTION_CLIENT_TYPE', mode='before')
+    @classmethod
+    def normalize_gdrive_client_type(cls, value: Optional[str]) -> str:
+        allowed = {
+            "clash",
+            "stash",
+            "singbox",
+            "singbox-legacy",
+            "mihomo",
+            "json",
+            "v2ray-json",
+        }
+
+        if value is None:
+            return "clash"
+
+        normalized = str(value).strip().lower().replace('_', '-')
+        mapping = {
+            "singboxlegacy": "singbox-legacy",
+            "singbox-legacy": "singbox-legacy",
+            "v2ray-json": "v2ray-json",
+            "v2rayjson": "v2ray-json",
+        }
+        normalized = mapping.get(normalized, normalized)
+
+        if normalized not in allowed:
+            raise ValueError(
+                "GDRIVE_SUBSCRIPTION_CLIENT_TYPE must be one of: "
+                "clash, stash, singbox, singbox-legacy, mihomo, json, v2ray-json"
+            )
+
+        return normalized
 
     @field_validator('SERVER_STATUS_MODE', mode='before')
     @classmethod
@@ -307,7 +348,41 @@ class Settings(BaseSettings):
         log_path = Path(v)
         log_path.parent.mkdir(parents=True, exist_ok=True)
         return str(log_path)
-    
+
+    def is_gdrive_enabled(self) -> bool:
+        if not self.GDRIVE_ENABLED:
+            return False
+        return bool(self.GDRIVE_SERVICE_ACCOUNT_FILE or self.GDRIVE_SERVICE_ACCOUNT_INFO)
+
+    def get_gdrive_client_type(self) -> str:
+        return self.GDRIVE_SUBSCRIPTION_CLIENT_TYPE
+
+    def format_gdrive_file_name(self, short_uuid: str, client_type: str, extension: str) -> str:
+        template = self.GDRIVE_FILE_NAME_TEMPLATE or "subscription-{short_uuid}.{extension}"
+        try:
+            return template.format(
+                short_uuid=short_uuid,
+                client_type=client_type,
+                extension=extension,
+            )
+        except Exception:
+            return f"subscription-{short_uuid}.{extension}"
+
+    def format_gdrive_share_link(self, file_id: str, default: Optional[str] = None) -> str:
+        template = self.GDRIVE_SHARE_LINK_TEMPLATE or ""
+        if not template and default:
+            return default
+
+        try:
+            formatted = template.format(
+                file_id=file_id,
+                default=default or "",
+                fallback=default or "",
+            )
+            return formatted or (default or "")
+        except Exception:
+            return default or template
+
     def get_database_url(self) -> str:
         if self.DATABASE_URL and self.DATABASE_URL.strip():
             return self.DATABASE_URL

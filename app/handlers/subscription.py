@@ -67,6 +67,13 @@ logger = logging.getLogger(__name__)
 TRAFFIC_PRICES = get_traffic_prices()
 
 
+def _get_connection_url(subscription: Optional[Subscription]) -> Optional[str]:
+    if not subscription:
+        return None
+
+    return getattr(subscription, "connection_url", None)
+
+
 def _apply_discount_to_monthly_component(
     amount_per_month: int,
     percent: int,
@@ -561,12 +568,14 @@ async def show_subscription_info(
             message += f"• {device_info}\n"
         message += texts.t("SUBSCRIPTION_CONNECTED_DEVICES_FOOTER", "</blockquote>")
     
-    if hasattr(subscription, 'subscription_url') and subscription.subscription_url:
+    connection_url = _get_connection_url(subscription)
+
+    if connection_url:
         if actual_status in ['trial_active', 'paid_active'] and not settings.HIDE_SUBSCRIPTION_LINK:
             message += "\n\n" + texts.t(
                 "SUBSCRIPTION_CONNECT_LINK_SECTION",
                 "🔗 <b>Ссылка для подключения:</b>\n<code>{subscription_url}</code>",
-            ).format(subscription_url=subscription.subscription_url)
+            ).format(subscription_url=connection_url)
             message += "\n\n" + texts.t(
                 "SUBSCRIPTION_CONNECT_LINK_PROMPT",
                 "📱 Скопируйте ссылку и добавьте в ваше VPN приложение",
@@ -832,12 +841,14 @@ async def activate_trial(
             await notification_service.send_trial_activation_notification(db, db_user, subscription)
         except Exception as e:
             logger.error(f"Ошибка отправки уведомления о триале: {e}")
-        
-        if remnawave_user and hasattr(subscription, 'subscription_url') and subscription.subscription_url:
+
+        connection_url = _get_connection_url(subscription)
+
+        if remnawave_user and connection_url:
             subscription_import_link = texts.t(
                 "SUBSCRIPTION_IMPORT_LINK_SECTION",
                 "🔗 <b>Ваша ссылка для импорта в VPN приложение:</b>\\n<code>{subscription_url}</code>",
-            ).format(subscription_url=subscription.subscription_url)
+            ).format(subscription_url=connection_url)
 
             trial_success_text = (
                 f"{texts.TRIAL_ACTIVATED}\n\n"
@@ -852,7 +863,7 @@ async def activate_trial(
                     [
                         InlineKeyboardButton(
                             text=texts.t("CONNECT_BUTTON", "🔗 Подключиться"),
-                            web_app=types.WebAppInfo(url=subscription.subscription_url),
+                            web_app=types.WebAppInfo(url=connection_url),
                         )
                     ],
                     [InlineKeyboardButton(text=texts.t("BACK_TO_MAIN_MENU_BUTTON", "⬅️ В главное меню"), callback_data="back_to_menu")],
@@ -879,7 +890,7 @@ async def activate_trial(
                 ])
             elif connect_mode == "link":
                 connect_keyboard = InlineKeyboardMarkup(inline_keyboard=[
-                    [InlineKeyboardButton(text=texts.t("CONNECT_BUTTON", "🔗 Подключиться"), url=subscription.subscription_url)],
+                    [InlineKeyboardButton(text=texts.t("CONNECT_BUTTON", "🔗 Подключиться"), url=connection_url)],
                     [InlineKeyboardButton(text=texts.t("BACK_TO_MAIN_MENU_BUTTON", "⬅️ В главное меню"), callback_data="back_to_menu")],
                 ])
             else:
@@ -3278,12 +3289,14 @@ async def confirm_purchase(
         
         await db.refresh(db_user)
         await db.refresh(subscription)
-        
-        if remnawave_user and hasattr(subscription, 'subscription_url') and subscription.subscription_url:
+
+        connection_url = _get_connection_url(subscription)
+
+        if remnawave_user and connection_url:
             import_link_section = texts.t(
                 "SUBSCRIPTION_IMPORT_LINK_SECTION",
                 "🔗 <b>Ваша ссылка для импорта в VPN приложение:</b>\\n<code>{subscription_url}</code>",
-            ).format(subscription_url=subscription.subscription_url)
+            ).format(subscription_url=connection_url)
 
             success_text = (
                 f"{texts.SUBSCRIPTION_PURCHASED}\n\n"
@@ -3298,7 +3311,7 @@ async def confirm_purchase(
                     [
                         InlineKeyboardButton(
                             text=texts.t("CONNECT_BUTTON", "🔗 Подключиться"),
-                            web_app=types.WebAppInfo(url=subscription.subscription_url),
+                            web_app=types.WebAppInfo(url=connection_url),
                         )
                     ],
                     [InlineKeyboardButton(text=texts.t("BACK_TO_MAIN_MENU_BUTTON", "⬅️ В главное меню"), callback_data="back_to_menu")],
@@ -3325,7 +3338,7 @@ async def confirm_purchase(
                 ])
             elif connect_mode == "link":
                 connect_keyboard = InlineKeyboardMarkup(inline_keyboard=[
-                    [InlineKeyboardButton(text=texts.t("CONNECT_BUTTON", "🔗 Подключиться"), url=subscription.subscription_url)],
+                    [InlineKeyboardButton(text=texts.t("CONNECT_BUTTON", "🔗 Подключиться"), url=connection_url)],
                     [InlineKeyboardButton(text=texts.t("BACK_TO_MAIN_MENU_BUTTON", "⬅️ В главное меню"), callback_data="back_to_menu")],
                 ])
             else:
@@ -4015,8 +4028,9 @@ async def handle_connect_subscription(
 ):
     texts = get_texts(db_user.language)
     subscription = db_user.subscription
-    
-    if not subscription or not subscription.subscription_url:
+    connection_url = _get_connection_url(subscription)
+
+    if not connection_url:
         await callback.answer(
             texts.t(
                 "SUBSCRIPTION_NO_ACTIVE_LINK",
@@ -4033,7 +4047,7 @@ async def handle_connect_subscription(
             [
                 InlineKeyboardButton(
                     text=texts.t("CONNECT_BUTTON", "🔗 Подключиться"),
-                    web_app=types.WebAppInfo(url=subscription.subscription_url)
+                    web_app=types.WebAppInfo(url=connection_url)
                 )
             ],
             [
@@ -4091,7 +4105,7 @@ async def handle_connect_subscription(
             [
                 InlineKeyboardButton(
                     text=texts.t("CONNECT_BUTTON", "🔗 Подключиться"),
-                    url=subscription.subscription_url
+                    url=connection_url
                 )
             ],
             [
@@ -4119,7 +4133,7 @@ async def handle_connect_subscription(
 <code>{subscription_url}</code>
 
 💡 <b>Выберите ваше устройство</b> для получения подробной инструкции по настройке:""",
-        ).format(subscription_url=subscription.subscription_url)
+        ).format(subscription_url=connection_url)
 
         await callback.message.edit_text(
             device_text,
@@ -4208,8 +4222,9 @@ async def handle_device_guide(
     device_type = callback.data.split('_')[2] 
     texts = get_texts(db_user.language)
     subscription = db_user.subscription
-    
-    if not subscription or not subscription.subscription_url:
+    connection_url = _get_connection_url(subscription)
+
+    if not connection_url:
         await callback.answer(
             texts.t("SUBSCRIPTION_LINK_UNAVAILABLE", "❌ Ссылка подписки недоступна"),
             show_alert=True,
@@ -4234,7 +4249,7 @@ async def handle_device_guide(
         ).format(device_name=get_device_name(device_type, db_user.language))
         + "\n\n"
         + texts.t("SUBSCRIPTION_DEVICE_LINK_TITLE", "🔗 <b>Ссылка подписки:</b>")
-        + f"\n<code>{subscription.subscription_url}</code>\n\n"
+        + f"\n<code>{connection_url}</code>\n\n"
         + texts.t(
             "SUBSCRIPTION_DEVICE_FEATURED_APP",
             "📋 <b>Рекомендуемое приложение:</b> {app_name}",
@@ -4273,7 +4288,7 @@ async def handle_device_guide(
     await callback.message.edit_text(
         guide_text,
         reply_markup=get_connection_guide_keyboard(
-            subscription.subscription_url,
+            connection_url,
             featured_app,
             db_user.language
         ),
@@ -4325,13 +4340,21 @@ async def handle_specific_app_guide(
     _, device_type, app_id = callback.data.split('_') 
     texts = get_texts(db_user.language)
     subscription = db_user.subscription
-    
+    connection_url = _get_connection_url(subscription)
+
     apps = get_apps_for_device(device_type, db_user.language)
     app = next((a for a in apps if a['id'] == app_id), None)
-    
+
     if not app:
         await callback.answer(
             texts.t("SUBSCRIPTION_APP_NOT_FOUND", "❌ Приложение не найдено"),
+            show_alert=True,
+        )
+        return
+
+    if not connection_url:
+        await callback.answer(
+            texts.t("SUBSCRIPTION_LINK_UNAVAILABLE", "❌ Ссылка подписки недоступна"),
             show_alert=True,
         )
         return
@@ -4343,7 +4366,7 @@ async def handle_specific_app_guide(
         ).format(app_name=app['name'], device_name=get_device_name(device_type, db_user.language))
         + "\n\n"
         + texts.t("SUBSCRIPTION_DEVICE_LINK_TITLE", "🔗 <b>Ссылка подписки:</b>")
-        + f"\n<code>{subscription.subscription_url}</code>\n\n"
+        + f"\n<code>{connection_url}</code>\n\n"
         + texts.t("SUBSCRIPTION_DEVICE_STEP_INSTALL_TITLE", "<b>Шаг 1 - Установка:</b>")
         + f"\n{app['installationStep']['description'][db_user.language]}\n\n"
         + texts.t("SUBSCRIPTION_DEVICE_STEP_ADD_TITLE", "<b>Шаг 2 - Добавление подписки:</b>")
@@ -4366,7 +4389,7 @@ async def handle_specific_app_guide(
     await callback.message.edit_text(
         guide_text,
         reply_markup=get_specific_app_keyboard(
-            subscription.subscription_url,
+            connection_url,
             app,
             device_type,
             db_user.language
@@ -4391,9 +4414,11 @@ async def handle_open_subscription_link(
     db_user: User,
     db: AsyncSession
 ):
+    texts = get_texts(db_user.language)
     subscription = db_user.subscription
-    
-    if not subscription or not subscription.subscription_url:
+    connection_url = _get_connection_url(subscription)
+
+    if not connection_url:
         await callback.answer(
             texts.t("SUBSCRIPTION_LINK_UNAVAILABLE", "❌ Ссылка подписки недоступна"),
             show_alert=True,
@@ -4403,7 +4428,7 @@ async def handle_open_subscription_link(
     link_text = (
         texts.t("SUBSCRIPTION_DEVICE_LINK_TITLE", "🔗 <b>Ссылка подписки:</b>")
         + "\n\n"
-        + f"<code>{subscription.subscription_url}</code>\n\n"
+        + f"<code>{connection_url}</code>\n\n"
         + texts.t("SUBSCRIPTION_LINK_USAGE_TITLE", "📱 <b>Как использовать:</b>")
         + "\n"
         + "\n".join(
@@ -4530,11 +4555,12 @@ async def show_device_connection_help(
 ):
     
     subscription = db_user.subscription
-    
-    if not subscription or not subscription.subscription_url:
+    connection_url = _get_connection_url(subscription)
+
+    if not connection_url:
         await callback.answer("❌ Ссылка подписки недоступна", show_alert=True)
         return
-    
+
     help_text = f"""
 📱 <b>Как подключить устройство заново</b>
 
@@ -4553,7 +4579,7 @@ async def show_device_connection_help(
 • Нажмите "Подключить"
 
 <b>🔗 Ваша ссылка подписки:</b>
-<code>{subscription.subscription_url}</code>
+<code>{connection_url}</code>
 
 💡 <b>Совет:</b> Сохраните эту ссылку - она понадобится для подключения новых устройств
 """

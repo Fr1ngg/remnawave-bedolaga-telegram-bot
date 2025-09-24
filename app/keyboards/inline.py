@@ -323,14 +323,16 @@ def get_subscription_keyboard(
     keyboard = []
 
     if has_subscription:
-        if subscription and subscription.subscription_url:
+        connection_url = getattr(subscription, "connection_url", None) if subscription else None
+
+        if connection_url:
             connect_mode = settings.CONNECT_BUTTON_MODE
-            
+
             if connect_mode == "miniapp_subscription":
                 keyboard.append([
                     InlineKeyboardButton(
                         text=texts.t("CONNECT_BUTTON", "🔗 Подключиться"),
-                        web_app=types.WebAppInfo(url=subscription.subscription_url)
+                        web_app=types.WebAppInfo(url=connection_url)
                     )
                 ])
             elif connect_mode == "miniapp_custom":
@@ -344,10 +346,10 @@ def get_subscription_keyboard(
                 else:
                     keyboard.append([
                         InlineKeyboardButton(text=texts.t("CONNECT_BUTTON", "🔗 Подключиться"), callback_data="subscription_connect")
-                    ])
+                ])
             elif connect_mode == "link":
                 keyboard.append([
-                    InlineKeyboardButton(text=texts.t("CONNECT_BUTTON", "🔗 Подключиться"), url=subscription.subscription_url)
+                    InlineKeyboardButton(text=texts.t("CONNECT_BUTTON", "🔗 Подключиться"), url=connection_url)
                 ])
             else:
                 keyboard.append([

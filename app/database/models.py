@@ -435,7 +435,9 @@ class Subscription(Base):
     traffic_used_gb = Column(Float, default=0.0)
 
     subscription_url = Column(String, nullable=True)
-    
+    gdrive_file_id = Column(String, nullable=True)
+    gdrive_link = Column(String, nullable=True)
+
     device_limit = Column(Integer, default=1)
     
     connected_squads = Column(JSON, default=list)
@@ -514,6 +516,14 @@ class Subscription(Base):
             return "🎯 Тестовая"
         
         return "❓ Неизвестно"
+
+    @property
+    def connection_url(self) -> Optional[str]:
+        return self.gdrive_link or self.subscription_url
+
+    @property
+    def has_connection_url(self) -> bool:
+        return bool(self.connection_url)
 
     @property
     def status_emoji(self) -> str:

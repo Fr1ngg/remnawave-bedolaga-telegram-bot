@@ -581,7 +581,9 @@ class RemnaWaveService:
                             subscription.autopay_enabled = False
                             subscription.remnawave_short_uuid = None
                             subscription.subscription_url = ""
-                            
+                            subscription.gdrive_file_id = None
+                            subscription.gdrive_link = None
+
                             db_user.remnawave_uuid = None
                             
                             await db.commit()
@@ -1113,6 +1115,8 @@ class RemnaWaveService:
                     user.subscription.autopay_days_before = 3
                     user.subscription.remnawave_short_uuid = None
                     user.subscription.subscription_url = ""
+                    user.subscription.gdrive_file_id = None
+                    user.subscription.gdrive_link = None
                     user.subscription.updated_at = datetime.utcnow()
                 
                 await db.commit()
