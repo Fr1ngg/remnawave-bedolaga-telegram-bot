@@ -7,10 +7,15 @@ from collections.abc import Mapping, Iterator
 from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, ConfigDict, field_validator
 from pathlib import Path
+from dotenv import load_dotenv, dotenv_values
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 SETTINGS_FILE_NAME = "settings.json"
 SETTINGS_FILE_PATH = PROJECT_ROOT / SETTINGS_FILE_NAME
+ENV_FILE_PATH = PROJECT_ROOT / ".env"
+
+# Load environment variables from the project-level .env once on import
+load_dotenv(ENV_FILE_PATH, override=False)
 
 
 def _load_settings_data() -> Dict[str, Any]:
@@ -46,12 +51,19 @@ class Settings(BaseModel):
     @classmethod
     def load(cls) -> "Settings":
         data = _load_settings_data()
-        env_overrides = {
+
+        if ENV_FILE_PATH.exists():
+            for key, value in dotenv_values(ENV_FILE_PATH).items():
+                if value is not None:
+                    os.environ[key] = value
+
+        runtime_env_overrides = {
             key: os.environ[key]
             for key in cls.model_fields
             if key in os.environ
         }
-        data.update(env_overrides)
+
+        data.update(runtime_env_overrides)
         return cls(**data)
 
     def model_post_init(self, __context: Any) -> None:
