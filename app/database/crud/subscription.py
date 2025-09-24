@@ -15,7 +15,6 @@ from app.database.models import (
 from app.database.crud.notification import clear_notifications
 from app.utils.pricing_utils import calculate_months_from_days, get_remaining_months
 from app.config import settings
-from app.utils.link_utils import normalize_subscription_url
 
 logger = logging.getLogger(__name__)
 
@@ -975,8 +974,6 @@ async def create_subscription(
     if connected_squads is None:
         connected_squads = []
     
-    normalized_url = normalize_subscription_url(subscription_url)
-
     subscription = Subscription(
         user_id=user_id,
         status=status,
@@ -987,7 +984,7 @@ async def create_subscription(
         device_limit=device_limit,
         connected_squads=connected_squads,
         remnawave_short_uuid=remnawave_short_uuid,
-        subscription_url=normalized_url
+        subscription_url=subscription_url
     )
     
     db.add(subscription)
