@@ -1,13 +1,17 @@
+import importlib
 import logging
 import os
 import re
 import html
 from collections import defaultdict
 from datetime import time
-from typing import List, Optional, Union, Dict
+from typing import ClassVar, List, Optional, Union, Dict
 from pydantic_settings import BaseSettings
 from pydantic import field_validator, Field
 from pathlib import Path
+
+
+logger = logging.getLogger(__name__)
 
 
 class Settings(BaseSettings):
@@ -349,10 +353,38 @@ class Settings(BaseSettings):
         log_path.parent.mkdir(parents=True, exist_ok=True)
         return str(log_path)
 
+    _gdrive_dependencies_available: ClassVar[Optional[bool]] = None
+
+    @classmethod
+    def _are_gdrive_dependencies_available(cls) -> bool:
+        if cls._gdrive_dependencies_available is not None:
+            return cls._gdrive_dependencies_available
+
+        try:
+            importlib.import_module("google.oauth2.service_account")
+            importlib.import_module("googleapiclient.discovery")
+            importlib.import_module("googleapiclient.http")
+        except ModuleNotFoundError:
+            logger.warning(
+                "Google Drive integration disabled: install optional dependencies "
+                "google-api-python-client, google-auth, google-auth-httplib2 to enable it."
+            )
+            cls._gdrive_dependencies_available = False
+        else:
+            cls._gdrive_dependencies_available = True
+
+        return cls._gdrive_dependencies_available
+
     def is_gdrive_enabled(self) -> bool:
         if not self.GDRIVE_ENABLED:
             return False
-        return bool(self.GDRIVE_SERVICE_ACCOUNT_FILE or self.GDRIVE_SERVICE_ACCOUNT_INFO)
+
+        if not (
+            self.GDRIVE_SERVICE_ACCOUNT_FILE or self.GDRIVE_SERVICE_ACCOUNT_INFO
+        ):
+            return False
+
+        return self._are_gdrive_dependencies_available()
 
     def get_gdrive_client_type(self) -> str:
         return self.GDRIVE_SUBSCRIPTION_CLIENT_TYPE
