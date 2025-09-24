@@ -1300,6 +1300,76 @@ async def add_media_fields_to_broadcast_history():
         return False
 
 
+async def ensure_subscription_gdrive_columns() -> bool:
+    logger.info("=== ПРОВЕРКА GDRIVE ПОЛЕЙ В SUBSCRIPTIONS ===")
+
+    file_column = "gdrive_file_id"
+    link_column = "gdrive_link"
+
+    try:
+        file_exists = await check_column_exists("subscriptions", file_column)
+        link_exists = await check_column_exists("subscriptions", link_column)
+
+        if file_exists and link_exists:
+            logger.info("ℹ️ GDrive поля уже существуют в subscriptions")
+            return True
+
+        async with engine.begin() as conn:
+            db_type = await get_database_type()
+
+            if not file_exists:
+                if db_type == "sqlite":
+                    alter_file_sql = (
+                        "ALTER TABLE subscriptions ADD COLUMN gdrive_file_id TEXT NULL"
+                    )
+                elif db_type == "postgresql":
+                    alter_file_sql = (
+                        "ALTER TABLE subscriptions ADD COLUMN gdrive_file_id VARCHAR(255) NULL"
+                    )
+                elif db_type == "mysql":
+                    alter_file_sql = (
+                        "ALTER TABLE subscriptions ADD COLUMN gdrive_file_id VARCHAR(255) NULL"
+                    )
+                else:
+                    logger.error(
+                        "Неподдерживаемый тип БД для добавления поля gdrive_file_id: %s",
+                        db_type,
+                    )
+                    return False
+
+                await conn.execute(text(alter_file_sql))
+                logger.info("✅ Добавлена колонка subscriptions.gdrive_file_id")
+
+            if not link_exists:
+                if db_type == "sqlite":
+                    alter_link_sql = (
+                        "ALTER TABLE subscriptions ADD COLUMN gdrive_link TEXT NULL"
+                    )
+                elif db_type == "postgresql":
+                    alter_link_sql = (
+                        "ALTER TABLE subscriptions ADD COLUMN gdrive_link VARCHAR(255) NULL"
+                    )
+                elif db_type == "mysql":
+                    alter_link_sql = (
+                        "ALTER TABLE subscriptions ADD COLUMN gdrive_link VARCHAR(255) NULL"
+                    )
+                else:
+                    logger.error(
+                        "Неподдерживаемый тип БД для добавления поля gdrive_link: %s",
+                        db_type,
+                    )
+                    return False
+
+                await conn.execute(text(alter_link_sql))
+                logger.info("✅ Добавлена колонка subscriptions.gdrive_link")
+
+        return True
+
+    except Exception as e:
+        logger.error(f"Ошибка при добавлении GDrive полей в subscriptions: {e}")
+        return False
+
+
 async def add_ticket_reply_block_columns():
     try:
         col_perm_exists = await check_column_exists('tickets', 'user_reply_block_permanent')
@@ -1891,6 +1961,13 @@ async def run_universal_migration():
             logger.info("✅ Таблица subscription_conversions готова")
         else:
             logger.warning("⚠️ Проблемы с таблицей subscription_conversions")
+
+        logger.info("=== ПРОВЕРКА GDRIVE ПОЛЕЙ ПОДПИСОК ===")
+        gdrive_columns_ready = await ensure_subscription_gdrive_columns()
+        if gdrive_columns_ready:
+            logger.info("✅ GDrive поля в subscriptions настроены")
+        else:
+            logger.warning("⚠️ Проблемы с GDrive полями в subscriptions")
         
         async with engine.begin() as conn:
             total_subs = await conn.execute(text("SELECT COUNT(*) FROM subscriptions"))
@@ -1927,6 +2004,7 @@ async def run_universal_migration():
                 logger.info("✅ Реферальная система обновлена")
                 logger.info("✅ CryptoBot таблица готова")
                 logger.info("✅ Таблица конверсий подписок создана")
+                logger.info("✅ GDrive поля в subscriptions добавлены")
                 logger.info("✅ Таблица welcome_texts с полем is_enabled готова")
                 logger.info("✅ Медиа поля в broadcast_history добавлены")
                 logger.info("✅ Дубликаты подписок исправлены")
@@ -1949,6 +2027,7 @@ async def check_migration_status():
             "broadcast_history_media_fields": False,
             "subscription_duplicates": False,
             "subscription_conversions_table": False,
+            "subscription_gdrive_columns": False,
             "promo_groups_table": False,
             "server_promo_groups_table": False,
             "users_promo_group_column": False,
@@ -1971,6 +2050,10 @@ async def check_migration_status():
         status["promo_groups_period_discounts_column"] = await check_column_exists('promo_groups', 'period_discounts')
         status["promo_groups_auto_assign_column"] = await check_column_exists('promo_groups', 'auto_assign_total_spent_kopeks')
         status["users_auto_promo_group_assigned_column"] = await check_column_exists('users', 'auto_promo_group_assigned')
+        status["subscription_gdrive_columns"] = (
+            await check_column_exists('subscriptions', 'gdrive_file_id')
+            and await check_column_exists('subscriptions', 'gdrive_link')
+        )
         
         media_fields_exist = (
             await check_column_exists('broadcast_history', 'has_media') and
@@ -2000,6 +2083,7 @@ async def check_migration_status():
             "welcome_texts_is_enabled_column": "Поле is_enabled в welcome_texts",
             "broadcast_history_media_fields": "Медиа поля в broadcast_history",
             "subscription_conversions_table": "Таблица конверсий подписок",
+            "subscription_gdrive_columns": "GDrive поля в subscriptions",
             "subscription_duplicates": "Отсутствие дубликатов подписок",
             "promo_groups_table": "Таблица промо-групп",
             "server_promo_groups_table": "Связи серверов и промогрупп",
