@@ -32,3 +32,4 @@ app/**/*.pyd
 *.pyo
 *.pyd
 tests/test_api.db
+settings.json
