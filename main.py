@@ -22,7 +22,6 @@ from app.services.backup_service import backup_service
 from app.services.reporting_service import reporting_service
 from app.localization.loader import ensure_locale_templates
 from app.services.system_settings_service import bot_configuration_service
-from app.webadmin.server import WebAdminServer
 
 
 class GracefulExit:
@@ -64,7 +63,6 @@ async def main():
     maintenance_task = None
     version_check_task = None
     polling_task = None
-    webadmin_server: WebAdminServer | None = None
     
     try:
         logger.info("📊 Инициализация базы данных...")
@@ -131,26 +129,6 @@ async def main():
             logger.error(f"❌ Ошибка запуска сервиса отчетов: {e}")
 
         payment_service = PaymentService(bot)
-
-        if settings.is_webadmin_enabled():
-            logger.info(
-                "🌐 Запуск веб-админки на %s:%s...",
-                settings.WEBADMIN_HOST,
-                settings.WEBADMIN_PORT,
-            )
-            try:
-                webadmin_server = WebAdminServer()
-                await webadmin_server.start()
-                logger.info(
-                    "✅ Веб-админка доступна: http://%s:%s",
-                    settings.WEBADMIN_HOST,
-                    settings.WEBADMIN_PORT,
-                )
-            except Exception as error:
-                logger.error("❌ Не удалось запустить веб-админку: %s", error)
-                webadmin_server = None
-        else:
-            logger.info("ℹ️ Веб-админка отключена")
         
         webhook_needed = (
             settings.TRIBUTE_ENABLED
@@ -264,23 +242,12 @@ async def main():
                         if settings.is_version_check_enabled():
                             logger.info("🔄 Перезапуск сервиса проверки версий...")
                             version_check_task = asyncio.create_task(version_service.start_periodic_check())
-
+                        
                 if polling_task.done():
                     exception = polling_task.exception()
                     if exception:
                         logger.error(f"Polling завершился с ошибкой: {exception}")
                         break
-
-                if webadmin_server and not webadmin_server.is_running():
-                    exception = webadmin_server.get_exception()
-                    if exception:
-                        logger.error("Веб-админка завершилась с ошибкой: %s", exception)
-                        try:
-                            await webadmin_server.start()
-                            logger.info("🔄 Веб-админка перезапущена")
-                        except Exception as restart_error:
-                            logger.error("Не удалось перезапустить веб-админку: %s", restart_error)
-                            webadmin_server = None
                         
         except Exception as e:
             logger.error(f"Ошибка в основном цикле: {e}")
@@ -353,14 +320,7 @@ async def main():
         if webhook_server:
             logger.info("ℹ️ Остановка webhook сервера...")
             await webhook_server.stop()
-
-        if webadmin_server:
-            logger.info("ℹ️ Остановка веб-админки...")
-            try:
-                await webadmin_server.stop()
-            except Exception as error:
-                logger.error(f"Ошибка остановки веб-админки: {error}")
-
+        
         if 'bot' in locals():
             try:
                 await bot.session.close()

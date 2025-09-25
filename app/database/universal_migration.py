@@ -377,82 +377,6 @@ async def create_mulenpay_payments_table():
         return False
 
 
-async def create_webadmin_sessions_table() -> bool:
-    table_exists = await check_table_exists("webadmin_sessions")
-    if table_exists:
-        logger.info("Таблица webadmin_sessions уже существует")
-        return True
-
-    try:
-        async with engine.begin() as conn:
-            db_type = await get_database_type()
-
-            if db_type == "sqlite":
-                create_sql = """
-                CREATE TABLE webadmin_sessions (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    token VARCHAR(128) NOT NULL UNIQUE,
-                    refresh_token VARCHAR(128) NOT NULL UNIQUE,
-                    ip_address VARCHAR(64) NULL,
-                    user_agent VARCHAR(255) NULL,
-                    expires_at DATETIME NOT NULL,
-                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                    refreshed_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                    revoked_at DATETIME NULL
-                );
-
-                CREATE INDEX idx_webadmin_sessions_token ON webadmin_sessions(token);
-                CREATE INDEX idx_webadmin_sessions_refresh ON webadmin_sessions(refresh_token);
-                """
-            elif db_type == "postgresql":
-                create_sql = """
-                CREATE TABLE webadmin_sessions (
-                    id SERIAL PRIMARY KEY,
-                    token VARCHAR(128) NOT NULL UNIQUE,
-                    refresh_token VARCHAR(128) NOT NULL UNIQUE,
-                    ip_address VARCHAR(64),
-                    user_agent VARCHAR(255),
-                    expires_at TIMESTAMP NOT NULL,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    refreshed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    revoked_at TIMESTAMP NULL
-                );
-
-                CREATE INDEX idx_webadmin_sessions_token ON webadmin_sessions(token);
-                CREATE INDEX idx_webadmin_sessions_refresh ON webadmin_sessions(refresh_token);
-                """
-            elif db_type == "mysql":
-                create_sql = """
-                CREATE TABLE webadmin_sessions (
-                    id INT AUTO_INCREMENT PRIMARY KEY,
-                    token VARCHAR(128) NOT NULL UNIQUE,
-                    refresh_token VARCHAR(128) NOT NULL UNIQUE,
-                    ip_address VARCHAR(64) NULL,
-                    user_agent VARCHAR(255) NULL,
-                    expires_at DATETIME NOT NULL,
-                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                    refreshed_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-                    revoked_at DATETIME NULL
-                );
-
-                CREATE INDEX idx_webadmin_sessions_token ON webadmin_sessions(token);
-                CREATE INDEX idx_webadmin_sessions_refresh ON webadmin_sessions(refresh_token);
-                """
-            else:
-                logger.error(
-                    f"Неподдерживаемый тип БД для таблицы webadmin_sessions: {db_type}"
-                )
-                return False
-
-            await conn.execute(text(create_sql))
-            logger.info("Таблица webadmin_sessions успешно создана")
-            return True
-
-    except Exception as e:
-        logger.error(f"Ошибка создания таблицы webadmin_sessions: {e}")
-        return False
-
-
 async def ensure_mulenpay_payment_schema() -> bool:
     logger.info("=== ОБНОВЛЕНИЕ СХЕМЫ MULEN PAY ===")
 
@@ -2020,13 +1944,6 @@ async def run_universal_migration():
             logger.info("✅ Таблица user_messages готова")
         else:
             logger.warning("⚠️ Проблемы с таблицей user_messages")
-
-        logger.info("=== СОЗДАНИЕ ТАБЛИЦЫ WEBADMIN_SESSIONS ===")
-        webadmin_sessions_created = await create_webadmin_sessions_table()
-        if webadmin_sessions_created:
-            logger.info("✅ Таблица webadmin_sessions готова")
-        else:
-            logger.warning("⚠️ Проблемы с таблицей webadmin_sessions")
 
         logger.info("=== СОЗДАНИЕ/ОБНОВЛЕНИЕ ТАБЛИЦЫ WELCOME_TEXTS ===")
         welcome_texts_created = await create_welcome_texts_table()

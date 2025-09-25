@@ -1,4 +1,3 @@
-import hashlib
 import logging
 import os
 import re
@@ -38,16 +37,7 @@ class Settings(BaseSettings):
     CHANNEL_SUB_ID: Optional[str] = None
     CHANNEL_LINK: Optional[str] = None
     CHANNEL_IS_REQUIRED_SUB: bool = False
-
-    WEBADMIN_ENABLED: bool = False
-    WEBADMIN_HOST: str = "0.0.0.0"
-    WEBADMIN_PORT: int = 8080
-    WEBADMIN_USERNAME: Optional[str] = None
-    WEBADMIN_PASSWORD: Optional[str] = None
-    WEBADMIN_PASSWORD_HASH: Optional[str] = None
-    WEBADMIN_SESSION_TTL_MINUTES: int = 120
-    WEBADMIN_ALLOWED_ORIGINS: str = ""
-
+    
     DATABASE_URL: str = ""
     
     POSTGRES_HOST: str = "postgres"
@@ -511,38 +501,6 @@ class Settings(BaseSettings):
     
     def get_fixed_traffic_limit(self) -> int:
         return self.FIXED_TRAFFIC_LIMIT_GB
-
-    def get_webadmin_allowed_origins(self) -> List[str]:
-        origins = self.WEBADMIN_ALLOWED_ORIGINS
-
-        if not origins:
-            return []
-
-        if isinstance(origins, str):
-            return [item.strip() for item in origins.split(",") if item.strip()]
-
-        try:
-            return list(origins)
-        except TypeError:
-            return []
-
-    def get_webadmin_password_hash(self) -> Optional[str]:
-        if self.WEBADMIN_PASSWORD_HASH:
-            return self.WEBADMIN_PASSWORD_HASH
-
-        if self.WEBADMIN_PASSWORD:
-            return hashlib.sha256(self.WEBADMIN_PASSWORD.encode("utf-8")).hexdigest()
-
-        return None
-
-    def is_webadmin_enabled(self) -> bool:
-        if not self.WEBADMIN_ENABLED:
-            return False
-
-        if not self.WEBADMIN_USERNAME:
-            return False
-
-        return self.get_webadmin_password_hash() is not None
     
     def is_yookassa_enabled(self) -> bool:
         return (self.YOOKASSA_ENABLED and 

@@ -27,9 +27,6 @@
             --danger: #ef4444;
             --border: rgba(255, 255, 255, 0.08);
             --shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 10px 10px -5px rgba(0, 0, 0, 0.4);
-            --radius-lg: 16px;
-            --radius-md: 12px;
-            --radius-sm: 8px;
         }
 
         body {
@@ -40,8 +37,7 @@
             overflow-x: hidden;
         }
 
-        .hidden { display: none !important; }
-
+        /* Animated Background */
         .bg-animation {
             position: fixed;
             width: 100%;
@@ -49,10 +45,10 @@
             top: 0;
             left: 0;
             z-index: -1;
-            opacity: 0.35;
-            background: radial-gradient(circle at 20% 50%, rgba(99, 102, 241, 0.18) 0%, transparent 55%),
-                        radial-gradient(circle at 80% 80%, rgba(139, 92, 246, 0.12) 0%, transparent 55%),
-                        radial-gradient(circle at 40% 20%, rgba(16, 185, 129, 0.08) 0%, transparent 55%);
+            opacity: 0.3;
+            background: radial-gradient(circle at 20% 50%, rgba(99, 102, 241, 0.15) 0%, transparent 50%),
+                        radial-gradient(circle at 80% 80%, rgba(139, 92, 246, 0.1) 0%, transparent 50%),
+                        radial-gradient(circle at 40% 20%, rgba(16, 185, 129, 0.05) 0%, transparent 50%);
             animation: bgShift 20s ease-in-out infinite;
         }
 
@@ -63,11 +59,13 @@
             75% { transform: translate(-30px, 20px) scale(1.05); }
         }
 
+        /* Layout */
         .container {
             display: flex;
             min-height: 100vh;
         }
 
+        /* Sidebar */
         .sidebar {
             width: 280px;
             background: var(--bg-secondary);
@@ -85,10 +83,10 @@
             top: 0;
             left: 0;
             right: 0;
-            height: 180px;
+            height: 200px;
             background: var(--accent-gradient);
-            opacity: 0.12;
-            filter: blur(120px);
+            opacity: 0.1;
+            filter: blur(100px);
         }
 
         .logo {
@@ -122,7 +120,7 @@
 
         @keyframes pulse {
             0% { box-shadow: 0 0 10px var(--success); }
-            50% { box-shadow: 0 0 22px var(--success), 0 0 30px var(--success); }
+            50% { box-shadow: 0 0 20px var(--success), 0 0 30px var(--success); }
             100% { box-shadow: 0 0 10px var(--success); }
         }
 
@@ -134,7 +132,9 @@
             z-index: 1;
         }
 
-        .nav-section { margin-bottom: 28px; }
+        .nav-section {
+            margin-bottom: 24px;
+        }
 
         .nav-section-title {
             font-size: 11px;
@@ -142,7 +142,7 @@
             text-transform: uppercase;
             color: var(--text-tertiary);
             padding: 0 12px;
-            margin-bottom: 12px;
+            margin-bottom: 8px;
             letter-spacing: 0.5px;
         }
 
@@ -151,11 +151,11 @@
             align-items: center;
             gap: 12px;
             padding: 12px 16px;
-            border-radius: var(--radius-md);
+            border-radius: 12px;
             color: var(--text-secondary);
             text-decoration: none;
             transition: all 0.3s ease;
-            margin-bottom: 6px;
+            margin-bottom: 4px;
             position: relative;
             overflow: hidden;
         }
@@ -168,7 +168,7 @@
             width: 0;
             height: 100%;
             background: var(--accent-gradient);
-            opacity: 0.12;
+            opacity: 0.1;
             transition: width 0.3s ease;
         }
 
@@ -178,7 +178,9 @@
             transform: translateX(4px);
         }
 
-        .nav-item:hover::before { width: 100%; }
+        .nav-item:hover::before {
+            width: 100%;
+        }
 
         .nav-item.active {
             background: var(--bg-tertiary);
@@ -193,7 +195,7 @@
             top: 50%;
             transform: translateY(-50%);
             width: 3px;
-            height: 22px;
+            height: 20px;
             background: var(--accent-primary);
             border-radius: 0 3px 3px 0;
         }
@@ -217,12 +219,14 @@
             font-weight: 600;
         }
 
+        /* Main Content */
         .main {
             flex: 1;
             display: flex;
             flex-direction: column;
         }
 
+        /* Header */
         .header {
             background: var(--bg-secondary);
             border-bottom: 1px solid var(--border);
@@ -233,11 +237,15 @@
             backdrop-filter: blur(10px);
         }
 
-        .header-left { display: flex; align-items: center; gap: 16px; }
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: 24px;
+        }
 
         .search-box {
             position: relative;
-            width: 360px;
+            width: 400px;
         }
 
         .search-box input {
@@ -245,7 +253,7 @@
             padding: 12px 16px 12px 44px;
             background: var(--bg-tertiary);
             border: 1px solid var(--border);
-            border-radius: var(--radius-md);
+            border-radius: 12px;
             color: var(--text-primary);
             font-size: 14px;
             transition: all 0.3s ease;
@@ -254,7 +262,7 @@
         .search-box input:focus {
             outline: none;
             border-color: var(--accent-primary);
-            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
         }
 
         .search-box::before {
@@ -267,65 +275,101 @@
             opacity: 0.5;
         }
 
-        .header-right { display: flex; align-items: center; gap: 16px; }
-
-        .session-pill {
+        .header-right {
             display: flex;
             align-items: center;
-            gap: 10px;
-            padding: 10px 14px;
-            border-radius: var(--radius-md);
+            gap: 16px;
+        }
+
+        .header-btn {
+            width: 40px;
+            height: 40px;
+            border-radius: 12px;
             background: var(--bg-tertiary);
             border: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            position: relative;
         }
 
-        .session-dot {
-            width: 10px;
-            height: 10px;
-            border-radius: 50%;
-            background: var(--success);
-            box-shadow: 0 0 10px var(--success);
+        .header-btn:hover {
+            background: var(--bg-hover);
+            transform: translateY(-2px);
         }
 
-        .session-pill.expired .session-dot {
+        .notification-badge {
+            position: absolute;
+            top: -4px;
+            right: -4px;
+            width: 18px;
+            height: 18px;
             background: var(--danger);
-            box-shadow: 0 0 10px var(--danger);
+            color: white;
+            font-size: 10px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 600;
         }
 
-        .session-user { font-size: 14px; font-weight: 500; }
-        .session-expire { font-size: 12px; color: var(--text-tertiary); }
+        .user-menu {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 8px 16px;
+            background: var(--bg-tertiary);
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
 
+        .user-menu:hover {
+            background: var(--bg-hover);
+        }
+
+        .user-avatar {
+            width: 32px;
+            height: 32px;
+            border-radius: 8px;
+            background: var(--accent-gradient);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 600;
+            font-size: 14px;
+            color: white;
+        }
+
+        /* Content Area */
         .content {
             flex: 1;
             padding: 32px;
             overflow-y: auto;
         }
 
-        .page-header {
-            display: flex;
-            align-items: flex-start;
-            justify-content: space-between;
-            gap: 16px;
-            margin-bottom: 32px;
-            flex-wrap: wrap;
-        }
-
         .page-title {
             font-size: 28px;
             font-weight: 700;
-            margin-bottom: 6px;
+            margin-bottom: 8px;
             background: linear-gradient(135deg, var(--text-primary) 0%, var(--text-secondary) 100%);
+            background-clip: text;
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
         }
 
-        .page-subtitle { color: var(--text-secondary); }
+        .page-subtitle {
+            color: var(--text-secondary);
+            margin-bottom: 32px;
+        }
 
-        .page-actions { display: flex; gap: 12px; flex-wrap: wrap; }
-
+        /* Stats Grid */
         .stats-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
             gap: 24px;
             margin-bottom: 32px;
         }
@@ -333,7 +377,7 @@
         .stat-card {
             background: var(--bg-secondary);
             border: 1px solid var(--border);
-            border-radius: var(--radius-lg);
+            border-radius: 16px;
             padding: 24px;
             position: relative;
             overflow: hidden;
@@ -355,10 +399,12 @@
         .stat-card:hover {
             transform: translateY(-4px);
             box-shadow: var(--shadow);
-            border-color: rgba(99, 102, 241, 0.35);
+            border-color: rgba(99, 102, 241, 0.3);
         }
 
-        .stat-card:hover::before { opacity: 1; }
+        .stat-card:hover::before {
+            opacity: 1;
+        }
 
         .stat-header {
             display: flex;
@@ -382,18 +428,89 @@
         .stat-icon.servers { background: linear-gradient(135deg, #4facfe, #00f2fe); }
         .stat-icon.chart { background: linear-gradient(135deg, #43e97b, #38f9d7); }
 
-        .stat-value { font-size: 32px; font-weight: 700; margin-bottom: 6px; }
-        .stat-label { color: var(--text-secondary); font-size: 14px; }
+        .stat-value {
+            font-size: 32px;
+            font-weight: 700;
+            margin-bottom: 8px;
+        }
 
-        .action-btn {
-            padding: 12px 20px;
+        .stat-label {
+            color: var(--text-secondary);
+            font-size: 14px;
+            margin-bottom: 16px;
+        }
+
+        .stat-change {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .stat-change.positive {
+            background: rgba(16, 185, 129, 0.1);
+            color: var(--success);
+        }
+
+        .stat-change.negative {
+            background: rgba(239, 68, 68, 0.1);
+            color: var(--danger);
+        }
+
+        /* Chart Container */
+        .chart-container {
             background: var(--bg-secondary);
             border: 1px solid var(--border);
-            border-radius: var(--radius-md);
+            border-radius: 16px;
+            padding: 24px;
+            margin-bottom: 32px;
+            height: 400px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .chart-container::before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 300px;
+            height: 300px;
+            background: var(--accent-gradient);
+            opacity: 0.05;
+            filter: blur(100px);
+            border-radius: 50%;
+        }
+
+        .chart-placeholder {
+            text-align: center;
+            color: var(--text-tertiary);
+        }
+
+        /* Quick Actions */
+        .quick-actions {
+            display: flex;
+            gap: 16px;
+            margin-bottom: 32px;
+            flex-wrap: wrap;
+        }
+
+        .action-btn {
+            padding: 12px 24px;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 12px;
             color: var(--text-primary);
             cursor: pointer;
             transition: all 0.3s ease;
-            display: inline-flex;
+            display: flex;
             align-items: center;
             gap: 8px;
             font-size: 14px;
@@ -401,121 +518,235 @@
         }
 
         .action-btn:hover {
-            background: var(--bg-hover);
+            background: var(--bg-tertiary);
             transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
         }
 
-        .action-btn.danger {
+        .action-btn.primary {
+            background: var(--accent-primary);
+            border-color: var(--accent-primary);
+            color: white;
+        }
+
+        .action-btn.primary:hover {
+            background: var(--accent-secondary);
+            border-color: var(--accent-secondary);
+        }
+
+        /* Bot Control Dropdown */
+        .bot-control {
+            position: relative;
+        }
+        
+        .bot-control-btn {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 16px;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            color: var(--text-primary);
+            font-size: 14px;
+            font-weight: 500;
+        }
+        
+        .bot-control-btn:hover {
+            background: var(--bg-hover);
+            border-color: var(--accent-primary);
+        }
+        
+        .bot-status {
+            width: 8px;
+            height: 8px;
+            background: var(--success);
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+        
+        .bot-dropdown {
+            position: absolute;
+            top: 100%;
+            right: 0;
+            margin-top: 8px;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 8px;
+            min-width: 200px;
+            opacity: 0;
+            visibility: hidden;
+            transform: translateY(-10px);
+            transition: all 0.3s ease;
+            z-index: 1000;
+            box-shadow: var(--shadow);
+        }
+        
+        .bot-control:hover .bot-dropdown {
+            opacity: 1;
+            visibility: visible;
+            transform: translateY(0);
+        }
+        
+        .bot-dropdown-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 10px 12px;
+            border-radius: 8px;
+            color: var(--text-secondary);
+            cursor: pointer;
+            transition: all 0.2s ease;
+            font-size: 14px;
+        }
+        
+        .bot-dropdown-item:hover {
+            background: var(--bg-tertiary);
+            color: var(--text-primary);
+        }
+        
+        .bot-dropdown-item.danger {
             color: var(--danger);
-            border-color: rgba(239, 68, 68, 0.35);
+        }
+        
+        .bot-dropdown-item.warning {
+            color: var(--warning);
+        }
+        
+        .bot-dropdown-divider {
+            height: 1px;
+            background: var(--border);
+            margin: 8px 0;
         }
 
-        .action-btn.danger:hover {
+        /* Enhanced Table */
+        .table-container {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            overflow: hidden;
+        }
+
+        .table-header {
+            padding: 20px 24px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .table-title {
+            font-size: 18px;
+            font-weight: 600;
+        }
+
+        .table-actions {
+            display: flex;
+            gap: 12px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        thead {
+            background: var(--bg-tertiary);
+        }
+
+        th {
+            padding: 16px 24px;
+            text-align: left;
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+            color: var(--text-tertiary);
+            letter-spacing: 0.5px;
+        }
+
+        td {
+            padding: 16px 24px;
+            border-top: 1px solid var(--border);
+            font-size: 14px;
+        }
+
+        tbody tr {
+            transition: background 0.2s ease;
+        }
+
+        tbody tr:hover {
+            background: rgba(99, 102, 241, 0.05);
+        }
+
+        .user-cell {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .user-avatar-small {
+            width: 36px;
+            height: 36px;
+            border-radius: 8px;
+            background: var(--accent-gradient);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: 600;
+            font-size: 14px;
+        }
+
+        .user-info {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .user-name {
+            font-weight: 500;
+            margin-bottom: 2px;
+        }
+
+        .user-id {
+            font-size: 12px;
+            color: var(--text-tertiary);
+        }
+
+        .status-badge {
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            display: inline-block;
+        }
+
+        .status-badge.active {
+            background: rgba(16, 185, 129, 0.1);
+            color: var(--success);
+        }
+
+        .status-badge.trial {
+            background: rgba(245, 158, 11, 0.1);
+            color: var(--warning);
+        }
+
+        .status-badge.expired {
             background: rgba(239, 68, 68, 0.1);
             color: var(--danger);
         }
 
-        .section-header {
-            display: flex;
-            align-items: flex-start;
-            justify-content: space-between;
-            gap: 16px;
-            margin-bottom: 24px;
-            flex-wrap: wrap;
-        }
-
-        .section-title { font-size: 22px; font-weight: 600; margin-bottom: 4px; }
-        .section-subtitle { color: var(--text-secondary); font-size: 14px; }
-
-        .section-controls { display: flex; gap: 12px; align-items: center; }
-
-        .settings-list {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-            gap: 20px;
-        }
-
-        .setting-card {
-            background: var(--bg-secondary);
-            border: 1px solid var(--border);
-            border-radius: var(--radius-lg);
-            padding: 20px;
-            display: flex;
-            flex-direction: column;
-            gap: 16px;
-            transition: all 0.2s ease;
-        }
-
-        .setting-card:hover {
-            border-color: rgba(99, 102, 241, 0.45);
-            transform: translateY(-2px);
-            box-shadow: var(--shadow);
-        }
-
-        .setting-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: flex-start;
-            gap: 12px;
-        }
-
-        .setting-key {
-            font-size: 12px;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            color: var(--text-tertiary);
-            margin-bottom: 4px;
-        }
-
-        .setting-name { font-size: 18px; font-weight: 600; }
-
-        .setting-meta {
+        .table-actions-cell {
             display: flex;
             gap: 8px;
-            flex-wrap: wrap;
-            font-size: 12px;
-            color: var(--text-tertiary);
         }
-
-        .badge {
-            display: inline-flex;
-            align-items: center;
-            gap: 4px;
-            padding: 4px 8px;
-            border-radius: 999px;
-            background: rgba(99, 102, 241, 0.12);
-            color: var(--accent-primary);
-            font-weight: 600;
-        }
-
-        .badge.warning {
-            background: rgba(245, 158, 11, 0.12);
-            color: var(--warning);
-        }
-
-        .badge.success {
-            background: rgba(16, 185, 129, 0.12);
-            color: var(--success);
-        }
-
-        .setting-row {
-            display: flex;
-            justify-content: space-between;
-            align-items: flex-start;
-            gap: 12px;
-            font-size: 14px;
-            color: var(--text-secondary);
-        }
-
-        .setting-label { color: var(--text-tertiary); }
-        .setting-value { color: var(--text-primary); font-weight: 500; text-align: right; word-break: break-word; max-width: 60%; }
-
-        .setting-actions { display: flex; gap: 8px; }
 
         .icon-btn {
-            width: 34px;
-            height: 34px;
-            border-radius: var(--radius-sm);
+            width: 32px;
+            height: 32px;
+            border-radius: 8px;
             background: var(--bg-tertiary);
             border: 1px solid var(--border);
             display: flex;
@@ -528,840 +759,824 @@
 
         .icon-btn:hover {
             background: var(--bg-hover);
-            transform: scale(1.05);
+            transform: scale(1.1);
         }
 
-        .empty-state {
-            margin-top: 24px;
-            text-align: center;
-            padding: 48px 16px;
-            border: 1px dashed var(--border);
-            border-radius: var(--radius-lg);
-            background: var(--bg-secondary);
-            color: var(--text-secondary);
-        }
-
-        .empty-icon { font-size: 48px; margin-bottom: 12px; }
-        .empty-title { font-size: 18px; font-weight: 600; margin-bottom: 6px; }
-        .empty-text { color: var(--text-tertiary); font-size: 14px; }
-
-        .modal {
-            position: fixed;
-            inset: 0;
-            background: rgba(10, 11, 13, 0.92);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            padding: 24px;
-            z-index: 3000;
-        }
-
-        .modal.hidden { display: none; }
-
-        .modal-content {
-            background: var(--bg-secondary);
-            border-radius: var(--radius-lg);
-            border: 1px solid var(--border);
-            padding: 28px;
-            width: 100%;
-            max-width: 480px;
-            box-shadow: var(--shadow);
-        }
-
-        .modal-title { font-size: 20px; font-weight: 600; margin-bottom: 12px; }
-        .modal-description { color: var(--text-secondary); margin-bottom: 20px; font-size: 14px; }
-
-        .modal-field { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; }
-
-        .modal-field label { font-size: 13px; color: var(--text-tertiary); }
-
-        .modal-field input,
-        .modal-field select,
-        .modal-field textarea {
-            width: 100%;
-            padding: 12px 14px;
-            background: var(--bg-tertiary);
-            border: 1px solid var(--border);
-            border-radius: var(--radius-md);
-            color: var(--text-primary);
-            resize: vertical;
-            min-height: 46px;
-        }
-
-        .modal-field textarea { min-height: 120px; }
-
-        .modal-actions { display: flex; justify-content: flex-end; gap: 12px; margin-top: 24px; }
-
-        .btn {
-            padding: 10px 18px;
-            border-radius: var(--radius-md);
-            border: 1px solid transparent;
-            cursor: pointer;
-            font-weight: 600;
-            font-size: 14px;
-            transition: all 0.3s ease;
-        }
-
-        .btn-primary {
-            background: var(--accent-gradient);
-            color: #fff;
-            border: none;
-        }
-
-        .btn-primary:hover { filter: brightness(1.08); }
-
-        .btn-secondary {
-            background: var(--bg-tertiary);
-            color: var(--text-primary);
-            border: 1px solid var(--border);
-        }
-
-        .btn-secondary:hover { background: var(--bg-hover); }
-
-        .btn-ghost {
-            background: transparent;
-            color: var(--text-secondary);
-            border-color: var(--border);
-        }
-
-        .btn-ghost:hover { color: var(--text-primary); }
-
-        .auth-overlay {
-            position: fixed;
-            inset: 0;
-            background: rgba(10, 11, 13, 0.96);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            padding: 24px;
-            z-index: 4000;
-        }
-
-        .auth-overlay.hidden { display: none; }
-
-        .auth-modal {
-            background: var(--bg-secondary);
-            border: 1px solid var(--border);
-            border-radius: var(--radius-lg);
-            padding: 32px;
-            width: 100%;
-            max-width: 360px;
-            box-shadow: var(--shadow);
-            display: flex;
-            flex-direction: column;
-            gap: 20px;
-            text-align: center;
-        }
-
-        .auth-modal h2 { font-size: 22px; font-weight: 600; }
-        .auth-modal p { color: var(--text-secondary); font-size: 14px; }
-
-        .auth-modal form { display: flex; flex-direction: column; gap: 14px; }
-
-        .auth-modal input {
-            width: 100%;
-            padding: 12px 14px;
-            background: var(--bg-tertiary);
-            border: 1px solid var(--border);
-            border-radius: var(--radius-md);
-            color: var(--text-primary);
-            font-size: 14px;
-        }
-
-        .auth-error {
-            color: var(--danger);
-            font-size: 13px;
-            background: rgba(239, 68, 68, 0.12);
-            border-radius: var(--radius-md);
-            padding: 10px 12px;
-            display: none;
-        }
-
-        .toast {
+        /* Floating Action Button */
+        .fab {
             position: fixed;
             bottom: 32px;
             right: 32px;
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            background: var(--accent-gradient);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 24px;
+            cursor: pointer;
+            box-shadow: var(--shadow);
+            transition: all 0.3s ease;
+            z-index: 1000;
+        }
+
+        .fab:hover {
+            transform: scale(1.1) rotate(90deg);
+        }
+
+        /* Responsive */
+        @media (max-width: 1024px) {
+            .sidebar {
+                position: fixed;
+                left: 0;
+                top: 0;
+                height: 100vh;
+                transform: translateX(-100%);
+                z-index: 1000;
+            }
+
+            .sidebar.open {
+                transform: translateX(0);
+            }
+
+            .search-box {
+                width: 100%;
+            }
+
+            .stats-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        /* Server Details Expansion */
+        .server-card {
             background: var(--bg-secondary);
             border: 1px solid var(--border);
-            border-radius: var(--radius-md);
-            padding: 16px 20px;
+            border-radius: 16px;
+            margin-bottom: 24px;
+            overflow: hidden;
+            transition: all 0.3s ease;
+        }
+
+        .server-card-header {
+            padding: 20px 24px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            cursor: pointer;
+            transition: background 0.2s ease;
+        }
+
+        .server-card-header:hover {
+            background: rgba(99, 102, 241, 0.05);
+        }
+
+        .server-info {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .server-flag {
+            font-size: 32px;
+        }
+
+        .server-details {
+            flex: 1;
+        }
+
+        .server-name {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+
+        .server-location {
+            color: var(--text-secondary);
+            font-size: 14px;
+        }
+
+        .server-stats {
+            display: flex;
+            gap: 32px;
+            align-items: center;
+        }
+
+        .server-stat {
+            text-align: center;
+        }
+
+        .server-stat-value {
+            font-size: 20px;
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+
+        .server-stat-label {
+            font-size: 12px;
+            color: var(--text-tertiary);
+            text-transform: uppercase;
+        }
+
+        .expand-icon {
+            width: 32px;
+            height: 32px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 8px;
+            background: var(--bg-tertiary);
+            transition: transform 0.3s ease;
+        }
+
+        .server-card.expanded .expand-icon {
+            transform: rotate(180deg);
+        }
+
+        .server-expanded-content {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.3s ease;
+            border-top: 1px solid var(--border);
+        }
+
+        .server-card.expanded .server-expanded-content {
+            max-height: 600px;
+        }
+
+        .server-expanded-inner {
+            padding: 24px;
+        }
+
+        .server-actions {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 24px;
+        }
+
+        .speed-test-btn {
+            padding: 10px 20px;
+            background: var(--accent-gradient);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .speed-test-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+        }
+
+        .speed-test-btn.testing {
+            background: var(--warning);
+            animation: pulse 1s infinite;
+        }
+
+        .server-metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+
+        .metric-card {
+            background: var(--bg-tertiary);
+            padding: 16px;
+            border-radius: 12px;
+            text-align: center;
+        }
+
+        .metric-value {
+            font-size: 24px;
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+
+        .metric-label {
+            font-size: 12px;
+            color: var(--text-secondary);
+        }
+
+        .server-chart {
+            background: var(--bg-tertiary);
+            border-radius: 12px;
+            padding: 20px;
+            height: 200px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .chart-grid {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-image: 
+                linear-gradient(rgba(99, 102, 241, 0.1) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(99, 102, 241, 0.1) 1px, transparent 1px);
+            background-size: 20px 20px;
+        }
+
+        .chart-line {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 60%;
+            background: linear-gradient(to top, rgba(99, 102, 241, 0.2), transparent);
+            clip-path: polygon(
+                0% 100%,
+                5% 85%, 10% 70%, 15% 75%, 20% 60%, 25% 65%,
+                30% 50%, 35% 55%, 40% 45%, 45% 50%, 50% 40%,
+                55% 45%, 60% 35%, 65% 40%, 70% 30%, 75% 35%,
+                80% 25%, 85% 30%, 90% 20%, 95% 25%, 100% 15%,
+                100% 100%
+            );
+        }
+
+        /* Loading Animation */
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid var(--border);
+            border-top-color: var(--accent-primary);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* Tooltips */
+        [data-tooltip] {
+            position: relative;
+        }
+
+        [data-tooltip]:hover::after {
+            content: attr(data-tooltip);
+            position: absolute;
+            bottom: 100%;
+            left: 50%;
+            transform: translateX(-50%);
+            padding: 8px 12px;
+            background: var(--bg-tertiary);
             color: var(--text-primary);
-            box-shadow: var(--shadow);
-            display: none;
-            z-index: 3500;
-            min-width: 240px;
+            font-size: 12px;
+            border-radius: 8px;
+            white-space: nowrap;
+            z-index: 1000;
+            pointer-events: none;
+            animation: fadeIn 0.3s ease;
         }
 
-        .toast.show {
-            display: block;
-            animation: toastFade 4s ease forwards;
-        }
-
-        @keyframes toastFade {
-            0% { opacity: 0; transform: translateY(12px); }
-            10%, 80% { opacity: 1; transform: translateY(0); }
-            100% { opacity: 0; transform: translateY(12px); }
-        }
-
-        @media (max-width: 1100px) {
-            .sidebar { width: 240px; }
-            .search-box { width: 100%; }
-            .stats-grid { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
-        }
-
-        @media (max-width: 860px) {
-            .container { flex-direction: column; }
-            .sidebar { width: 100%; height: auto; border-right: none; border-bottom: 1px solid var(--border); }
-            .content { padding: 24px; }
-            .search-box { width: 100%; }
-            .settings-list { grid-template-columns: 1fr; }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateX(-50%) translateY(4px); }
+            to { opacity: 1; transform: translateX(-50%) translateY(0); }
         }
     </style>
 </head>
 <body>
     <div class="bg-animation"></div>
-
+    
     <div class="container">
+        <!-- Sidebar -->
         <aside class="sidebar">
             <div class="logo">
                 <h1>BedolagaAdmin <span class="status"></span></h1>
             </div>
-
-            <nav class="nav" id="navigation">
+            
+            <nav class="nav">
                 <div class="nav-section">
-                    <div class="nav-section-title">Обзор</div>
-                    <a href="#" class="nav-item active" data-view="dashboard">
+                    <div class="nav-section-title">Аналитика</div>
+                    <a href="#" class="nav-item active">
                         <span class="nav-icon">📊</span>
                         <span>Дашборд</span>
                     </a>
+                    <a href="#" class="nav-item">
+                        <span class="nav-icon">💰</span>
+                        <span>Финансы</span>
+                        <span class="nav-badge">12</span>
+                    </a>
+                    <a href="#" class="nav-item">
+                        <span class="nav-icon">📈</span>
+                        <span>Статистика</span>
+                    </a>
                 </div>
+                
                 <div class="nav-section">
-                    <div class="nav-section-title">Конфигурация бота</div>
-                    <div id="categoryList"></div>
+                    <div class="nav-section-title">Управление</div>
+                    <a href="#" class="nav-item">
+                        <span class="nav-icon">👥</span>
+                        <span>Пользователи</span>
+                    </a>
+                    <a href="#" class="nav-item">
+                        <span class="nav-icon">💳</span>
+                        <span>Подписки</span>
+                    </a>
+                    <a href="#" class="nav-item">
+                        <span class="nav-icon">🎫</span>
+                        <span>Промокоды</span>
+                    </a>
+                    <a href="#" class="nav-item">
+                        <span class="nav-icon">👫</span>
+                        <span>Промогруппы</span>
+                    </a>
+                    <a href="#" class="nav-item">
+                        <span class="nav-icon">🔗</span>
+                        <span>Рефералы</span>
+                    </a>
+                    <a href="#" class="nav-item">
+                        <span class="nav-icon">🖥️</span>
+                        <span>Серверы</span>
+                        <span class="nav-badge" style="background: var(--success);">✓</span>
+                    </a>
+                    <a href="#" class="nav-item">
+                        <span class="nav-icon">🌊</span>
+                        <span>Remnawave</span>
+                    </a>
+                    <a href="#" class="nav-item">
+                        <span class="nav-icon">📨</span>
+                        <span>Рассылки</span>
+                    </a>
+                    <a href="#" class="nav-item">
+                        <span class="nav-icon">📢</span>
+                        <span>Рекламные кампании</span>
+                    </a>
+                    <a href="#" class="nav-item">
+                        <span class="nav-icon">🎫</span>
+                        <span>Тикеты</span>
+                        <span class="nav-badge">5</span>
+                    </a>
+                </div>
+                
+                <div class="nav-section">
+                    <div class="nav-section-title">Система</div>
+                    <a href="#" class="nav-item">
+                        <span class="nav-icon">💳</span>
+                        <span>Платежные шлюзы</span>
+                    </a>
+                    <a href="#" class="nav-item">
+                        <span class="nav-icon">💸</span>
+                        <span>Настройка цен</span>
+                    </a>
+                    <a href="#" class="nav-item">
+                        <span class="nav-icon">💰</span>
+                        <span>Автоплатежи</span>
+                    </a>
+                    <a href="#" class="nav-item">
+                        <span class="nav-icon">🌍</span>
+                        <span>Локализация</span>
+                    </a>
+                    <a href="#" class="nav-item">
+                        <span class="nav-icon">📑</span>
+                        <span>Отчеты</span>
+                    </a>
+                    <a href="#" class="nav-item">
+                        <span class="nav-icon">🗄️</span>
+                        <span>Бекапы</span>
+                    </a>
+                    <a href="#" class="nav-item">
+                        <span class="nav-icon">📋</span>
+                        <span>Логи</span>
+                    </a>
+                    <a href="#" class="nav-item">
+                        <span class="nav-icon">⚙️</span>
+                        <span>Настройки</span>
+                    </a>
                 </div>
             </nav>
         </aside>
-
+        
+        <!-- Main Content -->
         <main class="main">
+            <!-- Header -->
             <header class="header">
                 <div class="header-left">
-                    <div class="search-box hidden" id="headerSearch">
-                        <input type="text" id="globalSearch" placeholder="Поиск по настройкам…">
+                    <div class="search-box">
+                        <input type="text" placeholder="Поиск пользователей, ID, email...">
                     </div>
                 </div>
+                
                 <div class="header-right">
-                    <div class="session-pill" id="sessionPill">
-                        <span class="session-dot"></span>
+                    <div class="bot-control">
+                        <button class="bot-control-btn">
+                            <span class="bot-status"></span>
+                            <span>Бот активен</span>
+                            <span style="font-size: 12px;">▼</span>
+                        </button>
+                        <div class="bot-dropdown">
+                            <div class="bot-dropdown-item">
+                                <span>🔄</span>
+                                <span>Перезапустить бота</span>
+                            </div>
+                            <div class="bot-dropdown-item warning">
+                                <span>⏸️</span>
+                                <span>Остановить бота</span>
+                            </div>
+                            <div class="bot-dropdown-item">
+                                <span>▶️</span>
+                                <span>Запустить бота</span>
+                            </div>
+                            <div class="bot-dropdown-divider"></div>
+                            <div class="bot-dropdown-item">
+                                <span>🔄</span>
+                                <span>Синхронизация</span>
+                            </div>
+                            <div class="bot-dropdown-item danger">
+                                <span>🚧</span>
+                                <span>Режим техработ</span>
+                            </div>
+                        </div>
+                    </div>
+                    <button class="header-btn" data-tooltip="Уведомления">
+                        <span>🔔</span>
+                        <span class="notification-badge">3</span>
+                    </button>
+                    <div class="user-menu">
+                        <div class="user-avatar">A</div>
                         <div>
-                            <div class="session-user" id="sessionUser">Не авторизовано</div>
-                            <div class="session-expire" id="sessionExpire">—</div>
+                            <div style="font-size: 14px; font-weight: 500;">Admin</div>
+                            <div style="font-size: 12px; color: var(--text-tertiary);">Супер админ</div>
                         </div>
                     </div>
                 </div>
             </header>
-
-            <div class="content" id="mainContent">
-                <div class="page-header">
-                    <div>
-                        <h1 class="page-title" id="pageTitle">Панель управления</h1>
-                        <p class="page-subtitle" id="pageSubtitle">Статистика по работе бота и активным пользователям.</p>
-                    </div>
-                    <div class="page-actions">
-                        <button class="action-btn" id="dashboardRefreshBtn">
-                            <span>🔄</span>
-                            <span>Обновить данные</span>
-                        </button>
-                        <button class="action-btn danger" id="logoutButton">
-                            <span>🚪</span>
-                            <span>Выйти</span>
-                        </button>
-                    </div>
-                </div>
-
-                <section id="dashboardSection">
-                    <div class="stats-grid" id="statsGrid"></div>
-                    <div class="empty-state hidden" id="dashboardEmpty">
-                        <div class="empty-icon">📊</div>
-                        <div class="empty-title">Нет данных для отображения</div>
-                        <div class="empty-text">Попробуйте обновить дашборд или зайдите позже.</div>
-                    </div>
-                </section>
-
-                <section id="settingsSection" class="hidden">
-                    <div class="section-header">
-                        <div>
-                            <h2 class="section-title" id="settingsTitle">Настройки</h2>
-                            <p class="section-subtitle" id="settingsSubtitle">Выберите категорию слева для просмотра параметров.</p>
-                        </div>
-                        <div class="section-controls">
-                            <div class="search-box">
-                                <input type="text" id="settingsSearch" placeholder="Поиск по ключу или названию…">
-                            </div>
-                        </div>
-                    </div>
-
-                    <div id="settingsList" class="settings-list"></div>
-
-                    <div class="empty-state hidden" id="settingsEmpty">
-                        <div class="empty-icon">🔍</div>
-                        <div class="empty-title">Настройки не найдены</div>
-                        <div class="empty-text">Измените запрос поиска или выберите другую категорию.</div>
-                    </div>
-                </section>
-            </div>
-        </main>
-    </div>
-
-    <div class="auth-overlay hidden" id="authOverlay">
-        <div class="auth-modal">
-            <h2>Вход в веб-админку</h2>
-            <p>Введите учетные данные администратора для продолжения.</p>
-            <div class="auth-error" id="authError"></div>
-            <form id="authForm">
-                <input type="text" id="authUsername" placeholder="Логин" required>
-                <input type="password" id="authPassword" placeholder="Пароль" required>
-                <button type="submit" class="btn btn-primary">Войти</button>
-            </form>
-        </div>
-    </div>
-
-    <div class="modal hidden" id="settingModal">
-        <div class="modal-content">
-            <h3 class="modal-title" id="modalTitle">Редактирование настройки</h3>
-            <p class="modal-description" id="modalDescription"></p>
-            <form id="modalForm">
-                <div class="modal-field">
-                    <label for="modalValue">Новое значение</label>
-                    <div id="modalField"></div>
-                </div>
-                <div class="modal-actions">
-                    <button type="button" class="btn btn-ghost" id="modalCancel">Отмена</button>
-                    <button type="submit" class="btn btn-primary">Сохранить</button>
-                </div>
-            </form>
-        </div>
-    </div>
-
-    <div class="toast" id="toast"></div>
-
-    <script>
-        const API_BASE = '/api';
-        let authToken = localStorage.getItem('webadminToken');
-        let refreshToken = localStorage.getItem('webadminRefreshToken');
-        let sessionInfo = null;
-        let categories = [];
-        let settingsCache = [];
-        let currentCategory = null;
-
-        const navigation = document.getElementById('navigation');
-        const categoryListEl = document.getElementById('categoryList');
-        const dashboardSection = document.getElementById('dashboardSection');
-        const dashboardEmpty = document.getElementById('dashboardEmpty');
-        const statsGrid = document.getElementById('statsGrid');
-        const settingsSection = document.getElementById('settingsSection');
-        const settingsListEl = document.getElementById('settingsList');
-        const settingsEmpty = document.getElementById('settingsEmpty');
-        const pageTitle = document.getElementById('pageTitle');
-        const pageSubtitle = document.getElementById('pageSubtitle');
-        const settingsTitle = document.getElementById('settingsTitle');
-        const settingsSubtitle = document.getElementById('settingsSubtitle');
-        const settingsSearch = document.getElementById('settingsSearch');
-        const globalSearch = document.getElementById('globalSearch');
-        const headerSearch = document.getElementById('headerSearch');
-        const dashboardRefreshBtn = document.getElementById('dashboardRefreshBtn');
-        const logoutButton = document.getElementById('logoutButton');
-        const sessionPill = document.getElementById('sessionPill');
-        const sessionUser = document.getElementById('sessionUser');
-        const sessionExpire = document.getElementById('sessionExpire');
-
-        const authOverlay = document.getElementById('authOverlay');
-        const authForm = document.getElementById('authForm');
-        const authError = document.getElementById('authError');
-        const toastEl = document.getElementById('toast');
-
-        const modal = document.getElementById('settingModal');
-        const modalTitle = document.getElementById('modalTitle');
-        const modalDescription = document.getElementById('modalDescription');
-        const modalField = document.getElementById('modalField');
-        const modalForm = document.getElementById('modalForm');
-        const modalCancel = document.getElementById('modalCancel');
-
-        function showToast(message, type = 'info') {
-            toastEl.textContent = message;
-            toastEl.classList.add('show');
-            clearTimeout(toastEl._timeout);
-            toastEl._timeout = setTimeout(() => toastEl.classList.remove('show'), 3800);
-        }
-
-        function updateSessionPill(info) {
-            if (!info) {
-                sessionUser.textContent = 'Не авторизовано';
-                sessionExpire.textContent = '—';
-                sessionPill.classList.add('expired');
-                return;
-            }
-            sessionUser.textContent = info.username;
-            sessionExpire.textContent = `Сессия до ${new Date(info.expires_at).toLocaleString('ru-RU')}`;
-            sessionPill.classList.toggle('expired', new Date(info.expires_at) <= new Date());
-        }
-
-        function setActiveNav(element) {
-            document.querySelectorAll('.nav-item').forEach(item => item.classList.remove('active'));
-            if (element) {
-                element.classList.add('active');
-            }
-        }
-
-        function switchView(view, category = null) {
-            if (view === 'dashboard') {
-                dashboardSection.classList.remove('hidden');
-                settingsSection.classList.add('hidden');
-                headerSearch.classList.add('hidden');
-                pageTitle.textContent = 'Панель управления';
-                pageSubtitle.textContent = 'Статистика по работе бота и активным пользователям.';
-            } else {
-                currentCategory = category;
-                dashboardSection.classList.add('hidden');
-                settingsSection.classList.remove('hidden');
-                headerSearch.classList.remove('hidden');
-                pageTitle.textContent = 'Настройки бота';
-                pageSubtitle.textContent = 'Управляйте параметрами без перезапуска бота.';
-                loadSettings(category);
-            }
-        }
-
-        async function fetchWithAuth(path, options = {}, retry = true) {
-            const headers = new Headers(options.headers || {});
-            if (options.body && !(options.body instanceof FormData)) {
-                headers.set('Content-Type', 'application/json');
-            }
-            if (authToken) {
-                headers.set('Authorization', `Bearer ${authToken}`);
-            }
-            const response = await fetch(`${API_BASE}${path}`, { ...options, headers });
-            if (response.status === 401 && retry && refreshToken) {
-                const refreshed = await refreshSession();
-                if (refreshed) {
-                    return fetchWithAuth(path, options, false);
-                }
-            }
-            if (!response.ok) {
-                let detail = 'Произошла ошибка';
-                try {
-                    const data = await response.json();
-                    detail = data.detail || JSON.stringify(data);
-                } catch (_) {
-                    detail = await response.text() || detail;
-                }
-                throw new Error(detail);
-            }
-            if (response.status === 204) {
-                return null;
-            }
-            return response.json();
-        }
-
-        async function login(username, password) {
-            const payload = { username, password };
-            const data = await fetchWithAuth('/auth/login', {
-                method: 'POST',
-                body: JSON.stringify(payload),
-                headers: { 'Content-Type': 'application/json' },
-            }, false);
-            authToken = data.token;
-            refreshToken = data.refresh_token;
-            localStorage.setItem('webadminToken', authToken);
-            localStorage.setItem('webadminRefreshToken', refreshToken);
-            sessionInfo = {
-                username: data.username,
-                expires_at: data.expires_at,
-                issued_at: new Date().toISOString(),
-            };
-            updateSessionPill(sessionInfo);
-        }
-
-        async function refreshSession() {
-            if (!refreshToken) {
-                return false;
-            }
-            try {
-                const data = await fetchWithAuth('/auth/refresh', {
-                    method: 'POST',
-                    body: JSON.stringify({ refresh_token: refreshToken }),
-                    headers: { 'Content-Type': 'application/json' },
-                }, false);
-                authToken = data.token;
-                refreshToken = data.refresh_token;
-                localStorage.setItem('webadminToken', authToken);
-                localStorage.setItem('webadminRefreshToken', refreshToken);
-                sessionInfo = {
-                    username: data.username,
-                    expires_at: data.expires_at,
-                    issued_at: new Date().toISOString(),
-                };
-                updateSessionPill(sessionInfo);
-                return true;
-            } catch (_) {
-                clearSession();
-                return false;
-            }
-        }
-
-        function clearSession() {
-            authToken = null;
-            refreshToken = null;
-            sessionInfo = null;
-            localStorage.removeItem('webadminToken');
-            localStorage.removeItem('webadminRefreshToken');
-            updateSessionPill(null);
-        }
-
-        async function verifySession() {
-            if (!authToken) {
-                return false;
-            }
-            try {
-                const data = await fetchWithAuth('/auth/session');
-                sessionInfo = data;
-                updateSessionPill(sessionInfo);
-                return true;
-            } catch (_) {
-                return await refreshSession();
-            }
-        }
-
-        async function loadDashboard() {
-            try {
-                const summary = await fetchWithAuth('/dashboard/summary');
-                renderDashboard(summary);
-            } catch (error) {
-                dashboardEmpty.classList.remove('hidden');
-                statsGrid.innerHTML = '';
-                showToast(error.message, 'error');
-            }
-        }
-
-        function renderDashboard(summary) {
-            const stats = [
-                {
-                    key: 'users_total',
-                    label: 'Всего пользователей',
-                    icon: '👥',
-                    value: summary.users_total.toLocaleString('ru-RU'),
-                },
-                {
-                    key: 'active_subscriptions',
-                    label: 'Активные подписки',
-                    icon: '🟢',
-                    value: summary.active_subscriptions.toLocaleString('ru-RU'),
-                },
-                {
-                    key: 'trial_subscriptions',
-                    label: 'Триальные подписки',
-                    icon: '🎯',
-                    value: summary.trial_subscriptions.toLocaleString('ru-RU'),
-                },
-                {
-                    key: 'total_revenue_kopeks',
-                    label: 'Оборот (₽)',
-                    icon: '💰',
-                    value: (summary.total_revenue_kopeks / 100).toLocaleString('ru-RU', { minimumFractionDigits: 2 }),
-                },
-                {
-                    key: 'settings_total',
-                    label: 'Настроек в системе',
-                    icon: '⚙️',
-                    value: summary.settings_total,
-                },
-                {
-                    key: 'overrides_total',
-                    label: 'Переопределений',
-                    icon: '🛠️',
-                    value: summary.overrides_total,
-                },
-            ];
-
-            statsGrid.innerHTML = stats.map(stat => `
-                <div class="stat-card">
-                    <div class="stat-header">
-                        <div>
-                            <div class="stat-value">${stat.value}</div>
-                            <div class="stat-label">${stat.label}</div>
-                        </div>
-                        <div class="stat-icon">${stat.icon}</div>
-                    </div>
-                </div>
-            `).join('');
-
-            dashboardEmpty.classList.toggle('hidden', stats.length > 0);
-        }
-
-        async function loadCategories() {
-            try {
-                const data = await fetchWithAuth('/settings/categories');
-                categories = data.categories;
-                renderCategories();
-            } catch (error) {
-                showToast(error.message, 'error');
-            }
-        }
-
-        function renderCategories() {
-            categoryListEl.innerHTML = '';
-            categories.forEach(category => {
-                const link = document.createElement('a');
-                link.href = '#';
-                link.className = 'nav-item';
-                link.dataset.view = 'settings';
-                link.dataset.category = category.key;
-                link.innerHTML = `
-                    <span class="nav-icon">⚙️</span>
-                    <span>${category.label}</span>
-                    ${category.overrides > 0 ? `<span class="nav-badge">${category.overrides}</span>` : ''}
-                `;
-                link.addEventListener('click', event => {
-                    event.preventDefault();
-                    setActiveNav(link);
-                    settingsTitle.textContent = category.label;
-                    settingsSubtitle.textContent = `Всего параметров: ${category.total}. Переопределено: ${category.overrides}.`;
-                    switchView('settings', category.key);
-                });
-                categoryListEl.appendChild(link);
-            });
-        }
-
-        async function loadSettings(category) {
-            try {
-                const params = new URLSearchParams();
-                if (category) params.set('category', category);
-                const search = (settingsSearch.value || '').trim();
-                if (search) params.set('search', search);
-                const data = await fetchWithAuth(`/settings?${params.toString()}`);
-                settingsCache = data.items;
-                renderSettings();
-            } catch (error) {
-                showToast(error.message, 'error');
-            }
-        }
-
-        function renderSettings() {
-            const query = (settingsSearch.value || '').trim().toLowerCase();
-            const items = query
-                ? settingsCache.filter(item => `${item.key} ${item.name}`.toLowerCase().includes(query))
-                : settingsCache;
-
-            if (!items.length) {
-                settingsListEl.innerHTML = '';
-                settingsEmpty.classList.remove('hidden');
-                return;
-            }
-
-            settingsEmpty.classList.add('hidden');
-            settingsListEl.innerHTML = items.map(item => {
-                const overrideBadge = item.has_override
-                    ? '<span class="badge">Override</span>'
-                    : '<span class="badge success">По умолчанию</span>';
-                const typeBadge = `<span class="badge warning">${item.type}</span>`;
-                return `
-                    <div class="setting-card" data-key="${item.key}">
-                        <div class="setting-header">
+            
+            <!-- Content Area -->
+            <div class="content">
+                <h1 class="page-title">Панель управления</h1>
+                <p class="page-subtitle">Добро пожаловать в систему управления VPN ботом</p>
+                
+                <!-- Stats Grid -->
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-header">
                             <div>
-                                <div class="setting-key">${item.key}</div>
-                                <div class="setting-name">${item.name}</div>
+                                <div class="stat-value">1,284</div>
+                                <div class="stat-label">Всего пользователей</div>
                             </div>
-                            <div class="setting-actions">
-                                <button class="icon-btn" data-action="edit" title="Изменить">✏️</button>
-                                <button class="icon-btn" data-action="reset" title="Сбросить" ${item.has_override ? '' : 'disabled'}>↩️</button>
+                            <div class="stat-icon users">👥</div>
+                        </div>
+                        <span class="stat-change positive">↑ 12% за неделю</span>
+                    </div>
+                    
+                    <div class="stat-card">
+                        <div class="stat-header">
+                            <div>
+                                <div class="stat-value">₽84,290</div>
+                                <div class="stat-label">Доход за месяц</div>
+                            </div>
+                            <div class="stat-icon money">💰</div>
+                        </div>
+                        <span class="stat-change positive">↑ 23% к прошлому</span>
+                    </div>
+                    
+                    <div class="stat-card">
+                        <div class="stat-header">
+                            <div>
+                                <div class="stat-value">8 / 8</div>
+                                <div class="stat-label">Активные серверы</div>
+                            </div>
+                            <div class="stat-icon servers">🖥️</div>
+                        </div>
+                        <span class="stat-change positive">100% uptime</span>
+                    </div>
+                    
+                    <div class="stat-card">
+                        <div class="stat-header">
+                            <div>
+                                <div class="stat-value">68%</div>
+                                <div class="stat-label">Конверсия триал → платная</div>
+                            </div>
+                            <div class="stat-icon chart">📈</div>
+                        </div>
+                        <span class="stat-change positive">↑ 5% за месяц</span>
+                    </div>
+                </div>
+                
+                <!-- Chart -->
+                <div class="chart-container">
+                    <div class="chart-placeholder">
+                        <div style="font-size: 48px; margin-bottom: 16px;">📊</div>
+                        <div style="font-size: 18px; font-weight: 500; margin-bottom: 8px;">График продаж</div>
+                        <div style="font-size: 14px;">Динамика подписок за последние 30 дней</div>
+                    </div>
+                </div>
+                
+                <!-- Quick Actions -->
+                <div class="quick-actions">
+                    <button class="action-btn primary">
+                        <span>➕</span>
+                        <span>Создать промокод</span>
+                    </button>
+                    <button class="action-btn">
+                        <span>📢</span>
+                        <span>Массовая рассылка</span>
+                    </button>
+                    <button class="action-btn">
+                        <span>💾</span>
+                        <span>Создать бекап</span>
+                    </button>
+                    <button class="action-btn">
+                        <span>🔄</span>
+                        <span>Синхронизация</span>
+                    </button>
+                </div>
+                
+                <!-- Active Servers Section -->
+                <div style="margin-bottom: 32px;">
+                    <h2 style="font-size: 20px; font-weight: 600; margin-bottom: 20px; display: flex; align-items: center; gap: 12px;">
+                        <span>🖥️</span>
+                        <span>Активные серверы</span>
+                        <span style="background: var(--success); color: white; font-size: 12px; padding: 4px 12px; border-radius: 20px;">8 онлайн</span>
+                    </h2>
+                    
+                    <!-- Server Card 1 - Expanded Example -->
+                    <div class="server-card expanded">
+                        <div class="server-card-header" onclick="this.parentElement.classList.toggle('expanded')">
+                            <div class="server-info">
+                                <span class="server-flag">🇳🇱</span>
+                                <div class="server-details">
+                                    <div class="server-name">Netherlands-1</div>
+                                    <div class="server-location">Amsterdam, Digital Ocean</div>
+                                </div>
+                            </div>
+                            <div class="server-stats">
+                                <div class="server-stat">
+                                    <div class="server-stat-value" style="color: var(--success);">342</div>
+                                    <div class="server-stat-label">Пользователей</div>
+                                </div>
+                                <div class="server-stat">
+                                    <div class="server-stat-value">45%</div>
+                                    <div class="server-stat-label">CPU</div>
+                                </div>
+                                <div class="server-stat">
+                                    <div class="server-stat-value">2.4GB</div>
+                                    <div class="server-stat-label">RAM</div>
+                                </div>
+                                <div class="server-stat">
+                                    <div class="server-stat-value" style="color: var(--success);">99.9%</div>
+                                    <div class="server-stat-label">Uptime</div>
+                                </div>
+                                <div class="expand-icon">▼</div>
                             </div>
                         </div>
-                        <div class="setting-meta">
-                            ${overrideBadge}
-                            ${typeBadge}
-                        </div>
-                        <div class="setting-row">
-                            <span class="setting-label">Текущее значение</span>
-                            <span class="setting-value">${item.value_display}</span>
-                        </div>
-                        <div class="setting-row">
-                            <span class="setting-label">Значение по умолчанию</span>
-                            <span class="setting-value">${item.original_display}</span>
+                        
+                        <div class="server-expanded-content">
+                            <div class="server-expanded-inner">
+                                <div class="server-actions">
+                                    <button class="speed-test-btn">
+                                        <span>⚡</span>
+                                        <span>Speed Test</span>
+                                    </button>
+                                    <button class="action-btn">
+                                        <span>🔄</span>
+                                        <span>Перезагрузить</span>
+                                    </button>
+                                    <button class="action-btn">
+                                        <span>📊</span>
+                                        <span>Детальная статистика</span>
+                                    </button>
+                                    <button class="action-btn" style="background: rgba(239, 68, 68, 0.1); color: var(--danger);">
+                                        <span>⏸️</span>
+                                        <span>Остановить</span>
+                                    </button>
+                                </div>
+                                
+                                <div class="server-metrics-grid">
+                                    <div class="metric-card">
+                                        <div class="metric-value" style="color: var(--success);">12ms</div>
+                                        <div class="metric-label">Ping</div>
+                                    </div>
+                                    <div class="metric-card">
+                                        <div class="metric-value">945 Mbps</div>
+                                        <div class="metric-label">Download</div>
+                                    </div>
+                                    <div class="metric-card">
+                                        <div class="metric-value">892 Mbps</div>
+                                        <div class="metric-label">Upload</div>
+                                    </div>
+                                    <div class="metric-card">
+                                        <div class="metric-value">1.2TB</div>
+                                        <div class="metric-label">Трафик/день</div>
+                                    </div>
+                                    <div class="metric-card">
+                                        <div class="metric-value">28°C</div>
+                                        <div class="metric-label">Температура</div>
+                                    </div>
+                                    <div class="metric-card">
+                                        <div class="metric-value">14d 6h</div>
+                                        <div class="metric-label">Работает</div>
+                                    </div>
+                                </div>
+                                
+                                <div style="margin-bottom: 12px; color: var(--text-secondary); font-size: 14px;">
+                                    📈 Нагрузка сервера (последние 24 часа)
+                                </div>
+                                <div class="server-chart">
+                                    <div class="chart-grid"></div>
+                                    <div class="chart-line"></div>
+                                </div>
+                            </div>
                         </div>
                     </div>
-                `;
-            }).join('');
-        }
+                    
+                    <!-- Server Card 2 -->
+                    <div class="server-card">
+                        <div class="server-card-header" onclick="this.parentElement.classList.toggle('expanded')">
+                            <div class="server-info">
+                                <span class="server-flag">🇩🇪</span>
+                                <div class="server-details">
+                                    <div class="server-name">Germany-2</div>
+                                    <div class="server-location">Frankfurt, Hetzner</div>
+                                </div>
+                            </div>
+                            <div class="server-stats">
+                                <div class="server-stat">
+                                    <div class="server-stat-value" style="color: var(--warning);">298</div>
+                                    <div class="server-stat-label">Пользователей</div>
+                                </div>
+                                <div class="server-stat">
+                                    <div class="server-stat-value" style="color: var(--warning);">68%</div>
+                                    <div class="server-stat-label">CPU</div>
+                                </div>
+                                <div class="server-stat">
+                                    <div class="server-stat-value">3.1GB</div>
+                                    <div class="server-stat-label">RAM</div>
+                                </div>
+                                <div class="server-stat">
+                                    <div class="server-stat-value" style="color: var(--success);">100%</div>
+                                    <div class="server-stat-label">Uptime</div>
+                                </div>
+                                <div class="expand-icon">▼</div>
+                            </div>
+                        </div>
+                        
+                        <div class="server-expanded-content">
+                            <div class="server-expanded-inner">
+                                <div class="server-actions">
+                                    <button class="speed-test-btn">
+                                        <span>⚡</span>
+                                        <span>Speed Test</span>
+                                    </button>
+                                    <button class="action-btn">
+                                        <span>🔄</span>
+                                        <span>Перезагрузить</span>
+                                    </button>
+                                    <button class="action-btn">
+                                        <span>📊</span>
+                                        <span>Детальная статистика</span>
+                                    </button>
+                                    <button class="action-btn" style="background: rgba(239, 68, 68, 0.1); color: var(--danger);">
+                                        <span>⏸️</span>
+                                        <span>Остановить</span>
+                                    </button>
+                                </div>
+                                
+                                <div class="server-metrics-grid">
+                                    <div class="metric-card">
+                                        <div class="metric-value" style="color: var(--success);">8ms</div>
+                                        <div class="metric-label">Ping</div>
+                                    </div>
+                                    <div class="metric-card">
+                                        <div class="metric-value">1024 Mbps</div>
+                                        <div class="metric-label">Download</div>
+                                    </div>
+                                    <div class="metric-card">
+                                        <div class="metric-value">976 Mbps</div>
+                                        <div class="metric-label">Upload</div>
+                                    </div>
+                                    <div class="metric-card">
+                                        <div class="metric-value">980GB</div>
+                                        <div class="metric-label">Трафик/день</div>
+                                    </div>
+                                    <div class="metric-card">
+                                        <div class="metric-value">32°C</div>
+                                        <div class="metric-label">Температура</div>
+                                    </div>
+                                    <div class="metric-card">
+                                        <div class="metric-value">28d 12h</div>
+                                        <div class="metric-label">Работает</div>
+                                    </div>
+                                </div>
+                                
+                                <div style="margin-bottom: 12px; color: var(--text-secondary); font-size: 14px;">
+                                    📈 Нагрузка сервера (последние 24 часа)
+                                </div>
+                                <div class="server-chart">
+                                    <div class="chart-grid"></div>
+                                    <div class="chart-line"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Server Card 3 -->
+                    <div class="server-card">
+                        <div class="server-card-header" onclick="this.parentElement.classList.toggle('expanded')">
+                            <div class="server-info">
+                                <span class="server-flag">🇸🇪</span>
+                                <div class="server-details">
+                                    <div class="server-name">Sweden-1</div>
+                                    <div class="server-location">Stockholm, OVH</div>
+                                </div>
+                            </div>
+                            <div class="server-stats">
+                                <div class="server-stat">
+                                    <div class="server-stat-value" style="color: var(--success);">256</div>
+                                    <div class="server-stat-label">Пользователей</div>
+                                </div>
+                                <div class="server-stat">
+                                    <div class="server-stat-value" style="color: var(--success);">32%</div>
+                                    <div class="server-stat-label">CPU</div>
+                                </div>
+                                <div class="server-stat">
+                                    <div class="server-stat-value">1.8GB</div>
+                                    <div class="server-stat-label">RAM</div>
+                                </div>
+                                <div class="server-stat">
+                                    <div class="server-stat-value" style="color: var(--success);">99.8%</div>
+                                    <div class="server-stat-label">Uptime</div>
+                                </div>
+                                <div class="expand-icon">▼</div>
+                            </div>
+                        </div>
+                        
+                        <div class="server-expanded-content">
+                            <div class="server-expanded-inner">
+                                <div class="server-actions">
+                                    <button class="speed-test-btn">
+                                        <span>⚡</span>
+                                        <span>Speed Test</span>
+                                    </button>
+                                    <button class="action-btn">
+                                        <span>🔄</span>
+                                        <span>Перезагрузить</span>
+                                    </button>
+                                    <button class="action-btn">
+                                        <span>📊</span>
+                                        <span>Детальная статистика</span>
+                                    </button>
+                                    <button class="action-btn" style="background: rgba(239, 68, 68, 0.1); color: var(--danger);">
+                                        <span>⏸️</span>
+                                        <span>Остановить</span>
+                                    </button>
+                                </div>
+                                
+                                <div class="server-metrics-grid">
+                                    <div class="metric-card">
+                                        <div class="metric-value" style="color: var(--success);">15ms</div>
+                                        <div class="metric-label">Ping</div>
+                                    </div>
+                                    <div class="metric-card">
+                                        <div class="metric-value">850 Mbps</div>
+                                        <div class="metric-label">Download</div>
+                                    </div>
+                                    <div class="metric-card">
+                                        <div class="metric-value">820 Mbps</div>
+                                        <div class="metric-label">Upload</div>
+                                    </div>
+                                    <div class="metric-card">
+                                        <div class="metric-value">650GB</div>
+                                        <div class="metric-label">Трафик/день</div>
+                                    </div>
+                                    <div class="metric-card">
+                                        <div class="metric-value">26°C</div>
+                                        <div class="metric-label">Температура</div>
+                                    </div>
+                                    <div class="metric-card">
+                                        <div class="metric-value">7d 18h</div>
+                                        <div class="metric-label">Работает</div>
+                                    </div>
+                                </div>
+                                
+                                <div style="margin-bottom: 12px; color: var(--text-secondary); font-size: 14px;">
+                                    📈 Нагрузка сервера (последние 24 часа)
+                                </div>
+                                <div class="server-chart">
+                                    <div class="chart-grid"></div>
+                                    <div class="chart-line"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
 
-        function openModal(setting) {
-            modalTitle.textContent = `${setting.name}`;
-            modalDescription.textContent = `Ключ: ${setting.key}`;
-
-            let fieldHtml = '';
-            const value = setting.value_raw ?? '';
-
-            if (setting.choices && setting.choices.length) {
-                const options = setting.choices.map(choice => {
-                    const selected = String(choice.value) === String(setting.value);
-                    return `<option value="${choice.value}" ${selected ? 'selected' : ''}>${choice.label}</option>`;
-                }).join('');
-                fieldHtml = `<select id="modalValue">${options}</select>`;
-            } else if (setting.type.startsWith('bool')) {
-                const current = setting.value === true || setting.value === 'true';
-                fieldHtml = `
-                    <select id="modalValue">
-                        <option value="true" ${current ? 'selected' : ''}>Да</option>
-                        <option value="false" ${!current ? 'selected' : ''}>Нет</option>
-                    </select>
-                `;
-            } else if (setting.type.startsWith('optional')) {
-                const val = value ?? '';
-                fieldHtml = `<textarea id="modalValue" placeholder="Оставьте пустым для значения по умолчанию">${val}</textarea>`;
-            } else {
-                fieldHtml = `<textarea id="modalValue">${value ?? ''}</textarea>`;
-            }
-
-            modalField.innerHTML = fieldHtml;
-            modal.dataset.key = setting.key;
-            modal.classList.remove('hidden');
-        }
-
-        function closeModal() {
-            modal.classList.add('hidden');
-            modal.dataset.key = '';
-        }
-
-        async function updateSetting(key, payload) {
-            const data = await fetchWithAuth(`/settings/${key}`, {
-                method: 'PUT',
-                body: JSON.stringify(payload),
-                headers: { 'Content-Type': 'application/json' },
-            });
-            settingsCache = settingsCache.map(item => item.key === key ? data.setting : item);
-            renderSettings();
-            showToast('Настройка обновлена');
-        }
-
-        async function resetSetting(key) {
-            const data = await fetchWithAuth(`/settings/${key}`, { method: 'DELETE' });
-            settingsCache = settingsCache.map(item => item.key === key ? data.setting : item);
-            renderSettings();
-            showToast('Настройка сброшена');
-        }
-
-        navigation.addEventListener('click', event => {
-            const target = event.target.closest('.nav-item');
-            if (!target) return;
-            event.preventDefault();
-            const view = target.dataset.view || target.dataset.category ? 'settings' : 'dashboard';
-            setActiveNav(target);
-            if (view === 'dashboard') {
-                switchView('dashboard');
-            }
-        });
-
-        settingsListEl.addEventListener('click', event => {
-            const button = event.target.closest('.icon-btn');
-            if (!button) return;
-            const card = button.closest('.setting-card');
-            const key = card.dataset.key;
-            const setting = settingsCache.find(item => item.key === key);
-            if (!setting) return;
-
-            if (button.dataset.action === 'edit') {
-                openModal(setting);
-            } else if (button.dataset.action === 'reset' && setting.has_override) {
-                resetSetting(key).catch(error => showToast(error.message, 'error'));
-            }
-        });
-
-        settingsSearch.addEventListener('input', () => renderSettings());
-        if (globalSearch) {
-            globalSearch.addEventListener('input', () => {
-                settingsSearch.value = globalSearch.value;
-                renderSettings();
-            });
-        }
-
-        dashboardRefreshBtn.addEventListener('click', () => {
-            if (!dashboardSection.classList.contains('hidden')) {
-                loadDashboard();
-            }
-        });
-
-        logoutButton.addEventListener('click', async () => {
-            try {
-                await fetchWithAuth('/auth/logout', { method: 'POST' }, false);
-            } catch (_) {
-                // ignore
-            }
-            clearSession();
-            authOverlay.classList.remove('hidden');
-        });
-
-        authForm.addEventListener('submit', async event => {
-            event.preventDefault();
-            const username = document.getElementById('authUsername').value.trim();
-            const password = document.getElementById('authPassword').value.trim();
-            authError.style.display = 'none';
-            try {
-                await login(username, password);
-                authOverlay.classList.add('hidden');
-                await initialize();
-            } catch (error) {
-                authError.textContent = error.message;
-                authError.style.display = 'block';
-            }
-        });
-
-        modalForm.addEventListener('submit', async event => {
-            event.preventDefault();
-            const key = modal.dataset.key;
-            if (!key) return;
-            const setting = settingsCache.find(item => item.key === key);
-            if (!setting) return;
-            const input = document.getElementById('modalValue');
-            let payload = {};
-            if (setting.choices && setting.choices.length) {
-                payload.value = input.value;
-            } else if (setting.type.startsWith('bool')) {
-                payload.value = input.value === 'true';
-            } else if (setting.type.startsWith('optional')) {
-                const value = input.value.trim();
-                payload.value = value === '' ? null : value;
-            } else {
-                payload.value = input.value;
-            }
-
-            try {
-                await updateSetting(key, payload);
-                closeModal();
-            } catch (error) {
-                showToast(error.message, 'error');
-            }
-        });
-
-        modalCancel.addEventListener('click', closeModal);
-        modal.addEventListener('click', event => {
-            if (event.target === modal) {
-                closeModal();
-            }
-        });
-
-        async function initialize() {
-            await loadDashboard();
-            await loadCategories();
-            if (currentCategory) {
-                switchView('settings', currentCategory);
-            }
-        }
-
-        (async () => {
-            const valid = await verifySession();
-            if (!valid) {
-                authOverlay.classList.remove('hidden');
-                return;
-            }
-            await initialize();
-        })();
-    </script>
-</body>
-</html>
+                <!-- Recent Users Table -->
+                <div class="table-container">
+                    <div class="table-header">
+                        <h3 class="table
