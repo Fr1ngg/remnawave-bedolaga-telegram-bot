@@ -1025,6 +1025,54 @@ async def ensure_promo_groups_setup():
 
                 logger.info("Добавлена колонка users.auto_promo_group_assigned")
 
+            auto_promo_group_id_exists = await check_column_exists(
+                "users", "auto_promo_group_id"
+            )
+
+            if not auto_promo_group_id_exists:
+                if db_type == "sqlite":
+                    await conn.execute(
+                        text("ALTER TABLE users ADD COLUMN auto_promo_group_id INTEGER")
+                    )
+                elif db_type == "postgresql":
+                    await conn.execute(
+                        text("ALTER TABLE users ADD COLUMN auto_promo_group_id INTEGER")
+                    )
+                elif db_type == "mysql":
+                    await conn.execute(
+                        text("ALTER TABLE users ADD COLUMN auto_promo_group_id INT")
+                    )
+                else:
+                    logger.error(
+                        f"Неподдерживаемый тип БД для users.auto_promo_group_id: {db_type}"
+                    )
+                    return False
+
+                logger.info("Добавлена колонка users.auto_promo_group_id")
+
+                try:
+                    if db_type in {"sqlite", "mysql"}:
+                        await conn.execute(
+                            text(
+                                "UPDATE users SET auto_promo_group_id = promo_group_id "
+                                "WHERE auto_promo_group_id IS NULL AND auto_promo_group_assigned = 1"
+                            )
+                        )
+                    else:
+                        await conn.execute(
+                            text(
+                                "UPDATE users SET auto_promo_group_id = promo_group_id "
+                                "WHERE auto_promo_group_id IS NULL AND auto_promo_group_assigned IS TRUE"
+                            )
+                        )
+                    logger.info(
+                        "Обновлены пользователи с автоматическими промогруппами"
+                    )
+                except Exception as exc:
+                    logger.warning(
+                        f"Не удалось обновить auto_promo_group_id для пользователей: {exc}"
+                    )
+
             index_exists = await check_index_exists("users", "ix_users_promo_group_id")
 
             if not index_exists:
@@ -2044,6 +2092,7 @@ async def check_migration_status():
             "promo_groups_auto_assign_column": False,
             "promo_groups_addon_discount_column": False,
             "users_auto_promo_group_assigned_column": False,
+            "users_auto_promo_group_id_column": False,
             "subscription_crypto_link_column": False,
         }
         
@@ -2062,6 +2111,7 @@ async def check_migration_status():
         status["promo_groups_auto_assign_column"] = await check_column_exists('promo_groups', 'auto_assign_total_spent_kopeks')
         status["promo_groups_addon_discount_column"] = await check_column_exists('promo_groups', 'apply_discounts_to_addons')
         status["users_auto_promo_group_assigned_column"] = await check_column_exists('users', 'auto_promo_group_assigned')
+        status["users_auto_promo_group_id_column"] = await check_column_exists('users', 'auto_promo_group_id')
         status["subscription_crypto_link_column"] = await check_column_exists('subscriptions', 'subscription_crypto_link')
         
         media_fields_exist = (
@@ -2100,6 +2150,7 @@ async def check_migration_status():
             "promo_groups_auto_assign_column": "Колонка auto_assign_total_spent_kopeks у промо-групп",
             "promo_groups_addon_discount_column": "Колонка apply_discounts_to_addons у промо-групп",
             "users_auto_promo_group_assigned_column": "Флаг автоназначения промогруппы у пользователей",
+            "users_auto_promo_group_id_column": "Последняя автоматически назначенная промогруппа",
             "subscription_crypto_link_column": "Колонка subscription_crypto_link в subscriptions",
         }
         
