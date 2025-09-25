@@ -2,14 +2,14 @@ import logging
 import secrets
 import string
 from datetime import datetime, timedelta
-from typing import Optional, List
-from sqlalchemy import select, and_, or_, func
+from typing import List, Optional
+
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.database.models import User, UserStatus, Subscription, Transaction, PromoGroup
-from app.config import settings
 from app.database.crud.promo_group import get_default_promo_group
+from app.database.models import PromoGroup, Subscription, TransactionType, User, UserStatus
 
 logger = logging.getLogger(__name__)
 
@@ -185,9 +185,65 @@ async def add_user_balance(
         return False
 
 
+async def subtract_user_balance(
+    db: AsyncSession,
+    user: User,
+    amount_kopeks: int,
+    description: str = "Списание средств",
+    *,
+    create_transaction: bool = True,
+) -> bool:
+    if amount_kopeks <= 0:
+        raise ValueError("amount_kopeks must be positive")
+
+    if user.balance_kopeks < amount_kopeks:
+        logger.warning(
+            "Недостаточно средств для списания %s₽ у пользователя %s",
+            amount_kopeks / 100,
+            user.telegram_id,
+        )
+        return False
+
+    try:
+        old_balance = user.balance_kopeks
+        user.balance_kopeks -= amount_kopeks
+        user.updated_at = datetime.utcnow()
+
+        if create_transaction:
+            from app.database.crud.transaction import create_transaction as create_trans
+
+            await create_trans(
+                db=db,
+                user_id=user.id,
+                type=TransactionType.WITHDRAWAL,
+                amount_kopeks=amount_kopeks,
+                description=description,
+            )
+
+        await db.commit()
+        await db.refresh(user)
+
+        logger.info(
+            "💸 Баланс пользователя %s уменьшен: %s → %s (−%s)",
+            user.telegram_id,
+            old_balance,
+            user.balance_kopeks,
+            amount_kopeks,
+        )
+        return True
+    except Exception as error:
+        logger.error(
+            "Ошибка списания баланса пользователя %s: %s",
+            user.id,
+            error,
+        )
+        await db.rollback()
+        return False
+
+
 async def add_user_balance_by_id(
     db: AsyncSession,
-    telegram_id: int, 
+    telegram_id: int,
     amount_kopeks: int,
     description: str = "Пополнение баланса"
 ) -> bool:
@@ -198,43 +254,49 @@ async def add_user_balance_by_id(
             return False
         
         return await add_user_balance(db, user, amount_kopeks, description)
-        
+
     except Exception as e:
         logger.error(f"Ошибка пополнения баланса пользователя {telegram_id}: {e}")
         return False
 
 
-async def subtract_user_balance(
-    db: AsyncSession, 
-    user: User, 
-    amount_kopeks: int, 
-    description: str
+async def withdraw_user_balance(
+    db: AsyncSession,
+    user: User,
+    amount_kopeks: int,
+    description: str = "Списание средств",
+    *,
+    create_transaction: bool = True,
+    allow_partial: bool = True,
 ) -> bool:
-    logger.error(f"💸 ОТЛАДКА subtract_user_balance:")
-    logger.error(f"   👤 User ID: {user.id} (TG: {user.telegram_id})")
-    logger.error(f"   💰 Баланс до списания: {user.balance_kopeks} копеек")
-    logger.error(f"   💸 Сумма к списанию: {amount_kopeks} копеек")
-    logger.error(f"   📝 Описание: {description}")
-    
-    if user.balance_kopeks < amount_kopeks:
-        logger.error(f"   ❌ НЕДОСТАТОЧНО СРЕДСТВ!")
+    """Списывает средства со счета пользователя.
+
+    Если ``allow_partial`` установлен в ``True``, а средств недостаточно, списывается
+    максимально доступная сумма (до нуля). В противном случае операция завершится
+    без изменений баланса.
+    """
+
+    if amount_kopeks <= 0:
+        raise ValueError("amount_kopeks must be positive")
+
+    available = user.balance_kopeks
+    if available <= 0:
         return False
-    
-    try:
-        old_balance = user.balance_kopeks
-        user.balance_kopeks -= amount_kopeks
-        user.updated_at = datetime.utcnow()
-        
-        await db.commit()
-        await db.refresh(user)
-        
-        logger.error(f"   ✅ Средства списаны: {old_balance} → {user.balance_kopeks}")
-        return True
-        
-    except Exception as e:
-        logger.error(f"   ❌ ОШИБКА СПИСАНИЯ: {e}")
-        await db.rollback()
+
+    target_amount = amount_kopeks
+    if allow_partial and available < amount_kopeks:
+        target_amount = available
+
+    if target_amount <= 0:
         return False
+
+    return await subtract_user_balance(
+        db,
+        user,
+        target_amount,
+        description=description,
+        create_transaction=create_transaction,
+    )
 
 
 async def get_users_list(

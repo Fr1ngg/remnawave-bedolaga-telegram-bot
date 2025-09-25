@@ -22,6 +22,7 @@ from app.services.backup_service import backup_service
 from app.services.reporting_service import reporting_service
 from app.localization.loader import ensure_locale_templates
 from app.services.system_settings_service import bot_configuration_service
+from app.external.admin_api_server import AdminAPIServer
 
 
 class GracefulExit:
@@ -63,6 +64,7 @@ async def main():
     maintenance_task = None
     version_check_task = None
     polling_task = None
+    admin_api_server: AdminAPIServer | None = None
     
     try:
         logger.info("📊 Инициализация базы данных...")
@@ -150,7 +152,7 @@ async def main():
             await webhook_server.start()
         else:
             logger.info("ℹ️ Tribute и CryptoBot отключены, webhook сервер не запускается")
-        
+
         if settings.is_yookassa_enabled():
             logger.info("💳 Запуск YooKassa webhook сервера...")
             yookassa_server_task = asyncio.create_task(
@@ -164,6 +166,16 @@ async def main():
             pal24_server = await start_pal24_webhook_server(payment_service)
         else:
             logger.info("ℹ️ PayPalych отключен, webhook сервер не запускается")
+
+        if settings.is_web_api_enabled():
+            try:
+                logger.info("🌐 Запуск административного API сервера...")
+                admin_api_server = AdminAPIServer(bot)
+                await admin_api_server.start()
+            except Exception as api_error:
+                logger.error("Не удалось запустить административный API: %s", api_error)
+        else:
+            logger.info("ℹ️ Административный API отключен")
 
         logger.info("📊 Запуск службы мониторинга...")
         monitoring_task = asyncio.create_task(monitoring_service.start_monitoring())
@@ -320,7 +332,14 @@ async def main():
         if webhook_server:
             logger.info("ℹ️ Остановка webhook сервера...")
             await webhook_server.stop()
-        
+
+        if admin_api_server:
+            logger.info("ℹ️ Остановка административного API...")
+            try:
+                await admin_api_server.stop()
+            except Exception as error:
+                logger.error("Ошибка остановки административного API: %s", error)
+
         if 'bot' in locals():
             try:
                 await bot.session.close()
