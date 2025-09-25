@@ -74,6 +74,7 @@ services:
     ports:
       - "${TRIBUTE_WEBHOOK_PORT:-8081}:8081"
       - "${YOOKASSA_WEBHOOK_PORT:-8082}:8082"
+      - "${ADMIN_API_PORT:-8085}:8085"
     networks:
       - bot_network
     healthcheck:
