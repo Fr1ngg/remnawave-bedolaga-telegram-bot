@@ -61,7 +61,6 @@ class BotConfigurationService:
         "SUPPORT": "Поддержка",
         "ADMIN_NOTIFICATIONS": "Уведомления администраторов",
         "ADMIN_REPORTS": "Автоотчеты",
-        "ADMIN_API": "API веб-админки",
         "CHANNEL": "Обязательная подписка на канал",
         "DATABASE": "База данных",
         "POSTGRES": "PostgreSQL",
@@ -159,12 +158,6 @@ class BotConfigurationService:
         "PAYMENT_BALANCE_TEMPLATE": "PAYMENT",
         "PAYMENT_SUBSCRIPTION_TEMPLATE": "PAYMENT",
         "INACTIVE_USER_DELETE_MONTHS": "MONITORING",
-        "ADMIN_API_ENABLED": "ADMIN_API",
-        "ADMIN_API_HOST": "ADMIN_API",
-        "ADMIN_API_PORT": "ADMIN_API",
-        "ADMIN_API_TOKEN": "ADMIN_API",
-        "ADMIN_API_ALLOWED_IPS": "ADMIN_API",
-        "ADMIN_API_CORS_ORIGINS": "ADMIN_API",
     }
 
     CATEGORY_PREFIX_OVERRIDES: Dict[str, str] = {
@@ -201,7 +194,6 @@ class BotConfigurationService:
         "WEBHOOK_": "WEBHOOK",
         "LOG_": "LOG",
         "DEBUG": "DEBUG",
-        "ADMIN_API_": "ADMIN_API",
     }
 
     CHOICES: Dict[str, List[ChoiceOption]] = {
