@@ -207,18 +207,6 @@ class Settings(BaseSettings):
     PAL24_MAX_AMOUNT_KOPEKS: int = 100000000
     PAL24_REQUEST_TIMEOUT: int = 30
 
-    WEB_API_ENABLED: bool = False
-    WEB_API_HOST: str = "0.0.0.0"
-    WEB_API_PORT: int = 8090
-    WEB_API_ALLOWED_ORIGINS: str = "*"
-    WEB_API_DEFAULT_PAGE_SIZE: int = 50
-    WEB_API_MAX_PAGE_SIZE: int = 200
-    WEB_API_BOOTSTRAP_TOKEN: Optional[str] = None
-    WEB_API_BOOTSTRAP_BASIC_USER: Optional[str] = None
-    WEB_API_BOOTSTRAP_BASIC_PASSWORD: Optional[str] = None
-    WEB_API_BOOTSTRAP_COOKIE_KEY: Optional[str] = None
-    WEB_API_BOOTSTRAP_COOKIE_VALUE: Optional[str] = None
-
     CONNECT_BUTTON_MODE: str = "guide"
     MINIAPP_CUSTOM_URL: str = ""
     CONNECT_BUTTON_HAPP_DOWNLOAD_ENABLED: bool = False
@@ -544,43 +532,6 @@ class Settings(BaseSettings):
             and self.PAL24_API_TOKEN is not None
             and self.PAL24_SHOP_ID is not None
         )
-
-    def is_web_api_enabled(self) -> bool:
-        return bool(self.WEB_API_ENABLED)
-
-    def get_web_api_allowed_origins(self) -> List[str]:
-        raw_value = (self.WEB_API_ALLOWED_ORIGINS or "").strip()
-        if not raw_value:
-            return []
-        if raw_value == "*":
-            return ["*"]
-        if "," in raw_value:
-            return [item.strip() for item in raw_value.split(",") if item.strip()]
-        return [raw_value]
-
-    def get_web_api_default_page_size(self) -> int:
-        try:
-            value = int(self.WEB_API_DEFAULT_PAGE_SIZE)
-        except (TypeError, ValueError):
-            value = 50
-        return max(1, value)
-
-    def get_web_api_max_page_size(self) -> int:
-        default_size = self.get_web_api_default_page_size()
-        try:
-            value = int(self.WEB_API_MAX_PAGE_SIZE)
-        except (TypeError, ValueError):
-            value = 200
-        return max(default_size, value)
-
-    def get_web_api_bootstrap_credentials(self) -> Dict[str, Optional[str]]:
-        return {
-            "token": (self.WEB_API_BOOTSTRAP_TOKEN or "").strip() or None,
-            "basic_user": (self.WEB_API_BOOTSTRAP_BASIC_USER or "").strip() or None,
-            "basic_password": (self.WEB_API_BOOTSTRAP_BASIC_PASSWORD or "").strip() or None,
-            "cookie_key": (self.WEB_API_BOOTSTRAP_COOKIE_KEY or "").strip() or None,
-            "cookie_value": (self.WEB_API_BOOTSTRAP_COOKIE_VALUE or "").strip() or None,
-        }
 
     def get_cryptobot_base_url(self) -> str:
         if self.CRYPTOBOT_TESTNET:
