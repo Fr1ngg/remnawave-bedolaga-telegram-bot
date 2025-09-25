@@ -1,0 +1,1582 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BedolagaAdmin • Панель управления</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --bg-primary: #0a0b0d;
+            --bg-secondary: #141519;
+            --bg-tertiary: #1c1d24;
+            --bg-hover: #25262f;
+            --text-primary: #e4e4e7;
+            --text-secondary: #9ca3af;
+            --text-tertiary: #6b7280;
+            --accent-primary: #6366f1;
+            --accent-secondary: #8b5cf6;
+            --accent-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            --success: #10b981;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+            --border: rgba(255, 255, 255, 0.08);
+            --shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 10px 10px -5px rgba(0, 0, 0, 0.4);
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        /* Animated Background */
+        .bg-animation {
+            position: fixed;
+            width: 100%;
+            height: 100%;
+            top: 0;
+            left: 0;
+            z-index: -1;
+            opacity: 0.3;
+            background: radial-gradient(circle at 20% 50%, rgba(99, 102, 241, 0.15) 0%, transparent 50%),
+                        radial-gradient(circle at 80% 80%, rgba(139, 92, 246, 0.1) 0%, transparent 50%),
+                        radial-gradient(circle at 40% 20%, rgba(16, 185, 129, 0.05) 0%, transparent 50%);
+            animation: bgShift 20s ease-in-out infinite;
+        }
+
+        @keyframes bgShift {
+            0%, 100% { transform: translate(0, 0) scale(1); }
+            25% { transform: translate(-20px, -20px) scale(1.05); }
+            50% { transform: translate(20px, -30px) scale(1.1); }
+            75% { transform: translate(-30px, 20px) scale(1.05); }
+        }
+
+        /* Layout */
+        .container {
+            display: flex;
+            min-height: 100vh;
+        }
+
+        /* Sidebar */
+        .sidebar {
+            width: 280px;
+            background: var(--bg-secondary);
+            border-right: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            transition: transform 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .sidebar::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 200px;
+            background: var(--accent-gradient);
+            opacity: 0.1;
+            filter: blur(100px);
+        }
+
+        .logo {
+            padding: 28px 24px;
+            border-bottom: 1px solid var(--border);
+            position: relative;
+            z-index: 1;
+        }
+
+        .logo h1 {
+            font-size: 24px;
+            font-weight: 700;
+            background: var(--accent-gradient);
+            background-clip: text;
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .logo .status {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            background: var(--success);
+            border-radius: 50%;
+            box-shadow: 0 0 10px var(--success);
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% { box-shadow: 0 0 10px var(--success); }
+            50% { box-shadow: 0 0 20px var(--success), 0 0 30px var(--success); }
+            100% { box-shadow: 0 0 10px var(--success); }
+        }
+
+        .nav {
+            flex: 1;
+            padding: 24px 16px;
+            overflow-y: auto;
+            position: relative;
+            z-index: 1;
+        }
+
+        .nav-section {
+            margin-bottom: 24px;
+        }
+
+        .nav-section-title {
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            color: var(--text-tertiary);
+            padding: 0 12px;
+            margin-bottom: 8px;
+            letter-spacing: 0.5px;
+        }
+
+        .nav-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px 16px;
+            border-radius: 12px;
+            color: var(--text-secondary);
+            text-decoration: none;
+            transition: all 0.3s ease;
+            margin-bottom: 4px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .nav-item::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 0;
+            height: 100%;
+            background: var(--accent-gradient);
+            opacity: 0.1;
+            transition: width 0.3s ease;
+        }
+
+        .nav-item:hover {
+            background: var(--bg-tertiary);
+            color: var(--text-primary);
+            transform: translateX(4px);
+        }
+
+        .nav-item:hover::before {
+            width: 100%;
+        }
+
+        .nav-item.active {
+            background: var(--bg-tertiary);
+            color: var(--accent-primary);
+            font-weight: 500;
+        }
+
+        .nav-item.active::after {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 3px;
+            height: 20px;
+            background: var(--accent-primary);
+            border-radius: 0 3px 3px 0;
+        }
+
+        .nav-icon {
+            width: 20px;
+            height: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+        }
+
+        .nav-badge {
+            margin-left: auto;
+            background: var(--accent-primary);
+            color: white;
+            font-size: 10px;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-weight: 600;
+        }
+
+        /* Main Content */
+        .main {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Header */
+        .header {
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border);
+            padding: 20px 32px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            backdrop-filter: blur(10px);
+        }
+
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: 24px;
+        }
+
+        .search-box {
+            position: relative;
+            width: 400px;
+        }
+
+        .search-box input {
+            width: 100%;
+            padding: 12px 16px 12px 44px;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            color: var(--text-primary);
+            font-size: 14px;
+            transition: all 0.3s ease;
+        }
+
+        .search-box input:focus {
+            outline: none;
+            border-color: var(--accent-primary);
+            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+        }
+
+        .search-box::before {
+            content: '🔍';
+            position: absolute;
+            left: 16px;
+            top: 50%;
+            transform: translateY(-50%);
+            font-size: 16px;
+            opacity: 0.5;
+        }
+
+        .header-right {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .header-btn {
+            width: 40px;
+            height: 40px;
+            border-radius: 12px;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            position: relative;
+        }
+
+        .header-btn:hover {
+            background: var(--bg-hover);
+            transform: translateY(-2px);
+        }
+
+        .notification-badge {
+            position: absolute;
+            top: -4px;
+            right: -4px;
+            width: 18px;
+            height: 18px;
+            background: var(--danger);
+            color: white;
+            font-size: 10px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 600;
+        }
+
+        .user-menu {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 8px 16px;
+            background: var(--bg-tertiary);
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .user-menu:hover {
+            background: var(--bg-hover);
+        }
+
+        .user-avatar {
+            width: 32px;
+            height: 32px;
+            border-radius: 8px;
+            background: var(--accent-gradient);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 600;
+            font-size: 14px;
+            color: white;
+        }
+
+        /* Content Area */
+        .content {
+            flex: 1;
+            padding: 32px;
+            overflow-y: auto;
+        }
+
+        .page-title {
+            font-size: 28px;
+            font-weight: 700;
+            margin-bottom: 8px;
+            background: linear-gradient(135deg, var(--text-primary) 0%, var(--text-secondary) 100%);
+            background-clip: text;
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .page-subtitle {
+            color: var(--text-secondary);
+            margin-bottom: 32px;
+        }
+
+        /* Stats Grid */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 24px;
+            margin-bottom: 32px;
+        }
+
+        .stat-card {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 24px;
+            position: relative;
+            overflow: hidden;
+            transition: all 0.3s ease;
+        }
+
+        .stat-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 3px;
+            background: var(--accent-gradient);
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        .stat-card:hover {
+            transform: translateY(-4px);
+            box-shadow: var(--shadow);
+            border-color: rgba(99, 102, 241, 0.3);
+        }
+
+        .stat-card:hover::before {
+            opacity: 1;
+        }
+
+        .stat-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 16px;
+        }
+
+        .stat-icon {
+            width: 48px;
+            height: 48px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+        }
+
+        .stat-icon.users { background: linear-gradient(135deg, #667eea, #764ba2); }
+        .stat-icon.money { background: linear-gradient(135deg, #f093fb, #f5576c); }
+        .stat-icon.servers { background: linear-gradient(135deg, #4facfe, #00f2fe); }
+        .stat-icon.chart { background: linear-gradient(135deg, #43e97b, #38f9d7); }
+
+        .stat-value {
+            font-size: 32px;
+            font-weight: 700;
+            margin-bottom: 8px;
+        }
+
+        .stat-label {
+            color: var(--text-secondary);
+            font-size: 14px;
+            margin-bottom: 16px;
+        }
+
+        .stat-change {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .stat-change.positive {
+            background: rgba(16, 185, 129, 0.1);
+            color: var(--success);
+        }
+
+        .stat-change.negative {
+            background: rgba(239, 68, 68, 0.1);
+            color: var(--danger);
+        }
+
+        /* Chart Container */
+        .chart-container {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 24px;
+            margin-bottom: 32px;
+            height: 400px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .chart-container::before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 300px;
+            height: 300px;
+            background: var(--accent-gradient);
+            opacity: 0.05;
+            filter: blur(100px);
+            border-radius: 50%;
+        }
+
+        .chart-placeholder {
+            text-align: center;
+            color: var(--text-tertiary);
+        }
+
+        /* Quick Actions */
+        .quick-actions {
+            display: flex;
+            gap: 16px;
+            margin-bottom: 32px;
+            flex-wrap: wrap;
+        }
+
+        .action-btn {
+            padding: 12px 24px;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            color: var(--text-primary);
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 14px;
+            font-weight: 500;
+        }
+
+        .action-btn:hover {
+            background: var(--bg-tertiary);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+        }
+
+        .action-btn.primary {
+            background: var(--accent-primary);
+            border-color: var(--accent-primary);
+            color: white;
+        }
+
+        .action-btn.primary:hover {
+            background: var(--accent-secondary);
+            border-color: var(--accent-secondary);
+        }
+
+        /* Bot Control Dropdown */
+        .bot-control {
+            position: relative;
+        }
+        
+        .bot-control-btn {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 16px;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            color: var(--text-primary);
+            font-size: 14px;
+            font-weight: 500;
+        }
+        
+        .bot-control-btn:hover {
+            background: var(--bg-hover);
+            border-color: var(--accent-primary);
+        }
+        
+        .bot-status {
+            width: 8px;
+            height: 8px;
+            background: var(--success);
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+        
+        .bot-dropdown {
+            position: absolute;
+            top: 100%;
+            right: 0;
+            margin-top: 8px;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 8px;
+            min-width: 200px;
+            opacity: 0;
+            visibility: hidden;
+            transform: translateY(-10px);
+            transition: all 0.3s ease;
+            z-index: 1000;
+            box-shadow: var(--shadow);
+        }
+        
+        .bot-control:hover .bot-dropdown {
+            opacity: 1;
+            visibility: visible;
+            transform: translateY(0);
+        }
+        
+        .bot-dropdown-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 10px 12px;
+            border-radius: 8px;
+            color: var(--text-secondary);
+            cursor: pointer;
+            transition: all 0.2s ease;
+            font-size: 14px;
+        }
+        
+        .bot-dropdown-item:hover {
+            background: var(--bg-tertiary);
+            color: var(--text-primary);
+        }
+        
+        .bot-dropdown-item.danger {
+            color: var(--danger);
+        }
+        
+        .bot-dropdown-item.warning {
+            color: var(--warning);
+        }
+        
+        .bot-dropdown-divider {
+            height: 1px;
+            background: var(--border);
+            margin: 8px 0;
+        }
+
+        /* Enhanced Table */
+        .table-container {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            overflow: hidden;
+        }
+
+        .table-header {
+            padding: 20px 24px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .table-title {
+            font-size: 18px;
+            font-weight: 600;
+        }
+
+        .table-actions {
+            display: flex;
+            gap: 12px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        thead {
+            background: var(--bg-tertiary);
+        }
+
+        th {
+            padding: 16px 24px;
+            text-align: left;
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+            color: var(--text-tertiary);
+            letter-spacing: 0.5px;
+        }
+
+        td {
+            padding: 16px 24px;
+            border-top: 1px solid var(--border);
+            font-size: 14px;
+        }
+
+        tbody tr {
+            transition: background 0.2s ease;
+        }
+
+        tbody tr:hover {
+            background: rgba(99, 102, 241, 0.05);
+        }
+
+        .user-cell {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .user-avatar-small {
+            width: 36px;
+            height: 36px;
+            border-radius: 8px;
+            background: var(--accent-gradient);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: 600;
+            font-size: 14px;
+        }
+
+        .user-info {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .user-name {
+            font-weight: 500;
+            margin-bottom: 2px;
+        }
+
+        .user-id {
+            font-size: 12px;
+            color: var(--text-tertiary);
+        }
+
+        .status-badge {
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            display: inline-block;
+        }
+
+        .status-badge.active {
+            background: rgba(16, 185, 129, 0.1);
+            color: var(--success);
+        }
+
+        .status-badge.trial {
+            background: rgba(245, 158, 11, 0.1);
+            color: var(--warning);
+        }
+
+        .status-badge.expired {
+            background: rgba(239, 68, 68, 0.1);
+            color: var(--danger);
+        }
+
+        .table-actions-cell {
+            display: flex;
+            gap: 8px;
+        }
+
+        .icon-btn {
+            width: 32px;
+            height: 32px;
+            border-radius: 8px;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            font-size: 14px;
+        }
+
+        .icon-btn:hover {
+            background: var(--bg-hover);
+            transform: scale(1.1);
+        }
+
+        /* Floating Action Button */
+        .fab {
+            position: fixed;
+            bottom: 32px;
+            right: 32px;
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            background: var(--accent-gradient);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 24px;
+            cursor: pointer;
+            box-shadow: var(--shadow);
+            transition: all 0.3s ease;
+            z-index: 1000;
+        }
+
+        .fab:hover {
+            transform: scale(1.1) rotate(90deg);
+        }
+
+        /* Responsive */
+        @media (max-width: 1024px) {
+            .sidebar {
+                position: fixed;
+                left: 0;
+                top: 0;
+                height: 100vh;
+                transform: translateX(-100%);
+                z-index: 1000;
+            }
+
+            .sidebar.open {
+                transform: translateX(0);
+            }
+
+            .search-box {
+                width: 100%;
+            }
+
+            .stats-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        /* Server Details Expansion */
+        .server-card {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            margin-bottom: 24px;
+            overflow: hidden;
+            transition: all 0.3s ease;
+        }
+
+        .server-card-header {
+            padding: 20px 24px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            cursor: pointer;
+            transition: background 0.2s ease;
+        }
+
+        .server-card-header:hover {
+            background: rgba(99, 102, 241, 0.05);
+        }
+
+        .server-info {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .server-flag {
+            font-size: 32px;
+        }
+
+        .server-details {
+            flex: 1;
+        }
+
+        .server-name {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+
+        .server-location {
+            color: var(--text-secondary);
+            font-size: 14px;
+        }
+
+        .server-stats {
+            display: flex;
+            gap: 32px;
+            align-items: center;
+        }
+
+        .server-stat {
+            text-align: center;
+        }
+
+        .server-stat-value {
+            font-size: 20px;
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+
+        .server-stat-label {
+            font-size: 12px;
+            color: var(--text-tertiary);
+            text-transform: uppercase;
+        }
+
+        .expand-icon {
+            width: 32px;
+            height: 32px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 8px;
+            background: var(--bg-tertiary);
+            transition: transform 0.3s ease;
+        }
+
+        .server-card.expanded .expand-icon {
+            transform: rotate(180deg);
+        }
+
+        .server-expanded-content {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.3s ease;
+            border-top: 1px solid var(--border);
+        }
+
+        .server-card.expanded .server-expanded-content {
+            max-height: 600px;
+        }
+
+        .server-expanded-inner {
+            padding: 24px;
+        }
+
+        .server-actions {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 24px;
+        }
+
+        .speed-test-btn {
+            padding: 10px 20px;
+            background: var(--accent-gradient);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .speed-test-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+        }
+
+        .speed-test-btn.testing {
+            background: var(--warning);
+            animation: pulse 1s infinite;
+        }
+
+        .server-metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+
+        .metric-card {
+            background: var(--bg-tertiary);
+            padding: 16px;
+            border-radius: 12px;
+            text-align: center;
+        }
+
+        .metric-value {
+            font-size: 24px;
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+
+        .metric-label {
+            font-size: 12px;
+            color: var(--text-secondary);
+        }
+
+        .server-chart {
+            background: var(--bg-tertiary);
+            border-radius: 12px;
+            padding: 20px;
+            height: 200px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .chart-grid {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-image: 
+                linear-gradient(rgba(99, 102, 241, 0.1) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(99, 102, 241, 0.1) 1px, transparent 1px);
+            background-size: 20px 20px;
+        }
+
+        .chart-line {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 60%;
+            background: linear-gradient(to top, rgba(99, 102, 241, 0.2), transparent);
+            clip-path: polygon(
+                0% 100%,
+                5% 85%, 10% 70%, 15% 75%, 20% 60%, 25% 65%,
+                30% 50%, 35% 55%, 40% 45%, 45% 50%, 50% 40%,
+                55% 45%, 60% 35%, 65% 40%, 70% 30%, 75% 35%,
+                80% 25%, 85% 30%, 90% 20%, 95% 25%, 100% 15%,
+                100% 100%
+            );
+        }
+
+        /* Loading Animation */
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid var(--border);
+            border-top-color: var(--accent-primary);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* Tooltips */
+        [data-tooltip] {
+            position: relative;
+        }
+
+        [data-tooltip]:hover::after {
+            content: attr(data-tooltip);
+            position: absolute;
+            bottom: 100%;
+            left: 50%;
+            transform: translateX(-50%);
+            padding: 8px 12px;
+            background: var(--bg-tertiary);
+            color: var(--text-primary);
+            font-size: 12px;
+            border-radius: 8px;
+            white-space: nowrap;
+            z-index: 1000;
+            pointer-events: none;
+            animation: fadeIn 0.3s ease;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateX(-50%) translateY(4px); }
+            to { opacity: 1; transform: translateX(-50%) translateY(0); }
+        }
+    </style>
+</head>
+<body>
+    <div class="bg-animation"></div>
+    
+    <div class="container">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="logo">
+                <h1>BedolagaAdmin <span class="status"></span></h1>
+            </div>
+            
+            <nav class="nav">
+                <div class="nav-section">
+                    <div class="nav-section-title">Аналитика</div>
+                    <a href="#" class="nav-item active">
+                        <span class="nav-icon">📊</span>
+                        <span>Дашборд</span>
+                    </a>
+                    <a href="#" class="nav-item">
+                        <span class="nav-icon">💰</span>
+                        <span>Финансы</span>
+                        <span class="nav-badge">12</span>
+                    </a>
+                    <a href="#" class="nav-item">
+                        <span class="nav-icon">📈</span>
+                        <span>Статистика</span>
+                    </a>
+                </div>
+                
+                <div class="nav-section">
+                    <div class="nav-section-title">Управление</div>
+                    <a href="#" class="nav-item">
+                        <span class="nav-icon">👥</span>
+                        <span>Пользователи</span>
+                    </a>
+                    <a href="#" class="nav-item">
+                        <span class="nav-icon">💳</span>
+                        <span>Подписки</span>
+                    </a>
+                    <a href="#" class="nav-item">
+                        <span class="nav-icon">🎫</span>
+                        <span>Промокоды</span>
+                    </a>
+                    <a href="#" class="nav-item">
+                        <span class="nav-icon">👫</span>
+                        <span>Промогруппы</span>
+                    </a>
+                    <a href="#" class="nav-item">
+                        <span class="nav-icon">🔗</span>
+                        <span>Рефералы</span>
+                    </a>
+                    <a href="#" class="nav-item">
+                        <span class="nav-icon">🖥️</span>
+                        <span>Серверы</span>
+                        <span class="nav-badge" style="background: var(--success);">✓</span>
+                    </a>
+                    <a href="#" class="nav-item">
+                        <span class="nav-icon">🌊</span>
+                        <span>Remnawave</span>
+                    </a>
+                    <a href="#" class="nav-item">
+                        <span class="nav-icon">📨</span>
+                        <span>Рассылки</span>
+                    </a>
+                    <a href="#" class="nav-item">
+                        <span class="nav-icon">📢</span>
+                        <span>Рекламные кампании</span>
+                    </a>
+                    <a href="#" class="nav-item">
+                        <span class="nav-icon">🎫</span>
+                        <span>Тикеты</span>
+                        <span class="nav-badge">5</span>
+                    </a>
+                </div>
+                
+                <div class="nav-section">
+                    <div class="nav-section-title">Система</div>
+                    <a href="#" class="nav-item">
+                        <span class="nav-icon">💳</span>
+                        <span>Платежные шлюзы</span>
+                    </a>
+                    <a href="#" class="nav-item">
+                        <span class="nav-icon">💸</span>
+                        <span>Настройка цен</span>
+                    </a>
+                    <a href="#" class="nav-item">
+                        <span class="nav-icon">💰</span>
+                        <span>Автоплатежи</span>
+                    </a>
+                    <a href="#" class="nav-item">
+                        <span class="nav-icon">🌍</span>
+                        <span>Локализация</span>
+                    </a>
+                    <a href="#" class="nav-item">
+                        <span class="nav-icon">📑</span>
+                        <span>Отчеты</span>
+                    </a>
+                    <a href="#" class="nav-item">
+                        <span class="nav-icon">🗄️</span>
+                        <span>Бекапы</span>
+                    </a>
+                    <a href="#" class="nav-item">
+                        <span class="nav-icon">📋</span>
+                        <span>Логи</span>
+                    </a>
+                    <a href="#" class="nav-item">
+                        <span class="nav-icon">⚙️</span>
+                        <span>Настройки</span>
+                    </a>
+                </div>
+            </nav>
+        </aside>
+        
+        <!-- Main Content -->
+        <main class="main">
+            <!-- Header -->
+            <header class="header">
+                <div class="header-left">
+                    <div class="search-box">
+                        <input type="text" placeholder="Поиск пользователей, ID, email...">
+                    </div>
+                </div>
+                
+                <div class="header-right">
+                    <div class="bot-control">
+                        <button class="bot-control-btn">
+                            <span class="bot-status"></span>
+                            <span>Бот активен</span>
+                            <span style="font-size: 12px;">▼</span>
+                        </button>
+                        <div class="bot-dropdown">
+                            <div class="bot-dropdown-item">
+                                <span>🔄</span>
+                                <span>Перезапустить бота</span>
+                            </div>
+                            <div class="bot-dropdown-item warning">
+                                <span>⏸️</span>
+                                <span>Остановить бота</span>
+                            </div>
+                            <div class="bot-dropdown-item">
+                                <span>▶️</span>
+                                <span>Запустить бота</span>
+                            </div>
+                            <div class="bot-dropdown-divider"></div>
+                            <div class="bot-dropdown-item">
+                                <span>🔄</span>
+                                <span>Синхронизация</span>
+                            </div>
+                            <div class="bot-dropdown-item danger">
+                                <span>🚧</span>
+                                <span>Режим техработ</span>
+                            </div>
+                        </div>
+                    </div>
+                    <button class="header-btn" data-tooltip="Уведомления">
+                        <span>🔔</span>
+                        <span class="notification-badge">3</span>
+                    </button>
+                    <div class="user-menu">
+                        <div class="user-avatar">A</div>
+                        <div>
+                            <div style="font-size: 14px; font-weight: 500;">Admin</div>
+                            <div style="font-size: 12px; color: var(--text-tertiary);">Супер админ</div>
+                        </div>
+                    </div>
+                </div>
+            </header>
+            
+            <!-- Content Area -->
+            <div class="content">
+                <h1 class="page-title">Панель управления</h1>
+                <p class="page-subtitle">Добро пожаловать в систему управления VPN ботом</p>
+                
+                <!-- Stats Grid -->
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-header">
+                            <div>
+                                <div class="stat-value">1,284</div>
+                                <div class="stat-label">Всего пользователей</div>
+                            </div>
+                            <div class="stat-icon users">👥</div>
+                        </div>
+                        <span class="stat-change positive">↑ 12% за неделю</span>
+                    </div>
+                    
+                    <div class="stat-card">
+                        <div class="stat-header">
+                            <div>
+                                <div class="stat-value">₽84,290</div>
+                                <div class="stat-label">Доход за месяц</div>
+                            </div>
+                            <div class="stat-icon money">💰</div>
+                        </div>
+                        <span class="stat-change positive">↑ 23% к прошлому</span>
+                    </div>
+                    
+                    <div class="stat-card">
+                        <div class="stat-header">
+                            <div>
+                                <div class="stat-value">8 / 8</div>
+                                <div class="stat-label">Активные серверы</div>
+                            </div>
+                            <div class="stat-icon servers">🖥️</div>
+                        </div>
+                        <span class="stat-change positive">100% uptime</span>
+                    </div>
+                    
+                    <div class="stat-card">
+                        <div class="stat-header">
+                            <div>
+                                <div class="stat-value">68%</div>
+                                <div class="stat-label">Конверсия триал → платная</div>
+                            </div>
+                            <div class="stat-icon chart">📈</div>
+                        </div>
+                        <span class="stat-change positive">↑ 5% за месяц</span>
+                    </div>
+                </div>
+                
+                <!-- Chart -->
+                <div class="chart-container">
+                    <div class="chart-placeholder">
+                        <div style="font-size: 48px; margin-bottom: 16px;">📊</div>
+                        <div style="font-size: 18px; font-weight: 500; margin-bottom: 8px;">График продаж</div>
+                        <div style="font-size: 14px;">Динамика подписок за последние 30 дней</div>
+                    </div>
+                </div>
+                
+                <!-- Quick Actions -->
+                <div class="quick-actions">
+                    <button class="action-btn primary">
+                        <span>➕</span>
+                        <span>Создать промокод</span>
+                    </button>
+                    <button class="action-btn">
+                        <span>📢</span>
+                        <span>Массовая рассылка</span>
+                    </button>
+                    <button class="action-btn">
+                        <span>💾</span>
+                        <span>Создать бекап</span>
+                    </button>
+                    <button class="action-btn">
+                        <span>🔄</span>
+                        <span>Синхронизация</span>
+                    </button>
+                </div>
+                
+                <!-- Active Servers Section -->
+                <div style="margin-bottom: 32px;">
+                    <h2 style="font-size: 20px; font-weight: 600; margin-bottom: 20px; display: flex; align-items: center; gap: 12px;">
+                        <span>🖥️</span>
+                        <span>Активные серверы</span>
+                        <span style="background: var(--success); color: white; font-size: 12px; padding: 4px 12px; border-radius: 20px;">8 онлайн</span>
+                    </h2>
+                    
+                    <!-- Server Card 1 - Expanded Example -->
+                    <div class="server-card expanded">
+                        <div class="server-card-header" onclick="this.parentElement.classList.toggle('expanded')">
+                            <div class="server-info">
+                                <span class="server-flag">🇳🇱</span>
+                                <div class="server-details">
+                                    <div class="server-name">Netherlands-1</div>
+                                    <div class="server-location">Amsterdam, Digital Ocean</div>
+                                </div>
+                            </div>
+                            <div class="server-stats">
+                                <div class="server-stat">
+                                    <div class="server-stat-value" style="color: var(--success);">342</div>
+                                    <div class="server-stat-label">Пользователей</div>
+                                </div>
+                                <div class="server-stat">
+                                    <div class="server-stat-value">45%</div>
+                                    <div class="server-stat-label">CPU</div>
+                                </div>
+                                <div class="server-stat">
+                                    <div class="server-stat-value">2.4GB</div>
+                                    <div class="server-stat-label">RAM</div>
+                                </div>
+                                <div class="server-stat">
+                                    <div class="server-stat-value" style="color: var(--success);">99.9%</div>
+                                    <div class="server-stat-label">Uptime</div>
+                                </div>
+                                <div class="expand-icon">▼</div>
+                            </div>
+                        </div>
+                        
+                        <div class="server-expanded-content">
+                            <div class="server-expanded-inner">
+                                <div class="server-actions">
+                                    <button class="speed-test-btn">
+                                        <span>⚡</span>
+                                        <span>Speed Test</span>
+                                    </button>
+                                    <button class="action-btn">
+                                        <span>🔄</span>
+                                        <span>Перезагрузить</span>
+                                    </button>
+                                    <button class="action-btn">
+                                        <span>📊</span>
+                                        <span>Детальная статистика</span>
+                                    </button>
+                                    <button class="action-btn" style="background: rgba(239, 68, 68, 0.1); color: var(--danger);">
+                                        <span>⏸️</span>
+                                        <span>Остановить</span>
+                                    </button>
+                                </div>
+                                
+                                <div class="server-metrics-grid">
+                                    <div class="metric-card">
+                                        <div class="metric-value" style="color: var(--success);">12ms</div>
+                                        <div class="metric-label">Ping</div>
+                                    </div>
+                                    <div class="metric-card">
+                                        <div class="metric-value">945 Mbps</div>
+                                        <div class="metric-label">Download</div>
+                                    </div>
+                                    <div class="metric-card">
+                                        <div class="metric-value">892 Mbps</div>
+                                        <div class="metric-label">Upload</div>
+                                    </div>
+                                    <div class="metric-card">
+                                        <div class="metric-value">1.2TB</div>
+                                        <div class="metric-label">Трафик/день</div>
+                                    </div>
+                                    <div class="metric-card">
+                                        <div class="metric-value">28°C</div>
+                                        <div class="metric-label">Температура</div>
+                                    </div>
+                                    <div class="metric-card">
+                                        <div class="metric-value">14d 6h</div>
+                                        <div class="metric-label">Работает</div>
+                                    </div>
+                                </div>
+                                
+                                <div style="margin-bottom: 12px; color: var(--text-secondary); font-size: 14px;">
+                                    📈 Нагрузка сервера (последние 24 часа)
+                                </div>
+                                <div class="server-chart">
+                                    <div class="chart-grid"></div>
+                                    <div class="chart-line"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Server Card 2 -->
+                    <div class="server-card">
+                        <div class="server-card-header" onclick="this.parentElement.classList.toggle('expanded')">
+                            <div class="server-info">
+                                <span class="server-flag">🇩🇪</span>
+                                <div class="server-details">
+                                    <div class="server-name">Germany-2</div>
+                                    <div class="server-location">Frankfurt, Hetzner</div>
+                                </div>
+                            </div>
+                            <div class="server-stats">
+                                <div class="server-stat">
+                                    <div class="server-stat-value" style="color: var(--warning);">298</div>
+                                    <div class="server-stat-label">Пользователей</div>
+                                </div>
+                                <div class="server-stat">
+                                    <div class="server-stat-value" style="color: var(--warning);">68%</div>
+                                    <div class="server-stat-label">CPU</div>
+                                </div>
+                                <div class="server-stat">
+                                    <div class="server-stat-value">3.1GB</div>
+                                    <div class="server-stat-label">RAM</div>
+                                </div>
+                                <div class="server-stat">
+                                    <div class="server-stat-value" style="color: var(--success);">100%</div>
+                                    <div class="server-stat-label">Uptime</div>
+                                </div>
+                                <div class="expand-icon">▼</div>
+                            </div>
+                        </div>
+                        
+                        <div class="server-expanded-content">
+                            <div class="server-expanded-inner">
+                                <div class="server-actions">
+                                    <button class="speed-test-btn">
+                                        <span>⚡</span>
+                                        <span>Speed Test</span>
+                                    </button>
+                                    <button class="action-btn">
+                                        <span>🔄</span>
+                                        <span>Перезагрузить</span>
+                                    </button>
+                                    <button class="action-btn">
+                                        <span>📊</span>
+                                        <span>Детальная статистика</span>
+                                    </button>
+                                    <button class="action-btn" style="background: rgba(239, 68, 68, 0.1); color: var(--danger);">
+                                        <span>⏸️</span>
+                                        <span>Остановить</span>
+                                    </button>
+                                </div>
+                                
+                                <div class="server-metrics-grid">
+                                    <div class="metric-card">
+                                        <div class="metric-value" style="color: var(--success);">8ms</div>
+                                        <div class="metric-label">Ping</div>
+                                    </div>
+                                    <div class="metric-card">
+                                        <div class="metric-value">1024 Mbps</div>
+                                        <div class="metric-label">Download</div>
+                                    </div>
+                                    <div class="metric-card">
+                                        <div class="metric-value">976 Mbps</div>
+                                        <div class="metric-label">Upload</div>
+                                    </div>
+                                    <div class="metric-card">
+                                        <div class="metric-value">980GB</div>
+                                        <div class="metric-label">Трафик/день</div>
+                                    </div>
+                                    <div class="metric-card">
+                                        <div class="metric-value">32°C</div>
+                                        <div class="metric-label">Температура</div>
+                                    </div>
+                                    <div class="metric-card">
+                                        <div class="metric-value">28d 12h</div>
+                                        <div class="metric-label">Работает</div>
+                                    </div>
+                                </div>
+                                
+                                <div style="margin-bottom: 12px; color: var(--text-secondary); font-size: 14px;">
+                                    📈 Нагрузка сервера (последние 24 часа)
+                                </div>
+                                <div class="server-chart">
+                                    <div class="chart-grid"></div>
+                                    <div class="chart-line"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Server Card 3 -->
+                    <div class="server-card">
+                        <div class="server-card-header" onclick="this.parentElement.classList.toggle('expanded')">
+                            <div class="server-info">
+                                <span class="server-flag">🇸🇪</span>
+                                <div class="server-details">
+                                    <div class="server-name">Sweden-1</div>
+                                    <div class="server-location">Stockholm, OVH</div>
+                                </div>
+                            </div>
+                            <div class="server-stats">
+                                <div class="server-stat">
+                                    <div class="server-stat-value" style="color: var(--success);">256</div>
+                                    <div class="server-stat-label">Пользователей</div>
+                                </div>
+                                <div class="server-stat">
+                                    <div class="server-stat-value" style="color: var(--success);">32%</div>
+                                    <div class="server-stat-label">CPU</div>
+                                </div>
+                                <div class="server-stat">
+                                    <div class="server-stat-value">1.8GB</div>
+                                    <div class="server-stat-label">RAM</div>
+                                </div>
+                                <div class="server-stat">
+                                    <div class="server-stat-value" style="color: var(--success);">99.8%</div>
+                                    <div class="server-stat-label">Uptime</div>
+                                </div>
+                                <div class="expand-icon">▼</div>
+                            </div>
+                        </div>
+                        
+                        <div class="server-expanded-content">
+                            <div class="server-expanded-inner">
+                                <div class="server-actions">
+                                    <button class="speed-test-btn">
+                                        <span>⚡</span>
+                                        <span>Speed Test</span>
+                                    </button>
+                                    <button class="action-btn">
+                                        <span>🔄</span>
+                                        <span>Перезагрузить</span>
+                                    </button>
+                                    <button class="action-btn">
+                                        <span>📊</span>
+                                        <span>Детальная статистика</span>
+                                    </button>
+                                    <button class="action-btn" style="background: rgba(239, 68, 68, 0.1); color: var(--danger);">
+                                        <span>⏸️</span>
+                                        <span>Остановить</span>
+                                    </button>
+                                </div>
+                                
+                                <div class="server-metrics-grid">
+                                    <div class="metric-card">
+                                        <div class="metric-value" style="color: var(--success);">15ms</div>
+                                        <div class="metric-label">Ping</div>
+                                    </div>
+                                    <div class="metric-card">
+                                        <div class="metric-value">850 Mbps</div>
+                                        <div class="metric-label">Download</div>
+                                    </div>
+                                    <div class="metric-card">
+                                        <div class="metric-value">820 Mbps</div>
+                                        <div class="metric-label">Upload</div>
+                                    </div>
+                                    <div class="metric-card">
+                                        <div class="metric-value">650GB</div>
+                                        <div class="metric-label">Трафик/день</div>
+                                    </div>
+                                    <div class="metric-card">
+                                        <div class="metric-value">26°C</div>
+                                        <div class="metric-label">Температура</div>
+                                    </div>
+                                    <div class="metric-card">
+                                        <div class="metric-value">7d 18h</div>
+                                        <div class="metric-label">Работает</div>
+                                    </div>
+                                </div>
+                                
+                                <div style="margin-bottom: 12px; color: var(--text-secondary); font-size: 14px;">
+                                    📈 Нагрузка сервера (последние 24 часа)
+                                </div>
+                                <div class="server-chart">
+                                    <div class="chart-grid"></div>
+                                    <div class="chart-line"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Recent Users Table -->
+                <div class="table-container">
+                    <div class="table-header">
+                        <h3 class="table
