@@ -34,6 +34,13 @@ class Settings(BaseSettings):
     ADMIN_REPORTS_TOPIC_ID: Optional[int] = None
     ADMIN_REPORTS_SEND_TIME: Optional[str] = None
 
+    ADMIN_API_ENABLED: bool = False
+    ADMIN_API_HOST: str = "0.0.0.0"
+    ADMIN_API_PORT: int = 8085
+    ADMIN_API_TOKEN: Optional[str] = None
+    ADMIN_API_ALLOWED_IPS: str = ""
+    ADMIN_API_CORS_ORIGINS: str = ""
+
     CHANNEL_SUB_ID: Optional[str] = None
     CHANNEL_LINK: Optional[str] = None
     CHANNEL_IS_REQUIRED_SUB: bool = False
@@ -467,7 +474,16 @@ class Settings(BaseSettings):
                 "Некорректное значение ADMIN_REPORTS_SEND_TIME: %s", value
             )
             return None
-    
+
+    def get_admin_api_allowed_ips(self) -> List[str]:
+        raw_value = self.ADMIN_API_ALLOWED_IPS or ""
+        return [item.strip() for item in raw_value.split(",") if item.strip()]
+
+    def get_admin_api_cors_origins(self) -> List[str]:
+        raw_value = self.ADMIN_API_CORS_ORIGINS or ""
+        origins = [item.strip() for item in raw_value.split(",") if item.strip()]
+        return origins or ["*"]
+
     def kopeks_to_rubles(self, kopeks: int) -> float:
         return kopeks / 100
     

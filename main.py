@@ -14,6 +14,7 @@ from app.services.monitoring_service import monitoring_service
 from app.services.maintenance_service import maintenance_service
 from app.services.payment_service import PaymentService
 from app.services.version_service import version_service
+from app.external.admin_api import AdminAPIServer
 from app.external.webhook_server import WebhookServer
 from app.external.yookassa_webhook import start_yookassa_webhook_server
 from app.external.pal24_webhook import start_pal24_webhook_server, Pal24WebhookServer
@@ -57,6 +58,7 @@ async def main():
     signal.signal(signal.SIGTERM, killer.exit_gracefully)
     
     webhook_server = None
+    admin_api_server: AdminAPIServer | None = None
     yookassa_server_task = None
     pal24_server: Pal24WebhookServer | None = None
     monitoring_task = None
@@ -129,7 +131,17 @@ async def main():
             logger.error(f"❌ Ошибка запуска сервиса отчетов: {e}")
 
         payment_service = PaymentService(bot)
-        
+
+        if settings.ADMIN_API_ENABLED:
+            try:
+                admin_api_server = AdminAPIServer()
+                await admin_api_server.start()
+            except Exception as error:
+                logger.error(f"❌ Не удалось запустить Admin API: {error}")
+                admin_api_server = None
+        else:
+            logger.info("ℹ️ Admin API отключен")
+
         webhook_needed = (
             settings.TRIBUTE_ENABLED
             or settings.is_cryptobot_enabled()
@@ -207,6 +219,10 @@ async def main():
         logger.info(
             "   Отчеты: %s",
             "Включен" if reporting_service.is_running() else "Отключен",
+        )
+        logger.info(
+            "   Admin API: %s",
+            "Включен" if admin_api_server else "Отключен",
         )
         logger.info("=" * 50)
         
@@ -316,7 +332,11 @@ async def main():
                 await polling_task
             except asyncio.CancelledError:
                 pass
-        
+
+        if admin_api_server:
+            logger.info("ℹ️ Остановка Admin API сервера...")
+            await admin_api_server.stop()
+
         if webhook_server:
             logger.info("ℹ️ Остановка webhook сервера...")
             await webhook_server.stop()
