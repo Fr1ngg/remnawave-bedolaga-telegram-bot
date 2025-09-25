@@ -64,7 +64,10 @@ from app.utils.pricing_utils import (
     format_period_description,
 )
 from app.utils.pagination import paginate_list
-from app.utils.subscription_utils import get_display_subscription_link
+from app.utils.subscription_utils import (
+    get_display_subscription_link,
+    get_subscription_button_link,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -4602,6 +4605,7 @@ async def handle_open_subscription_link(
     texts = get_texts(db_user.language)
     subscription = db_user.subscription
     subscription_link = get_display_subscription_link(subscription)
+    button_link = get_subscription_button_link(subscription)
 
     if not subscription_link:
         await callback.answer(
@@ -4611,16 +4615,24 @@ async def handle_open_subscription_link(
         return
 
     if settings.is_happ_cryptolink_mode():
+        if button_link:
+            open_link_text = texts.t(
+                "SUBSCRIPTION_HAPP_OPEN_LINK",
+                "<a href=\"{subscription_link}\">🔓 Открыть ссылку в Happ</a>",
+            ).format(subscription_link=button_link)
+        else:
+            open_link_text = texts.t(
+                "SUBSCRIPTION_HAPP_OPEN_LINK_MANUAL",
+                "🔓 Скопируйте ссылку ниже и откройте её вручную в Happ.",
+            )
+
         happ_message = (
             texts.t(
                 "SUBSCRIPTION_HAPP_OPEN_TITLE",
                 "🔗 <b>Подключение через Happ</b>",
             )
             + "\n\n"
-            + texts.t(
-                "SUBSCRIPTION_HAPP_OPEN_LINK",
-                "<a href=\"{subscription_link}\">🔓 Открыть ссылку в Happ</a>",
-            ).format(subscription_link=subscription_link)
+            + open_link_text
             + "\n\n"
             + texts.t(
                 "SUBSCRIPTION_HAPP_OPEN_HINT",
@@ -4628,7 +4640,10 @@ async def handle_open_subscription_link(
             ).format(subscription_link=subscription_link)
         )
 
-        keyboard = get_happ_cryptolink_keyboard(subscription_link, db_user.language)
+        keyboard = get_happ_cryptolink_keyboard(
+            button_link,
+            db_user.language,
+        )
 
         await callback.message.answer(
             happ_message,

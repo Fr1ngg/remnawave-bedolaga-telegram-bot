@@ -1,6 +1,8 @@
 import logging
 from datetime import datetime
 from typing import Optional
+
+from urllib.parse import urlsplit
 from sqlalchemy import select, delete, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.database.models import Subscription, User
@@ -109,3 +111,31 @@ def get_display_subscription_link(subscription: Optional[Subscription]) -> Optio
         return crypto_link or base_link
 
     return base_link
+
+
+_TELEGRAM_SUPPORTED_URL_SCHEMES = {"http", "https", "tg"}
+
+
+def _is_telegram_supported_url(url: Optional[str]) -> bool:
+    if not url:
+        return False
+
+    scheme = urlsplit(url).scheme
+    return scheme in _TELEGRAM_SUPPORTED_URL_SCHEMES
+
+
+def get_subscription_button_link(subscription: Optional[Subscription]) -> Optional[str]:
+    """Return a subscription link that can be safely attached to Telegram buttons."""
+
+    if not subscription:
+        return None
+
+    crypto_link = getattr(subscription, "subscription_crypto_link", None)
+    if _is_telegram_supported_url(crypto_link):
+        return crypto_link
+
+    base_link = getattr(subscription, "subscription_url", None)
+    if _is_telegram_supported_url(base_link):
+        return base_link
+
+    return None

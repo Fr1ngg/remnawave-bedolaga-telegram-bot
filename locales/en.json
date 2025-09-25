@@ -408,6 +408,7 @@
   "SUBSCRIPTION_DEVICE_GUIDE_TITLE": "📱 <b>Setup for {device_name}</b>",
   "SUBSCRIPTION_HAPP_OPEN_TITLE": "🔗 <b>Connect via Happ</b>",
   "SUBSCRIPTION_HAPP_OPEN_LINK": "<a href=\"{subscription_link}\">🔓 Open link in Happ</a>",
+  "SUBSCRIPTION_HAPP_OPEN_LINK_MANUAL": "🔓 Copy the link below and open it manually in Happ.",
   "SUBSCRIPTION_HAPP_OPEN_HINT": "💡 If the link doesn't open automatically, copy it manually: <code>{subscription_link}</code>",
   "SUBSCRIPTION_DEVICE_LINK_TITLE": "🔗 <b>Subscription link:</b>",
   "SUBSCRIPTION_DEVICE_FEATURED_APP": "📋 <b>Recommended app:</b> {app_name}",
