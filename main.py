@@ -22,6 +22,7 @@ from app.services.backup_service import backup_service
 from app.services.reporting_service import reporting_service
 from app.localization.loader import ensure_locale_templates
 from app.services.system_settings_service import bot_configuration_service
+from app.api import AdminAPIServer
 
 
 class GracefulExit:
@@ -63,6 +64,7 @@ async def main():
     maintenance_task = None
     version_check_task = None
     polling_task = None
+    admin_api_server: AdminAPIServer | None = None
     
     try:
         logger.info("📊 Инициализация базы данных...")
@@ -164,6 +166,18 @@ async def main():
             pal24_server = await start_pal24_webhook_server(payment_service)
         else:
             logger.info("ℹ️ PayPalych отключен, webhook сервер не запускается")
+
+        if settings.ADMIN_API_ENABLED and settings.ADMIN_API_TOKEN:
+            try:
+                admin_api_server = AdminAPIServer(bot)
+                await admin_api_server.start()
+            except Exception as api_error:
+                logger.error("❌ Ошибка запуска Admin API: %s", api_error)
+                admin_api_server = None
+        elif settings.ADMIN_API_ENABLED:
+            logger.warning("⚠️ Admin API включен, но ADMIN_API_TOKEN не задан. Сервис не запущен")
+        else:
+            logger.info("ℹ️ Admin API отключен")
 
         logger.info("📊 Запуск службы мониторинга...")
         monitoring_task = asyncio.create_task(monitoring_service.start_monitoring())
@@ -317,6 +331,13 @@ async def main():
             except asyncio.CancelledError:
                 pass
         
+        if admin_api_server:
+            logger.info("ℹ️ Остановка Admin API...")
+            try:
+                await admin_api_server.stop()
+            except Exception as api_error:
+                logger.error("Ошибка остановки Admin API: %s", api_error)
+
         if webhook_server:
             logger.info("ℹ️ Остановка webhook сервера...")
             await webhook_server.stop()

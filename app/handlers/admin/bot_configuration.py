@@ -94,7 +94,7 @@ CATEGORY_GROUP_DEFINITIONS: Tuple[Tuple[str, str, Tuple[str, ...]], ...] = (
     (
         "technical",
         "🧰 Технические",
-        ("LOG", "WEBHOOK", "DEBUG"),
+        ("LOG", "WEBHOOK", "ADMIN_API", "DEBUG"),
     ),
 )
 
