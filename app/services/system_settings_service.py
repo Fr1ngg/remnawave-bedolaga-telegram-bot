@@ -100,7 +100,6 @@ class BotConfigurationService:
         "LOG": "Логирование",
         "WEBHOOK": "Вебхуки",
         "DEBUG": "Режим разработки",
-        "ADMIN_API": "API админ-панели",
     }
 
     CATEGORY_KEY_OVERRIDES: Dict[str, str] = {
@@ -195,7 +194,6 @@ class BotConfigurationService:
         "WEBHOOK_": "WEBHOOK",
         "LOG_": "LOG",
         "DEBUG": "DEBUG",
-        "ADMIN_API_": "ADMIN_API",
     }
 
     CHOICES: Dict[str, List[ChoiceOption]] = {
@@ -402,11 +400,6 @@ class BotConfigurationService:
         ]
         filtered.sort(key=lambda definition: definition.key)
         return filtered
-
-    @classmethod
-    def get_all_definitions(cls) -> List[SettingDefinition]:
-        cls.initialize_definitions()
-        return sorted(cls._definitions.values(), key=lambda definition: definition.key)
 
     @classmethod
     def get_definition(cls, key: str) -> SettingDefinition:

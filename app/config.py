@@ -231,13 +231,6 @@ class Settings(BaseSettings):
     DEBUG: bool = False
     WEBHOOK_URL: Optional[str] = None
     WEBHOOK_PATH: str = "/webhook"
-
-    ADMIN_API_ENABLED: bool = False
-    ADMIN_API_HOST: str = "0.0.0.0"
-    ADMIN_API_PORT: int = 8085
-    ADMIN_API_TOKEN: Optional[str] = None
-    ADMIN_API_ALLOWED_IPS: str = ""
-    ADMIN_API_CORS_ORIGINS: str = ""
     
     APP_CONFIG_PATH: str = "app-config.json"
     ENABLE_DEEP_LINKS: bool = True
@@ -499,32 +492,6 @@ class Settings(BaseSettings):
     
     def get_app_config_cache_ttl(self) -> int:
         return self.APP_CONFIG_CACHE_TTL
-
-    def get_admin_api_allowed_ips(self) -> List[str]:
-        raw_value = self.ADMIN_API_ALLOWED_IPS
-        if not raw_value:
-            return []
-
-        if isinstance(raw_value, str):
-            return [ip.strip() for ip in raw_value.split(",") if ip.strip()]
-
-        try:
-            return [str(ip).strip() for ip in raw_value if str(ip).strip()]
-        except TypeError:
-            return []
-
-    def get_admin_api_cors_origins(self) -> List[str]:
-        raw_value = self.ADMIN_API_CORS_ORIGINS
-        if not raw_value:
-            return []
-
-        if isinstance(raw_value, str):
-            return [origin.strip() for origin in raw_value.split(",") if origin.strip()]
-
-        try:
-            return [str(origin).strip() for origin in raw_value if str(origin).strip()]
-        except TypeError:
-            return []
     
     def is_traffic_selectable(self) -> bool:
         return self.TRAFFIC_SELECTION_MODE.lower() == "selectable"
