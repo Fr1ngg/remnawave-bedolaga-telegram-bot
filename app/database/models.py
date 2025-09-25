@@ -1091,7 +1091,7 @@ class Ticket(Base):
 
 class TicketMessage(Base):
     __tablename__ = "ticket_messages"
-
+    
     id = Column(Integer, primary_key=True, index=True)
     ticket_id = Column(Integer, ForeignKey("tickets.id", ondelete="CASCADE"), nullable=False)
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
@@ -1118,61 +1118,6 @@ class TicketMessage(Base):
     @property
     def is_admin_message(self) -> bool:
         return self.is_from_admin
-
+    
     def __repr__(self):
         return f"<TicketMessage(id={self.id}, ticket_id={self.ticket_id}, is_admin={self.is_from_admin}, text='{self.message_text[:30]}...')>"
-
-
-class AdminApiClient(Base):
-    __tablename__ = "admin_api_clients"
-
-    id = Column(Integer, primary_key=True, index=True)
-    name = Column(String(100), nullable=False)
-    description = Column(Text, nullable=True)
-    auth_type = Column(String(20), nullable=False, default="api_key")
-    token_prefix = Column(String(16), nullable=False, unique=True)
-    token_hash = Column(String(128), nullable=False, unique=True)
-    basic_username = Column(String(255), nullable=True)
-    cookie_key = Column(String(255), nullable=True)
-    cookie_value_hash = Column(String(128), nullable=True)
-    allowed_origins = Column(JSON, nullable=True)
-    allowed_ips = Column(JSON, nullable=True)
-    permissions = Column(JSON, nullable=True)
-    metadata_json = Column(JSON, nullable=True)
-    is_active = Column(Boolean, nullable=False, default=True)
-    last_used_at = Column(DateTime, nullable=True)
-    last_used_ip = Column(String(64), nullable=True)
-    last_user_agent = Column(String(255), nullable=True)
-    created_at = Column(DateTime, default=func.now())
-    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
-
-    audit_logs = relationship("AdminApiAuditLog", back_populates="client")
-
-    def __repr__(self) -> str:
-        return f"<AdminApiClient(id={self.id}, name={self.name!r}, auth_type={self.auth_type}, active={self.is_active})>"
-
-
-class AdminApiAuditLog(Base):
-    __tablename__ = "admin_api_audit_log"
-
-    id = Column(Integer, primary_key=True, index=True)
-    client_id = Column(Integer, ForeignKey("admin_api_clients.id", ondelete="SET NULL"), nullable=True)
-    token_prefix = Column(String(16), nullable=True, index=True)
-    auth_type = Column(String(20), nullable=True)
-    method = Column(String(10), nullable=False)
-    path = Column(String(255), nullable=False)
-    action = Column(String(100), nullable=True)
-    status_code = Column(Integer, nullable=False)
-    ip_address = Column(String(64), nullable=True)
-    user_agent = Column(String(255), nullable=True)
-    response_time_ms = Column(Float, nullable=True)
-    metadata_json = Column(JSON, nullable=True)
-    created_at = Column(DateTime, default=func.now(), index=True)
-
-    client = relationship("AdminApiClient", back_populates="audit_logs")
-
-    def __repr__(self) -> str:
-        return (
-            f"<AdminApiAuditLog(id={self.id}, client_id={self.client_id}, "
-            f"method={self.method}, path={self.path}, status={self.status_code})>"
-        )
