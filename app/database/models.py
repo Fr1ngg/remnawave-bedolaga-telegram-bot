@@ -758,14 +758,28 @@ class ServiceRule(Base):
 
 class SystemSetting(Base):
     __tablename__ = "system_settings"
-    
+
     id = Column(Integer, primary_key=True, index=True)
     key = Column(String(255), unique=True, nullable=False)
     value = Column(Text, nullable=True)
     description = Column(Text, nullable=True)
-    
+
     created_at = Column(DateTime, default=func.now())
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+
+
+class WebAdminSession(Base):
+    __tablename__ = "webadmin_sessions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    token = Column(String(128), unique=True, nullable=False, index=True)
+    refresh_token = Column(String(128), unique=True, nullable=False, index=True)
+    ip_address = Column(String(64), nullable=True)
+    user_agent = Column(String(255), nullable=True)
+    expires_at = Column(DateTime, nullable=False)
+    created_at = Column(DateTime, default=func.now())
+    refreshed_at = Column(DateTime, default=func.now(), onupdate=func.now())
+    revoked_at = Column(DateTime, nullable=True)
 
 
 class MonitoringLog(Base):
