@@ -25,27 +25,6 @@ except ModuleNotFoundError:  # pragma: no cover - executed only when dependency 
 
     _GOOGLE_SDK_AVAILABLE = False
 
-_MISSING_DEPENDENCIES_MESSAGE = (
-    "Google Drive integration requires optional dependencies: "
-    "google-api-python-client, google-auth, google-auth-httplib2"
-)
-
-_missing_dependencies_logged = False
-
-
-def _log_missing_dependencies_once() -> None:
-    global _missing_dependencies_logged
-
-    if _missing_dependencies_logged:
-        return
-
-    logger.error(
-        "%s Install them with `pip install google-api-python-client google-auth "
-        "google-auth-httplib2` to enable this feature.",
-        _MISSING_DEPENDENCIES_MESSAGE,
-    )
-    _missing_dependencies_logged = True
-
 from app.config import settings
 
 if TYPE_CHECKING:
@@ -74,7 +53,10 @@ class GoogleDriveService:
             raise RuntimeError("Google Drive integration is not enabled")
 
         if not _GOOGLE_SDK_AVAILABLE:
-            raise RuntimeError(_MISSING_DEPENDENCIES_MESSAGE)
+            raise RuntimeError(
+                "Google Drive integration requires optional dependencies: "
+                "google-api-python-client, google-auth, google-auth-httplib2"
+            )
 
         self._credentials = None
         self._service = None
@@ -248,10 +230,6 @@ async def sync_subscription_to_gdrive(
     remnawave_user: "RemnaWaveUser",
 ) -> None:
     if not settings.is_gdrive_enabled():
-        return
-
-    if not _GOOGLE_SDK_AVAILABLE:
-        _log_missing_dependencies_once()
         return
 
     short_uuid = getattr(remnawave_user, "short_uuid", None)
