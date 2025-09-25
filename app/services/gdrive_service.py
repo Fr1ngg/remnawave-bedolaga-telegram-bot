@@ -1,29 +1,16 @@
 import asyncio
+import base64
 import json
 import logging
+import time
+import uuid
 from pathlib import Path
-from typing import Optional, Tuple, TYPE_CHECKING
+from typing import Any, Dict, Optional, Tuple, TYPE_CHECKING
 
-try:
-    from google.oauth2 import service_account
-    from googleapiclient.discovery import build
-    from googleapiclient.errors import HttpError
-    from googleapiclient.http import MediaInMemoryUpload
-
-    _GOOGLE_SDK_AVAILABLE = True
-except ModuleNotFoundError:  # pragma: no cover - executed only when dependency missing
-    service_account = None  # type: ignore[assignment]
-    build = None  # type: ignore[assignment]
-    MediaInMemoryUpload = None  # type: ignore[assignment]
-
-    class HttpError(Exception):
-        """Fallback HttpError used when Google SDK is unavailable."""
-
-        def __init__(self, *args, status: Optional[int] = None, **kwargs) -> None:
-            super().__init__(*args)
-            self.resp = type("_Resp", (), {"status": status})()
-
-    _GOOGLE_SDK_AVAILABLE = False
+import aiohttp
+from aiohttp import ClientError
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric import padding
 
 from app.config import settings
 
@@ -35,6 +22,11 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 SCOPES = ["https://www.googleapis.com/auth/drive"]
+
+GOOGLE_TOKEN_GRANT_TYPE = "urn:ietf:params:oauth:grant-type:jwt-bearer"
+GOOGLE_TOKEN_DEFAULT_URI = "https://oauth2.googleapis.com/token"
+TOKEN_EXPIRY_SAFETY_MARGIN = 60
+HTTP_TIMEOUT_SECONDS = 30
 
 CLIENT_TYPE_EXTENSIONS = {
     "clash": ("yaml", "text/yaml"),
@@ -52,60 +44,139 @@ class GoogleDriveService:
         if not settings.is_gdrive_enabled():
             raise RuntimeError("Google Drive integration is not enabled")
 
-        if not _GOOGLE_SDK_AVAILABLE:
-            raise RuntimeError(
-                "Google Drive integration requires optional dependencies: "
-                "google-api-python-client, google-auth, google-auth-httplib2"
-            )
+        self._service_account: Optional[Dict[str, Any]] = None
+        self._access_token: Optional[str] = None
+        self._access_token_expires_at: float = 0
+        self._token_lock = asyncio.Lock()
 
-        self._credentials = None
-        self._service = None
-
-    def _load_credentials(self):
-        if self._credentials is not None:
-            return self._credentials
+    def _load_service_account(self) -> Dict[str, Any]:
+        if self._service_account is not None:
+            return self._service_account
 
         info = settings.GDRIVE_SERVICE_ACCOUNT_INFO
-        credentials = None
+        service_account_data: Optional[Dict[str, Any]] = None
 
         if info:
             try:
-                data = json.loads(info)
-                credentials = service_account.Credentials.from_service_account_info(
-                    data, scopes=SCOPES
-                )
+                service_account_data = json.loads(info)
                 logger.debug("Loaded Google Drive credentials from inline JSON info")
             except json.JSONDecodeError as exc:
                 logger.error(f"Failed to decode GDRIVE_SERVICE_ACCOUNT_INFO: {exc}")
 
-        if credentials is None and settings.GDRIVE_SERVICE_ACCOUNT_FILE:
+        if service_account_data is None and settings.GDRIVE_SERVICE_ACCOUNT_FILE:
             path = Path(settings.GDRIVE_SERVICE_ACCOUNT_FILE)
             if not path.exists():
                 raise FileNotFoundError(
                     f"Google Drive service account file not found: {path}"
                 )
 
-            credentials = service_account.Credentials.from_service_account_file(
-                str(path), scopes=SCOPES
-            )
+            with path.open("r", encoding="utf-8") as fp:
+                service_account_data = json.load(fp)
             logger.debug(f"Loaded Google Drive credentials from file: {path}")
 
-        if credentials is None:
+        if service_account_data is None:
             raise RuntimeError("Google Drive credentials are not configured")
 
-        self._credentials = credentials
-        return self._credentials
+        missing_fields = [
+            field
+            for field in ("client_email", "private_key")
+            if not service_account_data.get(field)
+        ]
 
-    def _get_service(self):
-        if self._service is None:
-            credentials = self._load_credentials()
-            self._service = build(
-                "drive",
-                "v3",
-                credentials=credentials,
-                cache_discovery=False,
+        if missing_fields:
+            raise RuntimeError(
+                "Google Drive credentials are missing required fields: "
+                + ", ".join(missing_fields)
             )
-        return self._service
+
+        self._service_account = service_account_data
+        return self._service_account
+
+    @staticmethod
+    def _base64url_encode(data: bytes) -> bytes:
+        return base64.urlsafe_b64encode(data).rstrip(b"=")
+
+    def _build_jwt_assertion(self, service_account_data: Dict[str, Any]) -> str:
+        header = {"alg": "RS256", "typ": "JWT"}
+        now = int(time.time())
+        payload = {
+            "iss": service_account_data["client_email"],
+            "scope": " ".join(SCOPES),
+            "aud": service_account_data.get("token_uri") or GOOGLE_TOKEN_DEFAULT_URI,
+            "iat": now,
+            "exp": now + 3600,
+        }
+
+        signing_input = b".".join(
+            self._base64url_encode(json.dumps(part, separators=(",", ":"), sort_keys=True).encode("utf-8"))
+            for part in (header, payload)
+        )
+
+        private_key = service_account_data["private_key"].encode("utf-8")
+        key = serialization.load_pem_private_key(private_key, password=None)
+        signature = key.sign(
+            signing_input,
+            padding.PKCS1v15(),
+            hashes.SHA256(),
+        )
+
+        return b".".join([signing_input, self._base64url_encode(signature)]).decode("utf-8")
+
+    async def _get_access_token(self) -> str:
+        async with self._token_lock:
+            now = time.time()
+            if (
+                self._access_token
+                and now < self._access_token_expires_at - TOKEN_EXPIRY_SAFETY_MARGIN
+            ):
+                return self._access_token
+
+            service_account_data = self._load_service_account()
+            assertion = self._build_jwt_assertion(service_account_data)
+            token_uri = service_account_data.get("token_uri") or GOOGLE_TOKEN_DEFAULT_URI
+
+            data = {
+                "grant_type": GOOGLE_TOKEN_GRANT_TYPE,
+                "assertion": assertion,
+            }
+
+            timeout = aiohttp.ClientTimeout(total=HTTP_TIMEOUT_SECONDS)
+
+            async with aiohttp.ClientSession(timeout=timeout) as session:
+                try:
+                    async with session.post(token_uri, data=data) as response:
+                        body = await response.text()
+                        if response.status >= 400:
+                            logger.error(
+                                "Failed to obtain Google Drive access token: %s %s",
+                                response.status,
+                                body,
+                            )
+                            raise RuntimeError(
+                                "Unable to obtain Google Drive access token"
+                            )
+
+                        payload = json.loads(body)
+                except ClientError as exc:
+                    logger.error(f"Error requesting Google Drive access token: {exc}")
+                    raise RuntimeError("Unable to obtain Google Drive access token") from exc
+
+            access_token = payload.get("access_token")
+            expires_in = payload.get("expires_in", 3600)
+
+            if not access_token:
+                raise RuntimeError("Google Drive token response did not include access token")
+
+            self._access_token = access_token
+            self._access_token_expires_at = now + int(expires_in)
+            return access_token
+
+    @staticmethod
+    def _build_auth_headers(access_token: str) -> Dict[str, str]:
+        return {
+            "Authorization": f"Bearer {access_token}",
+            "Accept": "application/json",
+        }
 
     @staticmethod
     def _resolve_format(client_type: str) -> Tuple[str, str]:
@@ -123,105 +194,194 @@ class GoogleDriveService:
             logger.warning("Received empty subscription content for Google Drive upload")
             return existing_file_id, None
 
-        loop = asyncio.get_running_loop()
-        return await loop.run_in_executor(
-            None,
-            self._publish_subscription_sync,
-            existing_file_id,
-            short_uuid,
-            content,
-            client_type,
-        )
+        self._load_service_account()
+        access_token = await self._get_access_token()
+        headers = self._build_auth_headers(access_token)
+        timeout = aiohttp.ClientTimeout(total=HTTP_TIMEOUT_SECONDS)
 
-    def _publish_subscription_sync(
-        self,
-        existing_file_id: Optional[str],
-        short_uuid: str,
-        content: str,
-        client_type: str,
-    ) -> Tuple[Optional[str], Optional[str]]:
-        service = self._get_service()
         extension, mime_type = self._resolve_format(client_type)
         file_name = settings.format_gdrive_file_name(short_uuid, client_type, extension)
+        data_bytes = content.encode("utf-8")
 
-        media = MediaInMemoryUpload(content.encode("utf-8"), mimetype=mime_type, resumable=False)
+        async with aiohttp.ClientSession(timeout=timeout) as session:
+            file_id: Optional[str] = None
 
-        try:
-            if existing_file_id:
-                logger.info(f"Updating Google Drive subscription file {existing_file_id}")
-                service.files().update(
-                    fileId=existing_file_id,
-                    media_body=media,
-                    supportsAllDrives=True,
-                ).execute()
-                file_id = existing_file_id
-            else:
-                metadata = {
-                    "name": file_name,
-                    "mimeType": mime_type,
-                }
-
-                if settings.GDRIVE_SUBSCRIPTIONS_FOLDER_ID:
-                    metadata["parents"] = [settings.GDRIVE_SUBSCRIPTIONS_FOLDER_ID]
-
-                logger.info(f"Creating new Google Drive subscription file '{file_name}'")
-                created = service.files().create(
-                    body=metadata,
-                    media_body=media,
-                    fields="id, webViewLink, webContentLink",
-                    supportsAllDrives=True,
-                ).execute()
-                file_id = created.get("id")
+            try:
+                if existing_file_id:
+                    file_id = await self._update_file(
+                        session,
+                        headers,
+                        existing_file_id,
+                        data_bytes,
+                        mime_type,
+                    )
 
                 if not file_id:
-                    raise RuntimeError("Google Drive did not return file ID for the created subscription")
+                    file_id = await self._create_file(
+                        session,
+                        headers,
+                        file_name,
+                        data_bytes,
+                        mime_type,
+                    )
 
                 if settings.GDRIVE_MAKE_PUBLIC:
-                    self._ensure_public_permission(file_id)
+                    await self._ensure_public_permission(session, headers, file_id)
 
-            file_metadata = service.files().get(
-                fileId=file_id,
-                fields="id, webViewLink, webContentLink",
-                supportsAllDrives=True,
-            ).execute()
+                file_metadata = await self._get_file_metadata(session, headers, file_id)
 
-            share_link = settings.format_gdrive_share_link(
-                file_id,
-                default=file_metadata.get("webContentLink") or file_metadata.get("webViewLink"),
+            except Exception as exc:
+                logger.error(f"Failed to publish subscription to Google Drive: {exc}")
+                return existing_file_id, None
+
+        share_link = settings.format_gdrive_share_link(
+            file_id,
+            default=file_metadata.get("webContentLink") or file_metadata.get("webViewLink"),
+        )
+
+        if not share_link:
+            share_link = file_metadata.get("webContentLink") or file_metadata.get("webViewLink")
+
+        return file_id, share_link
+
+    async def _update_file(
+        self,
+        session: aiohttp.ClientSession,
+        headers: Dict[str, str],
+        file_id: str,
+        content: bytes,
+        mime_type: str,
+    ) -> Optional[str]:
+        update_headers = {**headers, "Content-Type": mime_type}
+        url = f"https://www.googleapis.com/upload/drive/v3/files/{file_id}?uploadType=media"
+
+        async with session.patch(url, data=content, headers=update_headers) as response:
+            if response.status == 404:
+                logger.info(
+                    "Google Drive subscription file %s not found. Creating a new one instead.",
+                    file_id,
+                )
+                return None
+
+            if response.status >= 400:
+                body = await response.text()
+                raise RuntimeError(
+                    f"Failed to update Google Drive subscription file {file_id}: "
+                    f"{response.status} {body}"
+                )
+
+        logger.info(f"Updating Google Drive subscription file {file_id}")
+        return file_id
+
+    async def _create_file(
+        self,
+        session: aiohttp.ClientSession,
+        headers: Dict[str, str],
+        file_name: str,
+        content: bytes,
+        mime_type: str,
+    ) -> str:
+        boundary = uuid.uuid4().hex
+        metadata: Dict[str, Any] = {
+            "name": file_name,
+            "mimeType": mime_type,
+        }
+
+        if settings.GDRIVE_SUBSCRIPTIONS_FOLDER_ID:
+            metadata["parents"] = [settings.GDRIVE_SUBSCRIPTIONS_FOLDER_ID]
+
+        body = (
+            f"--{boundary}\r\n"
+            "Content-Type: application/json; charset=UTF-8\r\n\r\n"
+            f"{json.dumps(metadata)}\r\n"
+            f"--{boundary}\r\n"
+            f"Content-Type: {mime_type}\r\n\r\n"
+        ).encode("utf-8") + content + f"\r\n--{boundary}--\r\n".encode("utf-8")
+
+        create_headers = headers.copy()
+        create_headers["Content-Type"] = f"multipart/related; boundary={boundary}"
+
+        url = (
+            "https://www.googleapis.com/upload/drive/v3/files"
+            "?uploadType=multipart&fields=id,webViewLink,webContentLink"
+        )
+
+        logger.info(f"Creating new Google Drive subscription file '{file_name}'")
+
+        async with session.post(url, data=body, headers=create_headers) as response:
+            payload_text = await response.text()
+
+            if response.status >= 400:
+                raise RuntimeError(
+                    f"Failed to create Google Drive subscription file: "
+                    f"{response.status} {payload_text}"
+                )
+
+            payload = json.loads(payload_text)
+
+        file_id = payload.get("id")
+
+        if not file_id:
+            raise RuntimeError(
+                "Google Drive did not return file ID for the created subscription"
             )
 
-            if not share_link:
-                share_link = file_metadata.get("webContentLink") or file_metadata.get("webViewLink")
+        return file_id
 
-            return file_id, share_link
-        except HttpError as exc:
-            logger.error(f"Google Drive API error: {exc}")
-        except Exception as exc:
-            logger.error(f"Failed to publish subscription to Google Drive: {exc}")
+    async def _get_file_metadata(
+        self,
+        session: aiohttp.ClientSession,
+        headers: Dict[str, str],
+        file_id: str,
+    ) -> Dict[str, Any]:
+        url = (
+            f"https://www.googleapis.com/drive/v3/files/{file_id}"
+            "?fields=id,webViewLink,webContentLink"
+        )
 
-        return existing_file_id, None
+        async with session.get(url, headers=headers) as response:
+            payload_text = await response.text()
 
-    def _ensure_public_permission(self, file_id: str) -> None:
-        service = self._get_service()
+            if response.status >= 400:
+                raise RuntimeError(
+                    f"Failed to fetch Google Drive metadata for {file_id}: "
+                    f"{response.status} {payload_text}"
+                )
 
-        try:
-            service.permissions().create(
-                fileId=file_id,
-                body={"type": "anyone", "role": "reader"},
-                fields="id",
-                supportsAllDrives=True,
-            ).execute()
-            logger.debug(f"Granted public read permission for Google Drive file {file_id}")
-        except HttpError as exc:
-            if exc.resp.status == 403:
+            return json.loads(payload_text)
+
+    async def _ensure_public_permission(
+        self,
+        session: aiohttp.ClientSession,
+        headers: Dict[str, str],
+        file_id: str,
+    ) -> None:
+        url = f"https://www.googleapis.com/drive/v3/files/{file_id}/permissions"
+
+        payload = {
+            "role": "reader",
+            "type": "anyone",
+        }
+
+        async with session.post(url, json=payload, headers=headers) as response:
+            if response.status in {200, 204}:
+                logger.debug(
+                    f"Granted public read permission for Google Drive file {file_id}"
+                )
+                return
+
+            if response.status == 403:
                 logger.warning(
                     "Insufficient permissions to make Google Drive file public. "
-                    "Users might not have access to the subscription link."
+                    "The link will still be returned but may require authentication."
                 )
-            else:
-                logger.error(f"Failed to update Google Drive permissions: {exc}")
-        except Exception as exc:
-            logger.error(f"Unexpected error while setting Google Drive permissions: {exc}")
+                return
+
+            body = await response.text()
+            raise RuntimeError(
+                f"Failed to update Google Drive permissions for {file_id}: "
+                f"{response.status} {body}"
+            )
 
 
 async def sync_subscription_to_gdrive(
