@@ -51,6 +51,7 @@ from app.webadmin.dashboard import (
     fetch_recent_users,
     fetch_server_overview,
     get_user_details,
+    list_transactions,
     list_users,
 )
 from app.webadmin.serializers import serialize_server
@@ -218,6 +219,8 @@ class WebAdminServer:
         app.router.add_get("/api/users/recent", self.handle_recent_users)
         app.router.add_get("/api/users", self.handle_users)
         app.router.add_get("/api/users/{user_id}", self.handle_user_details)
+
+        app.router.add_get("/api/transactions", self.handle_transactions)
 
         app.router.add_get("/api/servers", self.handle_servers)
 
@@ -448,6 +451,61 @@ class WebAdminServer:
             )
 
         return self._success({"items": items, "total": total, "limit": limit, "offset": offset})
+
+    async def handle_transactions(self, request: web.Request) -> web.Response:
+        try:
+            limit = int(request.query.get("limit", "20"))
+        except ValueError:
+            limit = 20
+        try:
+            offset = int(request.query.get("offset", "0"))
+        except ValueError:
+            offset = 0
+
+        search = request.query.get("search")
+
+        raw_types = request.query.getall("type", [])
+        if not raw_types:
+            single_type = request.query.get("type")
+            if single_type:
+                raw_types = [single_type]
+
+        types: List[str] = []
+        for value in raw_types:
+            if not value:
+                continue
+            for part in value.split(","):
+                clean = part.strip()
+                if clean:
+                    types.append(clean)
+
+        payment_method = request.query.get("payment_method")
+        if payment_method:
+            payment_method = payment_method.strip() or None
+
+        status_param = request.query.get("status")
+        is_completed: Optional[bool] = None
+        if status_param:
+            normalized_status = status_param.strip().lower()
+            if normalized_status in {"completed", "done", "success", "succeeded"}:
+                is_completed = True
+            elif normalized_status in {"pending", "waiting", "incomplete", "processing"}:
+                is_completed = False
+
+        async with AsyncSessionLocal() as session:
+            items, total = await list_transactions(
+                session,
+                limit=limit,
+                offset=offset,
+                search=search,
+                types=types or None,
+                payment_method=payment_method,
+                is_completed=is_completed,
+            )
+
+        return self._success(
+            {"items": items, "total": total, "limit": limit, "offset": offset}
+        )
 
     async def handle_user_details(self, request: web.Request) -> web.Response:
         try:

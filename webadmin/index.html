@@ -259,6 +259,21 @@
             box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
         }
 
+        .section-select {
+            padding: 10px 14px;
+            border-radius: 12px;
+            border: 1px solid var(--border);
+            background: var(--bg-tertiary);
+            color: var(--text-primary);
+            min-width: 160px;
+        }
+
+        .section-select:focus {
+            outline: none;
+            border-color: var(--accent-primary);
+            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+        }
+
         .table-caption {
             font-size: 12px;
             color: var(--text-tertiary);
@@ -874,6 +889,38 @@
             color: var(--danger);
         }
 
+        .status-badge.completed {
+            background: rgba(16, 185, 129, 0.12);
+            color: var(--success);
+        }
+
+        .status-badge.pending {
+            background: rgba(245, 158, 11, 0.12);
+            color: var(--warning);
+        }
+
+        .transaction-type-badge {
+            display: inline-flex;
+            align-items: center;
+            padding: 4px 12px;
+            border-radius: 16px;
+            background: rgba(99, 102, 241, 0.12);
+            color: var(--accent-primary);
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: none;
+        }
+
+        .amount-positive {
+            color: var(--success);
+            font-weight: 600;
+        }
+
+        .amount-negative {
+            color: var(--danger);
+            font-weight: 600;
+        }
+
         .table-actions-cell {
             display: flex;
             gap: 8px;
@@ -1312,6 +1359,10 @@
                     <span class="nav-icon">👥</span>
                     <span>Пользователи</span>
                 </a>
+                <a href="#" class="nav-item" data-section-target="transactions">
+                    <span class="nav-icon">💳</span>
+                    <span>Транзакции</span>
+                </a>
                 <a href="#" class="nav-item" data-section-target="servers">
                     <span class="nav-icon">🖥️</span>
                     <span>Серверы</span>
@@ -1530,6 +1581,60 @@
                     </table>
                 </div>
                 <div class="pagination" id="users-pagination"></div>
+            </section>
+
+            <section class="content-section" data-section="transactions">
+                <div class="section-header">
+                    <div>
+                        <h1 class="page-title">Транзакции</h1>
+                        <p class="page-subtitle">Анализируйте историю платежей и отслеживайте статус зачислений</p>
+                    </div>
+                    <div class="section-actions">
+                        <input type="text" id="transactions-search-input" class="section-search" placeholder="Поиск по пользователю, ID или описанию">
+                        <select id="transactions-type-filter" class="section-select">
+                            <option value="all">Все типы</option>
+                            <option value="deposit">Пополнение</option>
+                            <option value="subscription_payment">Оплата подписки</option>
+                            <option value="withdrawal">Списание</option>
+                            <option value="refund">Возврат</option>
+                            <option value="referral_reward">Реферальное вознаграждение</option>
+                        </select>
+                        <select id="transactions-status-filter" class="section-select">
+                            <option value="all">Любой статус</option>
+                            <option value="completed">Завершенные</option>
+                            <option value="pending">В обработке</option>
+                        </select>
+                        <button class="action-btn" data-action="transactions-refresh">
+                            <span>🔄</span>
+                            <span>Обновить</span>
+                        </button>
+                    </div>
+                </div>
+                <div class="table-container">
+                    <div class="table-header">
+                        <h3>История операций</h3>
+                        <span id="transactions-total-label" class="table-caption">—</span>
+                    </div>
+                    <table>
+                        <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Дата</th>
+                            <th>Пользователь</th>
+                            <th>Тип</th>
+                            <th>Сумма</th>
+                            <th>Способ</th>
+                            <th>Статус</th>
+                            <th>Описание</th>
+                            <th></th>
+                        </tr>
+                        </thead>
+                        <tbody id="transactions-table-body">
+                        <tr><td colspan="9" style="padding: 32px; text-align: center; color: var(--text-tertiary);">Загрузка…</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div class="pagination" id="transactions-pagination"></div>
             </section>
 
             <section class="content-section" data-section="remnawave-overview">
@@ -1758,6 +1863,7 @@
         activeSection: 'dashboard',
         loadedSections: new Set(),
         users: { search: '', offset: 0, limit: 20, total: 0 },
+        transactions: { search: '', type: 'all', status: 'all', offset: 0, limit: 20, total: 0 },
         promocodes: { offset: 0, limit: 20, total: 0 },
         remnawave: { inbounds: [] },
         syncLog: [],
@@ -1795,6 +1901,12 @@
         usersTotalLabel: document.getElementById('users-total-label'),
         usersPagination: document.getElementById('users-pagination'),
         usersSearchInput: document.getElementById('users-search-input'),
+        transactionsTableBody: document.getElementById('transactions-table-body'),
+        transactionsTotalLabel: document.getElementById('transactions-total-label'),
+        transactionsPagination: document.getElementById('transactions-pagination'),
+        transactionsSearchInput: document.getElementById('transactions-search-input'),
+        transactionsTypeFilter: document.getElementById('transactions-type-filter'),
+        transactionsStatusFilter: document.getElementById('transactions-status-filter'),
         rwOverviewCards: document.getElementById('rw-overview-cards'),
         rwOverviewDetails: document.getElementById('rw-overview-details'),
         rwOverviewUpdated: document.getElementById('rw-overview-updated'),
@@ -1816,6 +1928,7 @@
     const sectionLoaders = {
         dashboard: loadDashboard,
         users: loadUsersSection,
+        transactions: loadTransactionsSection,
         'remnawave-overview': loadRemnawaveOverview,
         'remnawave-nodes': loadRemnawaveNodes,
         'remnawave-squads': loadRemnawaveSquads,
@@ -1828,6 +1941,25 @@
     };
 
     let usersSearchTimeout = null;
+    let transactionsSearchTimeout = null;
+
+    const transactionTypeLabels = {
+        deposit: 'Пополнение',
+        withdrawal: 'Списание',
+        subscription_payment: 'Оплата подписки',
+        refund: 'Возврат',
+        referral_reward: 'Реферальное вознаграждение',
+    };
+
+    const paymentMethodLabels = {
+        telegram_stars: 'Telegram Stars',
+        tribute: 'Tribute',
+        yookassa: 'YooKassa',
+        cryptobot: 'CryptoBot',
+        mulenpay: 'MulenPay',
+        pal24: 'Pal24',
+        manual: 'Ручное зачисление',
+    };
 
     async function activateSection(sectionKey, { force = false } = {}) {
         if (!sectionKey) {
@@ -1874,6 +2006,16 @@
         const date = value instanceof Date ? value : new Date(value);
         if (Number.isNaN(date.getTime())) return '—';
         return date.toLocaleString('ru-RU');
+    }
+
+    function formatTransactionType(type) {
+        if (!type) return '—';
+        return transactionTypeLabels[type] || type;
+    }
+
+    function formatPaymentMethod(method) {
+        if (!method) return '—';
+        return paymentMethodLabels[method] || method;
     }
 
     function parseBoolean(value) {
@@ -2328,6 +2470,183 @@
             state.loadedSections.add('users');
         } catch (error) {
             els.usersTableBody.innerHTML = `<tr><td colspan="5" style="padding: 32px; text-align: center; color: var(--danger);">${error.message}</td></tr>`;
+        }
+    }
+
+    function renderTransactionsTable(data) {
+        const body = els.transactionsTableBody;
+        if (!body) return;
+
+        const items = Array.isArray(data?.items) ? data.items : [];
+        const total = Number(data?.total ?? 0);
+        const limit = Number(data?.limit ?? state.transactions.limit ?? 20);
+        const offset = Number(data?.offset ?? state.transactions.offset ?? 0);
+
+        state.transactions.total = total;
+        state.transactions.limit = limit;
+        state.transactions.offset = offset;
+
+        if (els.transactionsTotalLabel) {
+            els.transactionsTotalLabel.textContent = `Всего: ${total.toLocaleString('ru-RU')}`;
+        }
+
+        if (!items.length) {
+            body.innerHTML = '<tr><td colspan="9" style="padding: 32px; text-align: center; color: var(--text-tertiary);">Нет данных</td></tr>';
+            updateTransactionsPagination(total, offset, limit);
+            return;
+        }
+
+        const fragment = document.createDocumentFragment();
+        items.forEach((transaction) => {
+            const row = document.createElement('tr');
+
+            const idCell = document.createElement('td');
+            idCell.textContent = `#${transaction.id ?? '—'}`;
+            row.appendChild(idCell);
+
+            const dateCell = document.createElement('td');
+            dateCell.textContent = formatDateTime(transaction.created_at);
+            row.appendChild(dateCell);
+
+            const userCell = document.createElement('td');
+            const userContainer = document.createElement('div');
+            userContainer.className = 'user-cell';
+
+            const avatar = document.createElement('div');
+            avatar.className = 'user-avatar-small';
+            const user = transaction.user || {};
+            const displayName = user.full_name || user.username || (user.id ? `ID ${user.id}` : 'Без имени');
+            avatar.textContent = (displayName || 'U').charAt(0).toUpperCase();
+
+            const info = document.createElement('div');
+            info.className = 'user-info';
+            const name = document.createElement('div');
+            name.className = 'user-name';
+            name.textContent = displayName;
+            const meta = document.createElement('div');
+            meta.className = 'user-id';
+            if (user.username) {
+                meta.textContent = `@${user.username}`;
+            } else if (user.telegram_id) {
+                meta.textContent = `TG ${user.telegram_id}`;
+            } else {
+                meta.textContent = `ID ${transaction.user_id ?? '—'}`;
+            }
+
+            info.appendChild(name);
+            info.appendChild(meta);
+            userContainer.appendChild(avatar);
+            userContainer.appendChild(info);
+            userCell.appendChild(userContainer);
+            row.appendChild(userCell);
+
+            const typeCell = document.createElement('td');
+            typeCell.innerHTML = `<span class="transaction-type-badge">${formatTransactionType(transaction.type)}</span>`;
+            row.appendChild(typeCell);
+
+            const amountCell = document.createElement('td');
+            const amountValue = Number(transaction.amount_rub ?? 0);
+            const amountSpan = document.createElement('span');
+            amountSpan.className = amountValue >= 0 ? 'amount-positive' : 'amount-negative';
+            amountSpan.textContent = toLocaleCurrency(amountValue);
+            amountCell.appendChild(amountSpan);
+            row.appendChild(amountCell);
+
+            const methodCell = document.createElement('td');
+            methodCell.textContent = formatPaymentMethod(transaction.payment_method);
+            row.appendChild(methodCell);
+
+            const statusCell = document.createElement('td');
+            const statusBadge = document.createElement('span');
+            statusBadge.className = `status-badge ${transaction.is_completed ? 'completed' : 'pending'}`;
+            statusBadge.textContent = transaction.is_completed ? 'Завершена' : 'Ожидает';
+            statusCell.appendChild(statusBadge);
+            row.appendChild(statusCell);
+
+            const descriptionCell = document.createElement('td');
+            descriptionCell.textContent = transaction.description || '—';
+            row.appendChild(descriptionCell);
+
+            const actionCell = document.createElement('td');
+            const userId = transaction.user?.id ?? transaction.user_id;
+            if (userId) {
+                actionCell.innerHTML = `<button class="setting-button" data-action="view-user" data-user-id="${userId}">Профиль</button>`;
+            } else {
+                actionCell.textContent = '—';
+            }
+            row.appendChild(actionCell);
+
+            fragment.appendChild(row);
+        });
+
+        body.innerHTML = '';
+        body.appendChild(fragment);
+        updateTransactionsPagination(total, offset, limit);
+    }
+
+    function updateTransactionsPagination(total, offset, limit) {
+        const container = els.transactionsPagination;
+        if (!container) return;
+        if (!total || total <= limit) {
+            container.innerHTML = '';
+            return;
+        }
+
+        const currentPage = Math.floor(offset / limit) + 1;
+        const totalPages = Math.max(1, Math.ceil(total / limit));
+
+        container.innerHTML = '';
+
+        const info = document.createElement('span');
+        info.className = 'table-caption';
+        info.textContent = `Страница ${currentPage}/${totalPages}`;
+
+        const prev = document.createElement('button');
+        prev.className = 'action-btn';
+        prev.textContent = '←';
+        prev.disabled = currentPage <= 1;
+        prev.dataset.action = 'transactions-page';
+        prev.dataset.page = String(currentPage - 1);
+
+        const next = document.createElement('button');
+        next.className = 'action-btn';
+        next.textContent = '→';
+        next.disabled = currentPage >= totalPages;
+        next.dataset.action = 'transactions-page';
+        next.dataset.page = String(currentPage + 1);
+
+        container.append(prev, info, next);
+    }
+
+    async function loadTransactionsSection(force = false) {
+        if (!force && state.loadedSections.has('transactions')) {
+            return;
+        }
+
+        const { search, offset, limit, type, status } = state.transactions;
+        const params = new URLSearchParams({ limit: String(limit), offset: String(offset) });
+        if (search) {
+            params.append('search', search);
+        }
+        if (type && type !== 'all') {
+            params.append('type', type);
+        }
+        if (status && status !== 'all') {
+            params.append('status', status);
+        }
+
+        if (els.transactionsTableBody) {
+            els.transactionsTableBody.innerHTML = '<tr><td colspan="9" style="padding: 32px; text-align: center; color: var(--text-tertiary);">Загрузка…</td></tr>';
+        }
+
+        try {
+            const data = await callApi(`/api/transactions?${params.toString()}`);
+            renderTransactionsTable(data);
+            state.loadedSections.add('transactions');
+        } catch (error) {
+            if (els.transactionsTableBody) {
+                els.transactionsTableBody.innerHTML = `<tr><td colspan="9" style="padding: 32px; text-align: center; color: var(--danger);">${error.message}</td></tr>`;
+            }
         }
     }
 
@@ -3077,6 +3396,28 @@
         }
     }
 
+    async function handleTransactionsAction(action, element) {
+        switch (action) {
+            case 'transactions-refresh':
+                state.transactions.offset = 0;
+                await loadTransactionsSection(true);
+                showToast('История транзакций обновлена', 'success');
+                break;
+            case 'transactions-page': {
+                if (!element) break;
+                const page = Number(element.dataset.page);
+                if (!Number.isFinite(page)) break;
+                const limit = state.transactions.limit || 20;
+                const normalizedPage = Math.max(1, Math.floor(page));
+                state.transactions.offset = Math.max(0, (normalizedPage - 1) * limit);
+                await loadTransactionsSection(true);
+                break;
+            }
+            default:
+                break;
+        }
+    }
+
     async function handleRemnawaveAction(action, element) {
         switch (action) {
             case 'rw-refresh-overview':
@@ -3563,6 +3904,10 @@
                 await handleUsersAction(action, element);
                 return;
             }
+            if (action.startsWith('transactions')) {
+                await handleTransactionsAction(action, element);
+                return;
+            }
             if (action.startsWith('rw-')) {
                 await handleRemnawaveAction(action, element);
                 return;
@@ -3632,12 +3977,26 @@
                 state.users.search = '';
                 state.users.offset = 0;
                 state.users.total = 0;
+                state.transactions.search = '';
+                state.transactions.type = 'all';
+                state.transactions.status = 'all';
+                state.transactions.offset = 0;
+                state.transactions.total = 0;
                 state.promocodes.offset = 0;
                 state.promocodes.total = 0;
                 state.remnawave.inbounds = [];
                 renderSyncLog();
                 if (els.usersSearchInput) {
                     els.usersSearchInput.value = '';
+                }
+                if (els.transactionsSearchInput) {
+                    els.transactionsSearchInput.value = '';
+                }
+                if (els.transactionsTypeFilter) {
+                    els.transactionsTypeFilter.value = 'all';
+                }
+                if (els.transactionsStatusFilter) {
+                    els.transactionsStatusFilter.value = 'all';
                 }
                 els.navItems.forEach((item) => {
                     item.classList.toggle('active', item.dataset.sectionTarget === 'dashboard');
@@ -3687,6 +4046,46 @@
                     }
                     loadUsersSection(true);
                 }
+            });
+        }
+
+        if (els.transactionsSearchInput) {
+            els.transactionsSearchInput.addEventListener('input', () => {
+                state.transactions.search = els.transactionsSearchInput.value.trim();
+                state.transactions.offset = 0;
+                if (transactionsSearchTimeout) {
+                    clearTimeout(transactionsSearchTimeout);
+                }
+                transactionsSearchTimeout = setTimeout(() => {
+                    transactionsSearchTimeout = null;
+                    loadTransactionsSection(true);
+                }, 400);
+            });
+            els.transactionsSearchInput.addEventListener('keydown', (event) => {
+                if (event.key === 'Enter') {
+                    event.preventDefault();
+                    if (transactionsSearchTimeout) {
+                        clearTimeout(transactionsSearchTimeout);
+                        transactionsSearchTimeout = null;
+                    }
+                    loadTransactionsSection(true);
+                }
+            });
+        }
+
+        if (els.transactionsTypeFilter) {
+            els.transactionsTypeFilter.addEventListener('change', () => {
+                state.transactions.type = els.transactionsTypeFilter.value;
+                state.transactions.offset = 0;
+                loadTransactionsSection(true);
+            });
+        }
+
+        if (els.transactionsStatusFilter) {
+            els.transactionsStatusFilter.addEventListener('change', () => {
+                state.transactions.status = els.transactionsStatusFilter.value;
+                state.transactions.offset = 0;
+                loadTransactionsSection(true);
             });
         }
 
