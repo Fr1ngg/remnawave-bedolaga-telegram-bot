@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import datetime
 import hmac
 import json
 import logging
@@ -20,13 +21,18 @@ from app.services.monitoring_service import MonitoringService
 from app.services.reporting_service import ReportPeriod, ReportingService
 from app.services.system_settings_service import bot_configuration_service
 from app.services.version_service import VersionService
+from app.webadmin import (
+    communications as communications_api,
+    promotions as promotions_api,
+    subscriptions as subscriptions_api,
+    support as support_api,
+    users as users_api,
+)
 from app.webadmin.dashboard import (
     collect_dashboard_summary,
     collect_revenue_series,
     fetch_recent_users,
     fetch_server_overview,
-    get_user_details,
-    list_users,
 )
 
 logger = logging.getLogger(__name__)
@@ -189,11 +195,33 @@ class WebAdminServer:
         app.router.add_get("/api/dashboard/summary", self.handle_dashboard_summary)
         app.router.add_get("/api/dashboard/revenue", self.handle_dashboard_revenue)
 
+        app.router.add_get("/api/users/overview", self.handle_users_overview)
         app.router.add_get("/api/users/recent", self.handle_recent_users)
         app.router.add_get("/api/users", self.handle_users)
         app.router.add_get("/api/users/{user_id}", self.handle_user_details)
 
+        app.router.add_get("/api/subscriptions/overview", self.handle_subscriptions_overview)
+        app.router.add_get("/api/subscriptions", self.handle_subscriptions)
+        app.router.add_get("/api/subscriptions/expiring", self.handle_subscriptions_expiring)
+
         app.router.add_get("/api/servers", self.handle_servers)
+
+        app.router.add_get("/api/support/overview", self.handle_support_overview)
+        app.router.add_get("/api/support/tickets", self.handle_support_tickets)
+        app.router.add_get("/api/support/tickets/{ticket_id}", self.handle_support_ticket_details)
+        app.router.add_get(
+            "/api/support/tickets/{ticket_id}/messages",
+            self.handle_support_ticket_messages,
+        )
+
+        app.router.add_get("/api/promotions/overview", self.handle_promotions_overview)
+        app.router.add_get("/api/promotions/promocodes", self.handle_promocodes)
+        app.router.add_get("/api/promotions/campaigns", self.handle_campaigns)
+        app.router.add_get("/api/promotions/groups", self.handle_promo_groups)
+
+        app.router.add_get("/api/communications/overview", self.handle_communications_overview)
+        app.router.add_get("/api/communications/welcome-texts", self.handle_welcome_texts)
+        app.router.add_get("/api/communications/user-messages", self.handle_user_messages)
 
         app.router.add_get("/api/settings/categories", self.handle_settings_categories)
         app.router.add_get("/api/settings/category/{category_key}", self.handle_settings_category)
@@ -307,23 +335,44 @@ class WebAdminServer:
             data = await fetch_recent_users(session, limit=limit)
         return self._success(data)
 
+    async def handle_users_overview(self, request: web.Request) -> web.Response:
+        async with AsyncSessionLocal() as session:
+            data = await users_api.fetch_users_overview(session)
+        return self._success(data)
+
     async def handle_users(self, request: web.Request) -> web.Response:
         try:
             limit = int(request.query.get("limit", "20"))
         except ValueError:
             limit = 20
+
+        page: Optional[int]
         try:
-            offset = int(request.query.get("offset", "0"))
+            page = int(request.query.get("page", "1"))
         except ValueError:
-            offset = 0
+            page = 1
+
+        try:
+            offset = int(request.query.get("offset"))
+            page = max(1, (offset // max(limit, 1)) + 1)
+        except (TypeError, ValueError):
+            pass
+
         search = request.query.get("search")
+        status = request.query.get("status")
+        order = request.query.get("order")
 
         async with AsyncSessionLocal() as session:
-            items, total = await list_users(
-                session, limit=limit, offset=offset, search=search
+            payload = await users_api.fetch_users_page(
+                session,
+                page=page,
+                limit=limit,
+                search=search,
+                status=status,
+                order=order,
             )
 
-        return self._success({"items": items, "total": total, "limit": limit, "offset": offset})
+        return self._success(payload)
 
     async def handle_user_details(self, request: web.Request) -> web.Response:
         try:
@@ -332,16 +381,172 @@ class WebAdminServer:
             return self._error("Некорректный идентификатор пользователя", status=400)
 
         async with AsyncSessionLocal() as session:
-            data = await get_user_details(session, user_id)
+            data = await users_api.fetch_user_details(session, user_id)
 
         if not data:
             return self._error("Пользователь не найден", status=404)
 
         return self._success(data)
 
+    async def handle_subscriptions_overview(self, request: web.Request) -> web.Response:
+        async with AsyncSessionLocal() as session:
+            data = await subscriptions_api.fetch_subscriptions_overview(session)
+        return self._success(data)
+
+    async def handle_subscriptions(self, request: web.Request) -> web.Response:
+        try:
+            limit = int(request.query.get("limit", "20"))
+        except ValueError:
+            limit = 20
+        try:
+            page = int(request.query.get("page", "1"))
+        except ValueError:
+            page = 1
+
+        status = request.query.get("status")
+        search = request.query.get("search")
+        sort = request.query.get("sort", "end_date")
+        expiring_before: Optional[datetime]
+        expiring_param = request.query.get("expiring_before")
+        expiring_before = None
+        if expiring_param:
+            try:
+                expiring_before = datetime.fromisoformat(expiring_param)
+            except ValueError:
+                expiring_before = None
+
+        async with AsyncSessionLocal() as session:
+            data = await subscriptions_api.fetch_subscriptions(
+                session,
+                page=page,
+                limit=limit,
+                status=status,
+                search=search,
+                sort=sort,
+                expiring_before=expiring_before,
+            )
+        return self._success(data)
+
+    async def handle_subscriptions_expiring(self, request: web.Request) -> web.Response:
+        try:
+            days = int(request.query.get("days", "7"))
+        except ValueError:
+            days = 7
+
+        async with AsyncSessionLocal() as session:
+            data = await subscriptions_api.fetch_expiring_subscriptions(session, days=days)
+        return self._success(data)
+
     async def handle_servers(self, request: web.Request) -> web.Response:
         async with AsyncSessionLocal() as session:
             data = await fetch_server_overview(session)
+        return self._success(data)
+
+    async def handle_support_overview(self, request: web.Request) -> web.Response:
+        async with AsyncSessionLocal() as session:
+            data = await support_api.fetch_support_overview(session)
+        return self._success(data)
+
+    async def handle_support_tickets(self, request: web.Request) -> web.Response:
+        status = request.query.get("status")
+        try:
+            page = int(request.query.get("page", "1"))
+        except ValueError:
+            page = 1
+        try:
+            limit = int(request.query.get("limit", "20"))
+        except ValueError:
+            limit = 20
+
+        async with AsyncSessionLocal() as session:
+            data = await support_api.fetch_tickets(
+                session,
+                status=status,
+                page=page,
+                limit=limit,
+            )
+        return self._success(data)
+
+    async def handle_support_ticket_details(self, request: web.Request) -> web.Response:
+        try:
+            ticket_id = int(request.match_info["ticket_id"])
+        except (KeyError, ValueError):
+            return self._error("Некорректный идентификатор тикета", status=400)
+
+        async with AsyncSessionLocal() as session:
+            data = await support_api.fetch_ticket_details(session, ticket_id)
+        if not data:
+            return self._error("Тикет не найден", status=404)
+        return self._success(data)
+
+    async def handle_support_ticket_messages(self, request: web.Request) -> web.Response:
+        try:
+            ticket_id = int(request.match_info["ticket_id"])
+        except (KeyError, ValueError):
+            return self._error("Некорректный идентификатор тикета", status=400)
+        try:
+            limit = int(request.query.get("limit", "50"))
+        except ValueError:
+            limit = 50
+        try:
+            offset = int(request.query.get("offset", "0"))
+        except ValueError:
+            offset = 0
+
+        async with AsyncSessionLocal() as session:
+            data = await support_api.fetch_ticket_messages(
+                session,
+                ticket_id,
+                limit=limit,
+                offset=offset,
+            )
+        return self._success(data)
+
+    async def handle_promotions_overview(self, request: web.Request) -> web.Response:
+        async with AsyncSessionLocal() as session:
+            data = await promotions_api.fetch_promo_overview(session)
+        return self._success(data)
+
+    async def handle_promocodes(self, request: web.Request) -> web.Response:
+        active_param = request.query.get("active")
+        active: Optional[bool] = None
+        if active_param:
+            active = active_param.lower() in {"1", "true", "yes", "on"}
+        try:
+            limit = int(request.query.get("limit", "50"))
+        except ValueError:
+            limit = 50
+        async with AsyncSessionLocal() as session:
+            data = await promotions_api.fetch_promocodes(session, active=active, limit=limit)
+        return self._success(data)
+
+    async def handle_campaigns(self, request: web.Request) -> web.Response:
+        try:
+            limit = int(request.query.get("limit", "50"))
+        except ValueError:
+            limit = 50
+        async with AsyncSessionLocal() as session:
+            data = await promotions_api.fetch_campaigns(session, limit=limit)
+        return self._success(data)
+
+    async def handle_promo_groups(self, request: web.Request) -> web.Response:
+        async with AsyncSessionLocal() as session:
+            data = await promotions_api.fetch_promo_groups(session)
+        return self._success(data)
+
+    async def handle_communications_overview(self, request: web.Request) -> web.Response:
+        async with AsyncSessionLocal() as session:
+            data = await communications_api.fetch_communications_overview(session)
+        return self._success(data)
+
+    async def handle_welcome_texts(self, request: web.Request) -> web.Response:
+        async with AsyncSessionLocal() as session:
+            data = await communications_api.fetch_welcome_texts(session)
+        return self._success(data)
+
+    async def handle_user_messages(self, request: web.Request) -> web.Response:
+        async with AsyncSessionLocal() as session:
+            data = await communications_api.fetch_user_messages(session)
         return self._success(data)
 
     async def handle_settings_categories(self, request: web.Request) -> web.Response:
