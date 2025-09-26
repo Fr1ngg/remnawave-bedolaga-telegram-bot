@@ -75,7 +75,8 @@ class WebAdminServer:
         if self.app:
             return self.app
 
-        self.app = web.Application(middlewares=[self._cors_middleware, self._auth_middleware])
+        middlewares = self._create_middlewares()
+        self.app = web.Application(middlewares=middlewares)
         self._register_routes(self.app)
         return self.app
 
@@ -109,37 +110,46 @@ class WebAdminServer:
     # ------------------------------------------------------------------
     # Middlewares & helpers
     # ------------------------------------------------------------------
-    async def _cors_middleware(self, request: web.Request, handler: web.Handler) -> web.StreamResponse:
-        try:
-            response = await handler(request)
-        except web.HTTPException as exc:
-            self._apply_cors(request, exc)
-            raise
+    def _create_middlewares(self) -> List[web.Middleware]:
+        @web.middleware
+        async def cors_middleware(
+            request: web.Request, handler: web.Handler
+        ) -> web.StreamResponse:
+            try:
+                response = await handler(request)
+            except web.HTTPException as exc:
+                self._apply_cors(request, exc)
+                raise
 
-        self._apply_cors(request, response)
-        return response
+            self._apply_cors(request, response)
+            return response
 
-    async def _auth_middleware(self, request: web.Request, handler: web.Handler) -> web.StreamResponse:
-        if request.method == "OPTIONS":
+        @web.middleware
+        async def auth_middleware(
+            request: web.Request, handler: web.Handler
+        ) -> web.StreamResponse:
+            if request.method == "OPTIONS":
+                return await handler(request)
+
+            path = request.path
+            if path in self._PUBLIC_PATHS or not path.startswith("/api/"):
+                return await handler(request)
+
+            expected = (settings.WEBADMIN_API_KEY or "").strip()
+            if not expected:
+                return self._error("Веб-админка не настроена", status=503)
+
+            token = self._extract_token(request)
+            if not token:
+                return self._error("Требуется авторизация", status=401)
+
+            if not hmac.compare_digest(expected, token):
+                return self._error("Неверный токен доступа", status=401)
+
+            request["webadmin_token"] = token
             return await handler(request)
 
-        path = request.path
-        if path in self._PUBLIC_PATHS or not path.startswith("/api/"):
-            return await handler(request)
-
-        expected = (settings.WEBADMIN_API_KEY or "").strip()
-        if not expected:
-            return self._error("Веб-админка не настроена", status=503)
-
-        token = self._extract_token(request)
-        if not token:
-            return self._error("Требуется авторизация", status=401)
-
-        if not hmac.compare_digest(expected, token):
-            return self._error("Неверный токен доступа", status=401)
-
-        request["webadmin_token"] = token
-        return await handler(request)
+        return [cors_middleware, auth_middleware]
 
     def _apply_cors(self, request: web.Request, response: web.StreamResponse) -> None:
         origin = request.headers.get("Origin")

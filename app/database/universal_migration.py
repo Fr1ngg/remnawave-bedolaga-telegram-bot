@@ -1136,11 +1136,16 @@ async def ensure_promo_groups_setup():
                                 server_discount_percent,
                                 traffic_discount_percent,
                                 device_discount_percent,
+                                apply_discounts_to_addons,
                                 is_default
-                            ) VALUES (:name, 0, 0, 0, :is_default)
+                            ) VALUES (:name, 0, 0, 0, :apply_discounts_to_addons, :is_default)
                         """
                         ),
-                        {"name": default_group_name, "is_default": True},
+                        {
+                            "name": default_group_name,
+                            "apply_discounts_to_addons": True,
+                            "is_default": True,
+                        },
                     )
 
                     result = await conn.execute(
