@@ -1247,6 +1247,118 @@ async def ensure_promo_groups_setup():
         return False
 
 
+async def ensure_user_auto_promo_columns() -> bool:
+    """Гарантирует наличие колонок автоназначения промо-групп у пользователей."""
+
+    try:
+        db_type = await get_database_type()
+
+        async with engine.begin() as conn:
+            # Колонка-флаг автоназначения промогруппы
+            if db_type == "sqlite":
+                if not await check_column_exists("users", "auto_promo_group_assigned"):
+                    await conn.execute(
+                        text(
+                            "ALTER TABLE users ADD COLUMN auto_promo_group_assigned BOOLEAN DEFAULT 0"
+                        )
+                    )
+                    logger.info("Добавлена колонка users.auto_promo_group_assigned")
+            elif db_type == "postgresql":
+                await conn.execute(
+                    text(
+                        "ALTER TABLE users "
+                        "ADD COLUMN IF NOT EXISTS auto_promo_group_assigned "
+                        "BOOLEAN NOT NULL DEFAULT FALSE"
+                    )
+                )
+            elif db_type == "mysql":
+                await conn.execute(
+                    text(
+                        "ALTER TABLE users "
+                        "ADD COLUMN IF NOT EXISTS auto_promo_group_assigned "
+                        "TINYINT(1) NOT NULL DEFAULT 0"
+                    )
+                )
+            else:
+                logger.error(
+                    f"Неподдерживаемый тип БД для users.auto_promo_group_assigned: {db_type}"
+                )
+                return False
+
+            # Колонка для порога последней авто-промогруппы
+            if db_type == "sqlite":
+                if not await check_column_exists(
+                    "users", "auto_promo_group_threshold_kopeks"
+                ):
+                    await conn.execute(
+                        text(
+                            "ALTER TABLE users "
+                            "ADD COLUMN auto_promo_group_threshold_kopeks "
+                            "INTEGER NOT NULL DEFAULT 0"
+                        )
+                    )
+                    logger.info(
+                        "Добавлена колонка users.auto_promo_group_threshold_kopeks"
+                    )
+            elif db_type == "postgresql":
+                await conn.execute(
+                    text(
+                        "ALTER TABLE users "
+                        "ADD COLUMN IF NOT EXISTS auto_promo_group_threshold_kopeks "
+                        "BIGINT NOT NULL DEFAULT 0"
+                    )
+                )
+            elif db_type == "mysql":
+                await conn.execute(
+                    text(
+                        "ALTER TABLE users "
+                        "ADD COLUMN IF NOT EXISTS auto_promo_group_threshold_kopeks "
+                        "BIGINT NOT NULL DEFAULT 0"
+                    )
+                )
+            else:
+                logger.error(
+                    f"Неподдерживаемый тип БД для users.auto_promo_group_threshold_kopeks: {db_type}"
+                )
+                return False
+
+            # Стандартизируем значения по умолчанию, если ранее были NULL
+            if db_type == "sqlite":
+                await conn.execute(
+                    text(
+                        "UPDATE users SET auto_promo_group_assigned = 0 "
+                        "WHERE auto_promo_group_assigned IS NULL"
+                    )
+                )
+                await conn.execute(
+                    text(
+                        "UPDATE users SET auto_promo_group_threshold_kopeks = 0 "
+                        "WHERE auto_promo_group_threshold_kopeks IS NULL"
+                    )
+                )
+            else:
+                await conn.execute(
+                    text(
+                        "UPDATE users SET auto_promo_group_assigned = FALSE "
+                        "WHERE auto_promo_group_assigned IS NULL"
+                    )
+                )
+                await conn.execute(
+                    text(
+                        "UPDATE users SET auto_promo_group_threshold_kopeks = 0 "
+                        "WHERE auto_promo_group_threshold_kopeks IS NULL"
+                    )
+                )
+
+        return True
+
+    except Exception as error:
+        logger.error(
+            f"Ошибка обеспечения колонок авто промогрупп у пользователей: {error}"
+        )
+        return False
+      
+      
 async def add_welcome_text_is_enabled_column():
     column_exists = await check_column_exists('welcome_texts', 'is_enabled')
     if column_exists:
@@ -1967,6 +2079,13 @@ async def run_universal_migration():
             logger.info("✅ Таблица user_messages готова")
         else:
             logger.warning("⚠️ Проблемы с таблицей user_messages")
+
+        logger.info("=== ПРОВЕРКА КОЛОНОК АВТО-ПРОМО ГРУПП У ПОЛЬЗОВАТЕЛЕЙ ===")
+        auto_promo_columns_ready = await ensure_user_auto_promo_columns()
+        if auto_promo_columns_ready:
+            logger.info("✅ Колонки авто-промогрупп у пользователей готовы")
+        else:
+            logger.warning("⚠️ Проблемы с колонками авто-промогрупп у пользователей")
 
         logger.info("=== СОЗДАНИЕ/ОБНОВЛЕНИЕ ТАБЛИЦЫ WELCOME_TEXTS ===")
         welcome_texts_created = await create_welcome_texts_table()
