@@ -264,6 +264,82 @@ async def list_users(
     return [serialize_user(user) for user in users], int(total)
 
 
+async def list_transactions(
+    session: AsyncSession,
+    *,
+    limit: int = 20,
+    offset: int = 0,
+    search: Optional[str] = None,
+    types: Optional[List[str]] = None,
+    payment_method: Optional[str] = None,
+    is_completed: Optional[bool] = None,
+) -> Tuple[List[Dict[str, Any]], int]:
+    limit = max(1, min(limit, 100))
+    offset = max(0, offset)
+
+    base_query = (
+        select(Transaction)
+        .options(selectinload(Transaction.user))
+        .join(User)
+    )
+    count_query = select(func.count(Transaction.id)).select_from(Transaction).join(User)
+
+    if types:
+        base_query = base_query.where(Transaction.type.in_(types))
+        count_query = count_query.where(Transaction.type.in_(types))
+
+    if payment_method:
+        base_query = base_query.where(Transaction.payment_method == payment_method)
+        count_query = count_query.where(Transaction.payment_method == payment_method)
+
+    if is_completed is not None:
+        condition = Transaction.is_completed.is_(True if is_completed else False)
+        base_query = base_query.where(condition)
+        count_query = count_query.where(condition)
+
+    if search:
+        normalized = search.strip()
+        if normalized:
+            pattern = f"%{normalized.lower()}%"
+            text_filters = [
+                func.lower(func.coalesce(User.username, "")).like(pattern),
+                func.lower(func.coalesce(User.first_name, "")).like(pattern),
+                func.lower(func.coalesce(User.last_name, "")).like(pattern),
+                func.lower(func.coalesce(Transaction.description, "")).like(pattern),
+                func.lower(func.coalesce(Transaction.payment_method, "")).like(pattern),
+                func.lower(func.coalesce(Transaction.external_id, "")).like(pattern),
+            ]
+            numeric_filters: List[Any] = []
+            if normalized.isdigit():
+                numeric_value = int(normalized)
+                numeric_filters.extend(
+                    [
+                        User.telegram_id == numeric_value,
+                        User.id == numeric_value,
+                        Transaction.id == numeric_value,
+                    ]
+                )
+
+            conditions = text_filters + numeric_filters
+            if conditions:
+                search_condition = or_(*conditions)
+                base_query = base_query.where(search_condition)
+                count_query = count_query.where(search_condition)
+
+    base_query = (
+        base_query.order_by(Transaction.created_at.desc(), Transaction.id.desc())
+        .offset(offset)
+        .limit(limit)
+    )
+
+    result = await session.execute(base_query)
+    transactions = result.scalars().all()
+
+    total = await session.scalar(count_query) or 0
+
+    return [serialize_transaction(tx) for tx in transactions], int(total)
+
+
 async def get_user_details(
     session: AsyncSession,
     user_id: int,
