@@ -222,6 +222,64 @@
             flex-direction: column;
         }
 
+        .content-section {
+            display: none;
+        }
+
+        .content-section.active {
+            display: block;
+        }
+
+        .section-header {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+
+        .section-actions {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .section-search {
+            padding: 10px 14px;
+            border-radius: 12px;
+            border: 1px solid var(--border);
+            background: var(--bg-tertiary);
+            color: var(--text-primary);
+            min-width: 240px;
+        }
+
+        .section-search:focus {
+            outline: none;
+            border-color: var(--accent-primary);
+            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+        }
+
+        .table-caption {
+            font-size: 12px;
+            color: var(--text-tertiary);
+        }
+
+        .card-list {
+            display: grid;
+            gap: 16px;
+            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+        }
+
+        .simple-list {
+            list-style: none;
+            margin: 8px 0 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            color: var(--text-secondary);
+        }
+
         .header {
             background: var(--bg-secondary);
             border-bottom: 1px solid var(--border);
@@ -1224,40 +1282,59 @@
         <nav class="nav">
             <div class="nav-section">
                 <div class="nav-section-title">Обзор</div>
-                <a href="#" class="nav-item active">
+                <a href="#" class="nav-item active" data-section-target="dashboard">
                     <span class="nav-icon">📊</span>
                     <span>Панель управления</span>
                 </a>
-                <a href="#" class="nav-item">
-                    <span class="nav-icon">🧾</span>
-                    <span>История операций</span>
+            </div>
+            <div class="nav-section">
+                <div class="nav-section-title">Remnawave</div>
+                <a href="#" class="nav-item" data-section-target="remnawave-overview">
+                    <span class="nav-icon">🛰️</span>
+                    <span>Обзор</span>
+                </a>
+                <a href="#" class="nav-item" data-section-target="remnawave-nodes">
+                    <span class="nav-icon">🌐</span>
+                    <span>Ноды</span>
+                </a>
+                <a href="#" class="nav-item" data-section-target="remnawave-squads">
+                    <span class="nav-icon">👥</span>
+                    <span>Сквады</span>
+                </a>
+                <a href="#" class="nav-item" data-section-target="remnawave-sync">
+                    <span class="nav-icon">🔄</span>
+                    <span>Синхронизация</span>
                 </a>
             </div>
             <div class="nav-section">
                 <div class="nav-section-title">Управление</div>
-                <a href="#" class="nav-item">
+                <a href="#" class="nav-item" data-section-target="users">
                     <span class="nav-icon">👥</span>
                     <span>Пользователи</span>
                 </a>
-                <a href="#" class="nav-item">
-                    <span class="nav-icon">💳</span>
-                    <span>Подписки</span>
-                </a>
-                <a href="#" class="nav-item">
+                <a href="#" class="nav-item" data-section-target="servers">
                     <span class="nav-icon">🖥️</span>
                     <span>Серверы</span>
                     <span class="nav-badge" id="nav-servers-count">—</span>
                 </a>
+                <a href="#" class="nav-item" data-section-target="promocodes">
+                    <span class="nav-icon">🎫</span>
+                    <span>Промокоды</span>
+                </a>
             </div>
             <div class="nav-section">
                 <div class="nav-section-title">Система</div>
-                <a href="#settings" class="nav-item">
+                <a href="#" class="nav-item" data-section-target="support">
+                    <span class="nav-icon">🛟</span>
+                    <span>Поддержка</span>
+                </a>
+                <a href="#" class="nav-item" data-section-target="updates">
+                    <span class="nav-icon">⬆️</span>
+                    <span>Обновления</span>
+                </a>
+                <a href="#" class="nav-item" data-section-target="settings">
                     <span class="nav-icon">⚙️</span>
                     <span>Конфигурация бота</span>
-                </a>
-                <a href="#" class="nav-item">
-                    <span class="nav-icon">💾</span>
-                    <span>Бекапы</span>
                 </a>
             </div>
         </nav>
@@ -1311,113 +1388,359 @@
             </div>
         </header>
         <div class="content">
-            <h1 class="page-title">Панель управления</h1>
-            <p class="page-subtitle">Добро пожаловать в систему управления VPN ботом</p>
-            <div class="stats-grid">
-                <div class="stat-card">
-                    <div class="stat-header">
-                        <div>
-                            <div class="stat-value" id="stat-total-users">—</div>
-                            <div class="stat-label">Всего пользователей</div>
+            <section class="content-section active" data-section="dashboard">
+                <h1 class="page-title">Панель управления</h1>
+                <p class="page-subtitle">Добро пожаловать в систему управления VPN ботом</p>
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-header">
+                            <div>
+                                <div class="stat-value" id="stat-total-users">—</div>
+                                <div class="stat-label">Всего пользователей</div>
+                            </div>
+                            <div class="stat-icon users">👥</div>
                         </div>
-                        <div class="stat-icon users">👥</div>
+                        <span class="stat-change" id="stat-users-change">—</span>
                     </div>
-                    <span class="stat-change" id="stat-users-change">—</span>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-header">
-                        <div>
-                            <div class="stat-value" id="stat-revenue">—</div>
-                            <div class="stat-label">Доход за 30 дней</div>
+                    <div class="stat-card">
+                        <div class="stat-header">
+                            <div>
+                                <div class="stat-value" id="stat-revenue">—</div>
+                                <div class="stat-label">Доход за 30 дней</div>
+                            </div>
+                            <div class="stat-icon money">💰</div>
                         </div>
-                        <div class="stat-icon money">💰</div>
+                        <span class="stat-change" id="stat-revenue-change">—</span>
                     </div>
-                    <span class="stat-change" id="stat-revenue-change">—</span>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-header">
-                        <div>
-                            <div class="stat-value" id="stat-servers">—</div>
-                            <div class="stat-label">Доступные серверы</div>
+                    <div class="stat-card">
+                        <div class="stat-header">
+                            <div>
+                                <div class="stat-value" id="stat-servers">—</div>
+                                <div class="stat-label">Доступные серверы</div>
+                            </div>
+                            <div class="stat-icon servers">🖥️</div>
                         </div>
-                        <div class="stat-icon servers">🖥️</div>
+                        <span class="stat-change" id="stat-servers-change">—</span>
                     </div>
-                    <span class="stat-change" id="stat-servers-change">—</span>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-header">
-                        <div>
-                            <div class="stat-value" id="stat-conversion">—</div>
-                            <div class="stat-label">Конверсия триал → платная</div>
+                    <div class="stat-card">
+                        <div class="stat-header">
+                            <div>
+                                <div class="stat-value" id="stat-conversion">—</div>
+                                <div class="stat-label">Конверсия триал → платная</div>
+                            </div>
+                            <div class="stat-icon chart">📈</div>
                         </div>
-                        <div class="stat-icon chart">📈</div>
+                        <span class="stat-change" id="stat-conversion-change">—</span>
                     </div>
-                    <span class="stat-change" id="stat-conversion-change">—</span>
                 </div>
-            </div>
-            <div class="chart-container" id="revenue-chart">
-                <div class="chart-placeholder">
-                    <div style="font-size: 42px; margin-bottom: 12px;">📊</div>
-                    <div style="font-size: 18px; font-weight: 500; margin-bottom: 8px;">График продаж</div>
-                    <div style="font-size: 14px;">Динамика подписок за последние 30 дней</div>
+                <div class="chart-container" id="revenue-chart">
+                    <div class="chart-placeholder">
+                        <div style="font-size: 42px; margin-bottom: 12px;">📊</div>
+                        <div style="font-size: 18px; font-weight: 500; margin-bottom: 8px;">График продаж</div>
+                        <div style="font-size: 14px;">Динамика подписок за последние 30 дней</div>
+                    </div>
                 </div>
-            </div>
-            <div class="quick-actions">
-                <button class="action-btn primary" data-action="refresh">
-                    <span>🔄</span>
-                    <span>Обновить данные</span>
-                </button>
-                <button class="action-btn" data-action="reload-config">
-                    <span>⚙️</span>
-                    <span>Перезагрузить конфигурацию</span>
-                </button>
-                <button class="action-btn" data-action="create-backup">
-                    <span>💾</span>
-                    <span>Создать бекап</span>
-                </button>
-                <button class="action-btn" data-action="toggle-maintenance">
-                    <span>🚧</span>
-                    <span id="maintenance-action-label">Включить техработы</span>
-                </button>
-            </div>
-            <section style="margin-bottom: 32px;">
-                <h2 class="servers-section-title">
-                    <span>🖥️</span>
-                    <span>Активные серверы</span>
-                    <span style="background: var(--success); color: white; font-size: 12px; padding: 4px 12px; border-radius: 20px;" id="servers-online-badge">— онлайн</span>
-                </h2>
-                <div id="servers-list"></div>
-            </section>
-            <section class="table-container">
-                <div class="table-header">
-                    <h3>Последние пользователи</h3>
-                    <button class="action-btn" data-action="refresh-users">
+                <div class="quick-actions">
+                    <button class="action-btn primary" data-action="refresh">
                         <span>🔄</span>
-                        <span>Обновить</span>
+                        <span>Обновить данные</span>
+                    </button>
+                    <button class="action-btn" data-action="reload-config">
+                        <span>⚙️</span>
+                        <span>Перезагрузить конфигурацию</span>
+                    </button>
+                    <button class="action-btn" data-action="create-backup">
+                        <span>💾</span>
+                        <span>Создать бекап</span>
+                    </button>
+                    <button class="action-btn" data-action="toggle-maintenance">
+                        <span>🚧</span>
+                        <span id="maintenance-action-label">Включить техработы</span>
                     </button>
                 </div>
-                <table>
-                    <thead>
-                    <tr>
-                        <th>Пользователь</th>
-                        <th>Статус</th>
-                        <th>Подписка</th>
-                        <th>Баланс</th>
-                        <th></th>
-                    </tr>
-                    </thead>
-                    <tbody id="recent-users-body">
-                    <tr>
-                        <td colspan="5" style="padding: 32px; text-align: center; color: var(--text-tertiary);">
-                            Нет данных
-                        </td>
-                    </tr>
-                    </tbody>
-                </table>
+                <section style="margin-bottom: 32px;">
+                    <h2 class="servers-section-title">
+                        <span>🖥️</span>
+                        <span>Активные серверы</span>
+                        <span style="background: var(--success); color: white; font-size: 12px; padding: 4px 12px; border-radius: 20px;" id="servers-online-badge">— онлайн</span>
+                    </h2>
+                    <div id="servers-list"></div>
+                </section>
+                <section class="table-container">
+                    <div class="table-header">
+                        <h3>Последние пользователи</h3>
+                        <button class="action-btn" data-action="refresh-users">
+                            <span>🔄</span>
+                            <span>Обновить</span>
+                        </button>
+                    </div>
+                    <table>
+                        <thead>
+                        <tr>
+                            <th>Пользователь</th>
+                            <th>Статус</th>
+                            <th>Подписка</th>
+                            <th>Баланс</th>
+                            <th></th>
+                        </tr>
+                        </thead>
+                        <tbody id="recent-users-body">
+                        <tr>
+                            <td colspan="5" style="padding: 32px; text-align: center; color: var(--text-tertiary);">
+                                Нет данных
+                            </td>
+                        </tr>
+                        </tbody>
+                    </table>
+                </section>
             </section>
-            <section class="settings-section" id="settings">
-                <h2>⚙️ Конфигурация бота</h2>
-                <p>Просматривайте и обновляйте ключевые параметры без перезапуска бота. Значения сохраняются в базе данных.</p>
+
+            <section class="content-section" data-section="users">
+                <div class="section-header">
+                    <div>
+                        <h1 class="page-title">Пользователи</h1>
+                        <p class="page-subtitle">Поиск, фильтрация и быстрый доступ к информации о пользователях</p>
+                    </div>
+                    <div class="section-actions">
+                        <input type="text" id="users-search-input" class="section-search" placeholder="Поиск по имени, ID или username">
+                        <button class="action-btn" data-action="users-refresh">
+                            <span>🔄</span>
+                            <span>Обновить</span>
+                        </button>
+                    </div>
+                </div>
+                <div class="table-container">
+                    <div class="table-header">
+                        <h3>Список пользователей</h3>
+                        <span id="users-total-label" class="table-caption">—</span>
+                    </div>
+                    <table>
+                        <thead>
+                        <tr>
+                            <th>Пользователь</th>
+                            <th>Подписка</th>
+                            <th>Баланс</th>
+                            <th>Создан</th>
+                            <th></th>
+                        </tr>
+                        </thead>
+                        <tbody id="users-table-body">
+                        <tr><td colspan="5" style="padding: 32px; text-align: center; color: var(--text-terтиary);">Введите запрос для поиска</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div class="pagination" id="users-pagination"></div>
+            </section>
+
+            <section class="content-section" data-section="remnawave-overview">
+                <div class="section-header">
+                    <div>
+                        <h1 class="page-title">Remnawave • Обзор</h1>
+                        <p class="page-subtitle">Статистика панели и состояние инфраструктуры</p>
+                    </div>
+                    <div class="section-actions">
+                        <button class="action-btn" data-action="rw-refresh-overview">
+                            <span>🔄</span>
+                            <span>Обновить</span>
+                        </button>
+                    </div>
+                </div>
+                <div id="rw-overview-cards" class="stats-grid" style="margin-bottom: 24px;"></div>
+                <div class="table-container">
+                    <div class="table-header">
+                        <h3>Состояние системы</h3>
+                        <span id="rw-overview-updated" class="table-caption">—</span>
+                    </div>
+                    <div id="rw-overview-details" class="settings-container"></div>
+                </div>
+            </section>
+
+            <section class="content-section" data-section="remnawave-nodes">
+                <div class="section-header">
+                    <div>
+                        <h1 class="page-title">Remnawave • Ноды</h1>
+                        <p class="page-subtitle">Управление статусом нод и просмотр нагрузки</p>
+                    </div>
+                    <div class="section-actions">
+                        <button class="action-btn" data-action="rw-restart-all-nodes">
+                            <span>⚡</span>
+                            <span>Перезагрузить все</span>
+                        </button>
+                        <button class="action-btn" data-action="rw-refresh-nodes">
+                            <span>🔄</span>
+                            <span>Обновить</span>
+                        </button>
+                    </div>
+                </div>
+                <div id="rw-nodes-container" class="card-list"></div>
+            </section>
+
+            <section class="content-section" data-section="remnawave-squads">
+                <div class="section-header">
+                    <div>
+                        <h1 class="page-title">Remnawave • Сквады</h1>
+                        <p class="page-subtitle">Создание, редактирование и управление внутренними сквадами</p>
+                    </div>
+                    <div class="section-actions">
+                        <button class="action-btn" data-action="rw-create-squad">
+                            <span>➕</span>
+                            <span>Создать сквад</span>
+                        </button>
+                        <button class="action-btn" data-action="rw-refresh-squads">
+                            <span>🔄</span>
+                            <span>Обновить</span>
+                        </button>
+                    </div>
+                </div>
+                <div id="rw-squads-container" class="card-list"></div>
+            </section>
+
+            <section class="content-section" data-section="remnawave-sync">
+                <div class="section-header">
+                    <div>
+                        <h1 class="page-title">Remnawave • Синхронизация</h1>
+                        <p class="page-subtitle">Синхронизируйте данные пользователей и подписок между ботом и панелью</p>
+                    </div>
+                    <div class="section-actions">
+                        <button class="action-btn" data-action="rw-refresh-sync">
+                            <span>🔄</span>
+                            <span>Обновить рекомендации</span>
+                        </button>
+                    </div>
+                </div>
+                <div id="rw-sync-recommendations" class="settings-container" style="margin-bottom: 24px;"></div>
+                <div class="quick-actions" id="rw-sync-actions"></div>
+                <div class="table-container" style="margin-top: 24px;">
+                    <div class="table-header">
+                        <h3>Журнал операций</h3>
+                    </div>
+                    <div id="rw-sync-log" class="settings-empty">Ожидание запуска синхронизации…</div>
+                </div>
+            </section>
+
+            <section class="content-section" data-section="servers">
+                <div class="section-header">
+                    <div>
+                        <h1 class="page-title">Серверы</h1>
+                        <p class="page-subtitle">Управление точками подключения и синхронизация с Remnawave</p>
+                    </div>
+                    <div class="section-actions">
+                        <button class="action-btn" data-action="servers-sync">
+                            <span>🔄</span>
+                            <span>Синхронизировать с панелью</span>
+                        </button>
+                        <button class="action-btn" data-action="servers-refresh">
+                            <span>🔁</span>
+                            <span>Обновить</span>
+                        </button>
+                    </div>
+                </div>
+                <div id="servers-management-list" class="card-list"></div>
+            </section>
+
+            <section class="content-section" data-section="promocodes">
+                <div class="section-header">
+                    <div>
+                        <h1 class="page-title">Промокоды</h1>
+                        <p class="page-subtitle">Создание, редактирование и аналитика промокодов</p>
+                    </div>
+                    <div class="section-actions">
+                        <button class="action-btn" data-action="promocode-create">
+                            <span>➕</span>
+                            <span>Создать промокод</span>
+                        </button>
+                        <button class="action-btn" data-action="promocodes-refresh">
+                            <span>🔄</span>
+                            <span>Обновить</span>
+                        </button>
+                    </div>
+                </div>
+                <div class="table-container">
+                    <div class="table-header">
+                        <h3>Список промокодов</h3>
+                        <span id="promocodes-total" class="table-caption">—</span>
+                    </div>
+                    <table>
+                        <thead>
+                        <tr>
+                            <th>Код</th>
+                            <th>Тип</th>
+                            <th>Статус</th>
+                            <th>Использований</th>
+                            <th></th>
+                        </tr>
+                        </thead>
+                        <tbody id="promocodes-table-body">
+                        <tr><td colspan="5" style="padding: 32px; text-align: center; color: var(--text-terитиary);">Нет данных</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div class="pagination" id="promocodes-pagination"></div>
+            </section>
+
+            <section class="content-section" data-section="support">
+                <div class="section-header">
+                    <div>
+                        <h1 class="page-title">Поддержка</h1>
+                        <p class="page-subtitle">Настройки системы тикетов и список модераторов</p>
+                    </div>
+                    <div class="section-actions">
+                        <button class="action-btn" data-action="support-refresh">
+                            <span>🔄</span>
+                            <span>Обновить</span>
+                        </button>
+                    </div>
+                </div>
+                <div class="settings-container" id="support-settings-container">
+                    <div class="settings-empty">Загрузка настроек…</div>
+                </div>
+                <div class="table-container" style="margin-top: 24px;">
+                    <div class="table-header">
+                        <h3>Модераторы</h3>
+                        <button class="action-btn" data-action="support-add-moderator">
+                            <span>➕</span>
+                            <span>Добавить</span>
+                        </button>
+                    </div>
+                    <div id="support-moderators" class="settings-empty">Нет данных</div>
+                </div>
+            </section>
+
+            <section class="content-section" data-section="updates">
+                <div class="section-header">
+                    <div>
+                        <h1 class="page-title">Обновления</h1>
+                        <p class="page-subtitle">Отслеживайте новые версии бота и изучайте изменения</p>
+                    </div>
+                    <div class="section-actions">
+                        <button class="action-btn" data-action="updates-refresh">
+                            <span>🔄</span>
+                            <span>Проверить обновления</span>
+                        </button>
+                    </div>
+                </div>
+                <div class="settings-container" id="updates-info"></div>
+                <div class="table-container" style="margin-top: 24px;">
+                    <div class="table-header">
+                        <h3>Доступные релизы</h3>
+                    </div>
+                    <div id="updates-releases" class="settings-empty">Еще не проверено</div>
+                </div>
+            </section>
+
+            <section class="content-section" data-section="settings">
+                <div class="section-header">
+                    <div>
+                        <h1 class="page-title">Конфигурация бота</h1>
+                        <p class="page-subtitle">Все настройки собраны по разделам с возможностью быстрого редактирования</p>
+                    </div>
+                    <div class="section-actions">
+                        <button class="action-btn" data-action="settings-reload">
+                            <span>🔄</span>
+                            <span>Обновить список</span>
+                        </button>
+                    </div>
+                </div>
                 <div id="settings-container" class="settings-container">
                     <div class="settings-empty">Загрузка категорий настроек…</div>
                 </div>
@@ -1432,6 +1755,12 @@
         token: localStorage.getItem('webadminToken') || '',
         health: null,
         settingsCache: new Map(),
+        activeSection: 'dashboard',
+        loadedSections: new Set(),
+        users: { search: '', offset: 0, limit: 20, total: 0 },
+        promocodes: { offset: 0, limit: 20, total: 0 },
+        remnawave: { inbounds: [] },
+        syncLog: [],
     };
 
     const els = {
@@ -1445,6 +1774,8 @@
         botStatusIndicator: document.getElementById('bot-status-indicator'),
         maintenanceActionLabel: document.getElementById('maintenance-action-label'),
         maintenanceLabel: document.querySelector('[data-maintenance-label]'),
+        navItems: Array.from(document.querySelectorAll('.nav-item')),
+        sections: Array.from(document.querySelectorAll('.content-section')),
         statUsers: document.getElementById('stat-total-users'),
         statUsersChange: document.getElementById('stat-users-change'),
         statRevenue: document.getElementById('stat-revenue'),
@@ -1460,7 +1791,62 @@
         recentUsersBody: document.getElementById('recent-users-body'),
         settingsContainer: document.getElementById('settings-container'),
         searchInput: document.getElementById('search-input'),
+        usersTableBody: document.getElementById('users-table-body'),
+        usersTotalLabel: document.getElementById('users-total-label'),
+        usersPagination: document.getElementById('users-pagination'),
+        usersSearchInput: document.getElementById('users-search-input'),
+        rwOverviewCards: document.getElementById('rw-overview-cards'),
+        rwOverviewDetails: document.getElementById('rw-overview-details'),
+        rwOverviewUpdated: document.getElementById('rw-overview-updated'),
+        rwNodesContainer: document.getElementById('rw-nodes-container'),
+        rwSquadsContainer: document.getElementById('rw-squads-container'),
+        rwSyncRecommendations: document.getElementById('rw-sync-recommendations'),
+        rwSyncActions: document.getElementById('rw-sync-actions'),
+        rwSyncLog: document.getElementById('rw-sync-log'),
+        serversManagementList: document.getElementById('servers-management-list'),
+        promocodesTableBody: document.getElementById('promocodes-table-body'),
+        promocodesTotal: document.getElementById('promocodes-total'),
+        promocodesPagination: document.getElementById('promocodes-pagination'),
+        supportSettingsContainer: document.getElementById('support-settings-container'),
+        supportModerators: document.getElementById('support-moderators'),
+        updatesInfo: document.getElementById('updates-info'),
+        updatesReleases: document.getElementById('updates-releases'),
     };
+
+    const sectionLoaders = {
+        dashboard: loadDashboard,
+        users: loadUsersSection,
+        'remnawave-overview': loadRemnawaveOverview,
+        'remnawave-nodes': loadRemnawaveNodes,
+        'remnawave-squads': loadRemnawaveSquads,
+        'remnawave-sync': loadRemnawaveSync,
+        servers: loadServersSection,
+        promocodes: loadPromocodesSection,
+        support: loadSupportSection,
+        updates: loadUpdatesSection,
+        settings: loadSettingsSection,
+    };
+
+    let usersSearchTimeout = null;
+
+    async function activateSection(sectionKey, { force = false } = {}) {
+        if (!sectionKey) {
+            return;
+        }
+        if (state.activeSection !== sectionKey) {
+            state.activeSection = sectionKey;
+            els.navItems.forEach((item) => {
+                item.classList.toggle('active', item.dataset.sectionTarget === sectionKey);
+            });
+            els.sections.forEach((section) => {
+                section.classList.toggle('active', section.dataset.section === sectionKey);
+            });
+        }
+        const loader = sectionLoaders[sectionKey];
+        if (typeof loader === 'function') {
+            await loader(force);
+        }
+    }
 
     function toLocaleCurrency(value) {
         return new Intl.NumberFormat('ru-RU', { style: 'currency', currency: 'RUB', maximumFractionDigits: 0 }).format(value || 0);
@@ -1471,6 +1857,39 @@
             return '—';
         }
         return `${value.toFixed(1)}%`;
+    }
+
+    function formatBytes(bytes) {
+        if (!bytes || Number.isNaN(bytes)) {
+            return '0 Б';
+        }
+        const units = ['Б', 'КБ', 'МБ', 'ГБ', 'ТБ'];
+        const exponent = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
+        const value = bytes / 1024 ** exponent;
+        return `${value >= 10 ? value.toFixed(0) : value.toFixed(1)} ${units[exponent]}`;
+    }
+
+    function formatDateTime(value) {
+        if (!value) return '—';
+        const date = value instanceof Date ? value : new Date(value);
+        if (Number.isNaN(date.getTime())) return '—';
+        return date.toLocaleString('ru-RU');
+    }
+
+    function parseBoolean(value) {
+        if (typeof value === 'boolean') {
+            return value;
+        }
+        if (typeof value === 'string') {
+            const normalized = value.trim().toLowerCase();
+            if (['true', '1', 'yes', 'y', 'да', 'on', 'enable', 'enabled'].includes(normalized)) {
+                return true;
+            }
+            if (['false', '0', 'no', 'n', 'нет', 'off', 'disable', 'disabled'].includes(normalized)) {
+                return false;
+            }
+        }
+        return Boolean(value);
     }
 
     function showToast(message, type = 'info') {
@@ -1612,7 +2031,7 @@
         els.revenueChart.appendChild(chart);
     }
 
-    function renderServers(servers) {
+    function renderDashboardServers(servers) {
         els.serversList.innerHTML = '';
         if (!Array.isArray(servers) || !servers.length) {
             els.serversList.innerHTML = '<div class="settings-empty">Нет доступных серверов</div>';
@@ -1681,7 +2100,30 @@
         });
     }
 
-    function renderUsers(users) {
+    async function loadDashboard(force = false) {
+        if (!force && state.loadedSections.has('dashboard')) {
+            return;
+        }
+        try {
+            const [health, summary, revenue, users, servers] = await Promise.all([
+                callApi('/api/health'),
+                callApi('/api/dashboard/summary'),
+                callApi('/api/dashboard/revenue?days=14'),
+                callApi('/api/users/recent?limit=8'),
+                callApi('/api/servers'),
+            ]);
+            renderHealth(health);
+            renderSummary(summary);
+            renderRevenue(revenue);
+            renderRecentUsers(users);
+            renderDashboardServers(servers);
+            state.loadedSections.add('dashboard');
+        } catch (error) {
+            showToast(error.message, 'error');
+        }
+    }
+
+    function renderRecentUsers(users) {
         if (!Array.isArray(users) || !users.length) {
             els.recentUsersBody.innerHTML = '<tr><td colspan="5" style="padding: 32px; text-align: center; color: var(--text-tertiary);">Нет данных</td></tr>';
             return;
@@ -1768,6 +2210,687 @@
         });
         els.recentUsersBody.textContent = '';
         els.recentUsersBody.appendChild(fragment);
+    }
+
+    function renderUsersTable(response) {
+        const items = Array.isArray(response?.items) ? response.items : [];
+        const total = Number(response?.total) || items.length;
+        const offset = Number(response?.offset) || 0;
+        const limit = Number(response?.limit) || state.users.limit;
+        state.users.limit = limit;
+        state.users.offset = offset;
+        state.users.total = total;
+
+        els.usersTotalLabel.textContent = `Всего: ${total.toLocaleString('ru-RU')}`;
+        const body = els.usersTableBody;
+
+        if (!items.length) {
+            body.innerHTML = '<tr><td colspan="5" style="padding: 32px; text-align: center; color: var(--text-tertiary);">Нет пользователей</td></tr>';
+            updateUsersPagination(total, offset, limit);
+            return;
+        }
+
+        const fragment = document.createDocumentFragment();
+        items.forEach((user) => {
+            const row = document.createElement('tr');
+            const subscription = user.subscription;
+            const statusCell = document.createElement('td');
+            statusCell.innerHTML = subscription
+                ? `<span class="status-badge ${subscription.status === 'expired' ? 'expired' : subscription.is_trial ? 'trial' : ''}">`
+                    + `${subscription.is_trial ? 'Триал' : subscription.status_display || 'Активна'}</span>`
+                : '<span class="status-badge">—</span>';
+
+            const balanceCell = document.createElement('td');
+            balanceCell.textContent = toLocaleCurrency(user.balance_rub ?? 0);
+
+            const createdAt = user.created_at ? new Date(user.created_at) : null;
+
+            row.innerHTML = `
+                <td>
+                    <div class="user-cell">
+                        <div class="user-avatar-small">${(user.full_name || 'U').charAt(0).toUpperCase()}</div>
+                        <div class="user-info">
+                            <div class="user-name">${user.full_name || 'Без имени'}</div>
+                            <div class="user-id">ID: ${user.id}</div>
+                        </div>
+                    </div>
+                </td>
+            `;
+
+            row.appendChild(statusCell);
+            row.appendChild(balanceCell);
+
+            const createdCell = document.createElement('td');
+            createdCell.textContent = createdAt
+                ? createdAt.toLocaleDateString('ru-RU', { day: '2-digit', month: 'short', year: 'numeric' })
+                : '—';
+            row.appendChild(createdCell);
+
+            const actionCell = document.createElement('td');
+            actionCell.innerHTML = `<button class="setting-button" data-action="view-user" data-user-id="${user.id}">Детали</button>`;
+            row.appendChild(actionCell);
+
+            fragment.appendChild(row);
+        });
+
+        body.innerHTML = '';
+        body.appendChild(fragment);
+        updateUsersPagination(total, offset, limit);
+    }
+
+    function updateUsersPagination(total, offset, limit) {
+        const container = els.usersPagination;
+        if (!container) return;
+        if (total <= limit) {
+            container.innerHTML = '';
+            return;
+        }
+
+        const currentPage = Math.floor(offset / limit) + 1;
+        const totalPages = Math.max(1, Math.ceil(total / limit));
+
+        container.innerHTML = '';
+
+        const info = document.createElement('span');
+        info.className = 'table-caption';
+        info.textContent = `Страница ${currentPage}/${totalPages}`;
+
+        const prev = document.createElement('button');
+        prev.className = 'action-btn';
+        prev.textContent = '←';
+        prev.disabled = currentPage <= 1;
+        prev.dataset.action = 'users-page';
+        prev.dataset.page = String(currentPage - 1);
+
+        const next = document.createElement('button');
+        next.className = 'action-btn';
+        next.textContent = '→';
+        next.disabled = currentPage >= totalPages;
+        next.dataset.action = 'users-page';
+        next.dataset.page = String(currentPage + 1);
+
+        container.append(prev, info, next);
+    }
+
+    async function loadUsersSection(force = false) {
+        if (!force && state.loadedSections.has('users')) {
+            return;
+        }
+        const { search, offset, limit } = state.users;
+        const params = new URLSearchParams({ limit: String(limit), offset: String(offset) });
+        if (search) {
+            params.append('search', search);
+        }
+        els.usersTableBody.innerHTML = '<tr><td colspan="5" style="padding: 32px; text-align: center; color: var(--text-tertiary);">Загрузка…</td></tr>';
+        try {
+            const data = await callApi(`/api/users?${params.toString()}`);
+            renderUsersTable(data);
+            state.loadedSections.add('users');
+        } catch (error) {
+            els.usersTableBody.innerHTML = `<tr><td colspan="5" style="padding: 32px; text-align: center; color: var(--danger);">${error.message}</td></tr>`;
+        }
+    }
+
+    function renderRemnawaveOverview(data) {
+        if (!data) {
+            els.rwOverviewCards.innerHTML = '<div class="settings-empty">Нет данных</div>';
+            els.rwOverviewDetails.innerHTML = '';
+            els.rwOverviewUpdated.textContent = '';
+            return;
+        }
+        state.remnawave.overview = data;
+        const system = data.system || {};
+        const cards = [
+            { icon: '👥', label: 'Пользователей', value: system.total_users?.toLocaleString('ru-RU') ?? '0' },
+            { icon: '🟢', label: 'Онлайн сейчас', value: system.users_online ?? 0 },
+            { icon: '🌐', label: 'Ноды онлайн', value: system.nodes_online ?? 0 },
+            { icon: '⚡', label: 'Реалтайм трафик', value: formatBytes(data.bandwidth?.realtime_total ?? 0) },
+        ];
+        els.rwOverviewCards.innerHTML = cards
+            .map((card) => `
+                <div class="stat-card">
+                    <div class="stat-header">
+                        <div>
+                            <div class="stat-value">${card.value}</div>
+                            <div class="stat-label">${card.label}</div>
+                        </div>
+                        <div class="stat-icon">${card.icon}</div>
+                    </div>
+                </div>
+            `)
+            .join('');
+
+        const server = data.server_info || {};
+        const usersByStatus = data.users_by_status || {};
+        const statusList = Object.entries(usersByStatus)
+            .map(([status, count]) => `<li>${status}: ${count}</li>`)
+            .join('');
+
+        const trafficPeriods = data.traffic_periods || {};
+        const trafficRows = ['last_2_days', 'last_7_days', 'last_30_days', 'current_month', 'current_year']
+            .map((key) => {
+                const entry = trafficPeriods[key] || {};
+                const labelMap = {
+                    last_2_days: '2 дня',
+                    last_7_days: '7 дней',
+                    last_30_days: '30 дней',
+                    current_month: 'Месяц',
+                    current_year: 'Год',
+                };
+                const label = labelMap[key] || key;
+                const difference = entry.difference ? ` (${entry.difference})` : '';
+                return `<li>${label}: ${formatBytes(entry.current || 0)}${difference}</li>`;
+            })
+            .join('');
+
+        els.rwOverviewDetails.innerHTML = `
+            <div class="settings-group">
+                <h4>Пользователи</h4>
+                <p>Всего: ${system.total_users ?? 0}</p>
+                <ul class="simple-list">${statusList || '<li>Нет данных</li>'}</ul>
+            </div>
+            <div class="settings-group">
+                <h4>Сервер</h4>
+                <ul class="simple-list">
+                    <li>CPU: ${server.cpu_cores ?? 0} (${server.cpu_physical_cores ?? 0} физ.)</li>
+                    <li>Память: ${formatBytes(server.memory_used ?? 0)} / ${formatBytes(server.memory_total ?? 0)}</li>
+                    <li>Свободно: ${formatBytes(server.memory_free ?? 0)}</li>
+                    <li>Uptime: ${Math.floor((server.uptime_seconds || 0) / 3600)} ч</li>
+                </ul>
+            </div>
+            <div class="settings-group">
+                <h4>Трафик</h4>
+                <p>Реалтайм: ${formatBytes(data.bandwidth?.realtime_total ?? 0)}</p>
+                <ul class="simple-list">${trafficRows}</ul>
+            </div>
+        `;
+
+        els.rwOverviewUpdated.textContent = data.last_updated
+            ? `Обновлено: ${formatDateTime(data.last_updated)}`
+            : '';
+    }
+
+    function renderRemnawaveNodes(nodes) {
+        if (!els.rwNodesContainer) return;
+        if (!Array.isArray(nodes) || !nodes.length) {
+            els.rwNodesContainer.innerHTML = '<div class="settings-empty">Ноды не найдены</div>';
+            return;
+        }
+        const fragment = document.createDocumentFragment();
+        nodes.forEach((node) => {
+            const card = document.createElement('div');
+            card.className = 'server-card';
+            const statusLabel = node.is_disabled
+                ? 'Отключена'
+                : node.is_node_online
+                    ? 'Онлайн'
+                    : 'Оффлайн';
+            card.innerHTML = `
+                <div class="server-card-header">
+                    <div class="server-info">
+                        <span class="server-flag">${countryCodeToEmoji(node.country_code)}</span>
+                        <div>
+                            <div class="server-name">${node.name || node.uuid}</div>
+                            <div class="server-status-badge ${node.is_node_online && !node.is_disabled ? '' : 'offline'}">${statusLabel}</div>
+                        </div>
+                    </div>
+                    <div class="server-stats">
+                        <div class="server-stat">
+                            <div class="server-stat-value">${node.users_online ?? 0}</div>
+                            <div class="server-stat-label">Онлайн</div>
+                        </div>
+                        <div class="server-stat">
+                            <div class="server-stat-value">${formatBytes(node.traffic_used_bytes ?? 0)}</div>
+                            <div class="server-stat-label">Трафик</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="server-expanded-content" style="max-height: none; border-top: 1px solid var(--border);">
+                    <div class="server-expanded-inner">
+                        <div class="setting-actions" style="justify-content: flex-start; gap: 12px;">
+                            <button class="setting-button" data-action="rw-node-action" data-command="restart" data-node="${node.uuid}">Перезапустить</button>
+                            <button class="setting-button" data-action="rw-node-action" data-command="${node.is_disabled ? 'enable' : 'disable'}" data-node="${node.uuid}">${node.is_disabled ? 'Включить' : 'Отключить'}</button>
+                            <button class="setting-button" data-action="rw-node-details" data-node="${node.uuid}">Детали</button>
+                        </div>
+                    </div>
+                </div>
+            `;
+            fragment.appendChild(card);
+        });
+        els.rwNodesContainer.innerHTML = '';
+        els.rwNodesContainer.appendChild(fragment);
+    }
+
+    function renderRemnawaveSquads(squads) {
+        if (!els.rwSquadsContainer) return;
+        if (!Array.isArray(squads) || !squads.length) {
+            els.rwSquadsContainer.innerHTML = '<div class="settings-empty">Сквады не найдены</div>';
+            return;
+        }
+        const fragment = document.createDocumentFragment();
+        squads.forEach((squad) => {
+            const card = document.createElement('div');
+            card.className = 'server-card';
+            card.innerHTML = `
+                <div class="server-card-header">
+                    <div>
+                        <div class="server-name">${squad.name}</div>
+                        <div class="server-status-badge">${squad.members_count} участников</div>
+                    </div>
+                    <div class="server-stat">
+                        <div class="server-stat-value">${squad.inbounds_count}</div>
+                        <div class="server-stat-label">Инбаунды</div>
+                    </div>
+                </div>
+                <div class="server-expanded-content" style="max-height: none; border-top: 1px solid var(--border);">
+                    <div class="server-expanded-inner">
+                        <div class="setting-key">UUID: ${squad.uuid}</div>
+                        <div class="setting-value">Инбаунды: ${Array.isArray(squad.inbounds) && squad.inbounds.length ? squad.inbounds.join(', ') : '—'}</div>
+                        <div class="setting-actions" style="justify-content: flex-start; gap: 12px; margin-top: 12px;">
+                            <button class="setting-button" data-action="rw-squad-rename" data-squad="${squad.uuid}" data-name="${squad.name}">Переименовать</button>
+                            <button class="setting-button" data-action="rw-squad-inbounds" data-squad="${squad.uuid}">Инбаунды</button>
+                            <button class="setting-button" data-action="rw-squad-add-users" data-squad="${squad.uuid}">Добавить всех</button>
+                            <button class="setting-button" data-action="rw-squad-remove-users" data-squad="${squad.uuid}">Удалить всех</button>
+                            <button class="setting-button" data-action="rw-squad-delete" data-squad="${squad.uuid}">Удалить</button>
+                        </div>
+                    </div>
+                </div>
+            `;
+            fragment.appendChild(card);
+        });
+        els.rwSquadsContainer.innerHTML = '';
+        els.rwSquadsContainer.appendChild(fragment);
+    }
+
+    function renderRemnawaveSync(recommendations) {
+        if (!els.rwSyncRecommendations) return;
+        const { sync_type: recommendedType, should_sync: shouldSync, reason } = recommendations || {};
+        els.rwSyncRecommendations.innerHTML = `
+            <div class="settings-group">
+                <h4>Рекомендация</h4>
+                <p>${shouldSync ? 'Рекомендуется выполнить синхронизацию.' : 'Синхронизация не требуется.'}</p>
+                <p>Тип: <strong>${recommendedType || '—'}</strong></p>
+                ${reason ? `<p>${reason}</p>` : ''}
+            </div>
+        `;
+
+        const actions = [
+            { action: 'from_panel_all', label: 'Полная синхронизация', icon: '🔁' },
+            { action: 'from_panel_new', label: 'Только новые', icon: '🆕' },
+            { action: 'from_panel_update', label: 'Обновить данные', icon: '♻️' },
+            { action: 'to_panel', label: 'Выгрузить в панель', icon: '⬆️' },
+            { action: 'validate', label: 'Валидация подписок', icon: '🔍' },
+            { action: 'cleanup', label: 'Очистить неактуальные', icon: '🧹' },
+            { action: 'sync_statuses', label: 'Статусы подписок', icon: '📊' },
+        ];
+        els.rwSyncActions.innerHTML = actions
+            .map((item) => `
+                <button class="action-btn" data-action="rw-sync-run" data-sync-action="${item.action}">
+                    <span>${item.icon}</span>
+                    <span>${item.label}</span>
+                </button>
+            `)
+            .join('');
+
+        renderSyncLog();
+    }
+
+    function appendSyncLog(message, type = 'info') {
+        state.syncLog.unshift({ message, type, time: new Date() });
+        if (state.syncLog.length > 20) {
+            state.syncLog.length = 20;
+        }
+        renderSyncLog();
+    }
+
+    function renderSyncLog() {
+        if (!els.rwSyncLog) return;
+        if (!state.syncLog.length) {
+            els.rwSyncLog.textContent = 'Журнал пуст';
+            return;
+        }
+        els.rwSyncLog.innerHTML = state.syncLog
+            .map((entry) => `<div style="margin-bottom: 6px;">${formatDateTime(entry.time)} • ${entry.message}</div>`)
+            .join('');
+    }
+
+    async function loadRemnawaveOverview(force = false) {
+        if (!force && state.loadedSections.has('remnawave-overview')) {
+            return;
+        }
+        els.rwOverviewCards.innerHTML = '<div class="settings-empty">Загрузка…</div>';
+        try {
+            const data = await callApi('/api/remnawave/overview');
+            renderRemnawaveOverview(data);
+            state.loadedSections.add('remnawave-overview');
+        } catch (error) {
+            els.rwOverviewCards.innerHTML = `<div class="settings-empty">${error.message}</div>`;
+        }
+    }
+
+    async function loadRemnawaveNodes(force = false) {
+        if (!force && state.loadedSections.has('remnawave-nodes')) {
+            return;
+        }
+        els.rwNodesContainer.innerHTML = '<div class="settings-empty">Загрузка…</div>';
+        try {
+            const nodes = await callApi('/api/remnawave/nodes');
+            renderRemnawaveNodes(nodes);
+            state.loadedSections.add('remnawave-nodes');
+        } catch (error) {
+            els.rwNodesContainer.innerHTML = `<div class="settings-empty">${error.message}</div>`;
+        }
+    }
+
+    async function loadRemnawaveSquads(force = false) {
+        if (!force && state.loadedSections.has('remnawave-squads')) {
+            return;
+        }
+        els.rwSquadsContainer.innerHTML = '<div class="settings-empty">Загрузка…</div>';
+        try {
+            const [inbounds, squads] = await Promise.all([
+                callApi('/api/remnawave/inbounds'),
+                callApi('/api/remnawave/squads'),
+            ]);
+            state.remnawave.inbounds = Array.isArray(inbounds) ? inbounds : [];
+            renderRemnawaveSquads(squads);
+            state.loadedSections.add('remnawave-squads');
+        } catch (error) {
+            els.rwSquadsContainer.innerHTML = `<div class="settings-empty">${error.message}</div>`;
+        }
+    }
+
+    async function loadRemnawaveSync(force = false) {
+        if (!force && state.loadedSections.has('remnawave-sync')) {
+            return;
+        }
+        els.rwSyncRecommendations.innerHTML = '<div class="settings-empty">Загрузка…</div>';
+        try {
+            const recommendations = await callApi('/api/remnawave/sync/recommendations');
+            renderRemnawaveSync(recommendations);
+            state.loadedSections.add('remnawave-sync');
+        } catch (error) {
+            els.rwSyncRecommendations.innerHTML = `<div class="settings-empty">${error.message}</div>`;
+        }
+    }
+
+    function renderServersManagement(servers) {
+        if (!els.serversManagementList) return;
+        if (!Array.isArray(servers) || !servers.length) {
+            els.serversManagementList.innerHTML = '<div class="settings-empty">Серверы не найдены</div>';
+            return;
+        }
+        const fragment = document.createDocumentFragment();
+        servers.forEach((server) => {
+            const card = document.createElement('div');
+            card.className = 'server-card';
+            card.innerHTML = `
+                <div class="server-card-header">
+                    <div class="server-info">
+                        <span class="server-flag">${countryCodeToEmoji(server.country_code)}</span>
+                        <div>
+                            <div class="server-name">${server.name}</div>
+                            <div class="server-status-badge ${server.is_available ? '' : 'offline'}">${server.status_label}</div>
+                        </div>
+                    </div>
+                    <div class="server-stats">
+                        <div class="server-stat">
+                            <div class="server-stat-value">${server.current_users}</div>
+                            <div class="server-stat-label">Пользователи</div>
+                        </div>
+                        <div class="server-stat">
+                            <div class="server-stat-value">${server.max_users ?? '∞'}</div>
+                            <div class="server-stat-label">Лимит</div>
+                        </div>
+                        <div class="server-stat">
+                            <div class="server-stat-value">${toLocaleCurrency(server.price_rub)}</div>
+                            <div class="server-stat-label">Цена</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="server-expanded-content" style="max-height: none; border-top: 1px solid var(--border);">
+                    <div class="server-expanded-inner">
+                        <div class="setting-key">UUID: ${server.squad_uuid}</div>
+                        <div class="setting-value">Описание: ${server.description || '—'}</div>
+                        <div class="setting-actions" style="justify-content: flex-start; gap: 12px; margin-top: 12px; flex-wrap: wrap;">
+                            <button class="setting-button" data-action="server-toggle" data-server="${server.id}" data-available="${server.is_available}">${server.is_available ? 'Отключить' : 'Включить'}</button>
+                            <button class="setting-button" data-action="server-edit" data-server="${server.id}">Редактировать</button>
+                            <button class="setting-button" data-action="server-promo" data-server="${server.id}">Промогруппы</button>
+                            <button class="setting-button" data-action="server-delete" data-server="${server.id}">Удалить</button>
+                        </div>
+                    </div>
+                </div>
+            `;
+            fragment.appendChild(card);
+        });
+        els.serversManagementList.innerHTML = '';
+        els.serversManagementList.appendChild(fragment);
+    }
+
+    async function loadServersSection(force = false) {
+        if (!force && state.loadedSections.has('servers')) {
+            return;
+        }
+        els.serversManagementList.innerHTML = '<div class="settings-empty">Загрузка…</div>';
+        try {
+            const servers = await callApi('/api/servers');
+            renderServersManagement(servers);
+            state.loadedSections.add('servers');
+        } catch (error) {
+            els.serversManagementList.innerHTML = `<div class="settings-empty">${error.message}</div>`;
+        }
+    }
+
+    function renderPromocodes(data) {
+        const body = els.promocodesTableBody;
+        if (!body) return;
+        const items = Array.isArray(data?.items) ? data.items : [];
+        const total = Number(data?.total) || items.length;
+        const offset = Number(data?.offset) || 0;
+        const limit = Number(data?.limit) || state.promocodes.limit;
+        state.promocodes.total = total;
+        state.promocodes.offset = offset;
+        state.promocodes.limit = limit;
+        els.promocodesTotal.textContent = `Всего: ${total.toLocaleString('ru-RU')}`;
+
+        if (!items.length) {
+            body.innerHTML = '<tr><td colspan="5" style="padding: 32px; text-align: center; color: var(--text-tertiary);">Нет промокодов</td></tr>';
+            els.promocodesPagination.innerHTML = '';
+            return;
+        }
+
+        const fragment = document.createDocumentFragment();
+        items.forEach((promo) => {
+            const row = document.createElement('tr');
+            row.innerHTML = `
+                <td><code>${promo.code}</code></td>
+                <td>${promo.type}</td>
+                <td>${promo.is_active ? 'Активен' : 'Выключен'}</td>
+                <td>${promo.current_uses}/${promo.max_uses}</td>
+                <td>
+                    <div class="setting-actions">
+                        <button class="setting-button" data-action="promocode-toggle" data-id="${promo.id}">${promo.is_active ? 'Выключить' : 'Включить'}</button>
+                        <button class="setting-button" data-action="promocode-edit" data-id="${promo.id}">Изменить</button>
+                        <button class="setting-button" data-action="promocode-delete" data-id="${promo.id}">Удалить</button>
+                    </div>
+                </td>
+            `;
+            fragment.appendChild(row);
+        });
+        body.innerHTML = '';
+        body.appendChild(fragment);
+
+        const totalPages = Math.max(1, Math.ceil(total / limit));
+        const currentPage = Math.floor(offset / limit) + 1;
+        if (totalPages <= 1) {
+            els.promocodesPagination.innerHTML = '';
+        } else {
+            els.promocodesPagination.innerHTML = `
+                <button class="action-btn" data-action="promocodes-page" data-page="${currentPage - 1}" ${currentPage <= 1 ? 'disabled' : ''}>←</button>
+                <span class="table-caption">Страница ${currentPage}/${totalPages}</span>
+                <button class="action-btn" data-action="promocodes-page" data-page="${currentPage + 1}" ${currentPage >= totalPages ? 'disabled' : ''}>→</button>
+            `;
+        }
+    }
+
+    async function loadPromocodesSection(force = false) {
+        if (!force && state.loadedSections.has('promocodes')) {
+            return;
+        }
+        els.promocodesTableBody.innerHTML = '<tr><td colspan="5" style="padding: 32px; text-align: center; color: var(--text-terтиary);">Загрузка…</td></tr>';
+        const { offset, limit } = state.promocodes;
+        const params = new URLSearchParams({ offset: String(offset), limit: String(limit) });
+        try {
+            const data = await callApi(`/api/promocodes?${params.toString()}`);
+            renderPromocodes(data);
+            state.loadedSections.add('promocodes');
+        } catch (error) {
+            els.promocodesTableBody.innerHTML = `<tr><td colspan="5" style="padding: 32px; text-align: center; color: var(--danger);">${error.message}</td></tr>`;
+        }
+    }
+
+    function renderSupportSettings(settings) {
+        if (!els.supportSettingsContainer) return;
+        if (!settings) {
+            els.supportSettingsContainer.innerHTML = '<div class="settings-empty">Нет данных</div>';
+            return;
+        }
+        els.supportSettingsContainer.innerHTML = `
+            <div class="setting-item">
+                <div>
+                    <div class="setting-name">Меню поддержки</div>
+                    <div class="setting-key">menu_enabled</div>
+                </div>
+                <div class="setting-value">${settings.menu_enabled ? 'Включено' : 'Выключено'}</div>
+                <div class="setting-actions">
+                    <button class="setting-button" data-action="support-toggle" data-key="menu_enabled" data-value="${!settings.menu_enabled}">${settings.menu_enabled ? 'Выключить' : 'Включить'}</button>
+                </div>
+            </div>
+            <div class="setting-item">
+                <div>
+                    <div class="setting-name">Уведомления админам</div>
+                    <div class="setting-key">admin_ticket_notifications</div>
+                </div>
+                <div class="setting-value">${settings.admin_ticket_notifications ? 'Включены' : 'Выключены'}</div>
+                <div class="setting-actions">
+                    <button class="setting-button" data-action="support-toggle" data-key="admin_ticket_notifications" data-value="${!settings.admin_ticket_notifications}">${settings.admin_ticket_notifications ? 'Выключить' : 'Включить'}</button>
+                </div>
+            </div>
+            <div class="setting-item">
+                <div>
+                    <div class="setting-name">Уведомления пользователям</div>
+                    <div class="setting-key">user_ticket_notifications</div>
+                </div>
+                <div class="setting-value">${settings.user_ticket_notifications ? 'Включены' : 'Выключены'}</div>
+                <div class="setting-actions">
+                    <button class="setting-button" data-action="support-toggle" data-key="user_ticket_notifications" data-value="${!settings.user_ticket_notifications}">${settings.user_ticket_notifications ? 'Выключить' : 'Включить'}</button>
+                </div>
+            </div>
+            <div class="setting-item">
+                <div>
+                    <div class="setting-name">SLA</div>
+                    <div class="setting-key">sla_minutes</div>
+                </div>
+                <div class="setting-value">${settings.sla_enabled ? `${settings.sla_minutes} минут` : 'Отключен'}</div>
+                <div class="setting-actions">
+                    <button class="setting-button" data-action="support-toggle" data-key="sla_enabled" data-value="${!settings.sla_enabled}">${settings.sla_enabled ? 'Выключить' : 'Включить'}</button>
+                    <button class="setting-button" data-action="support-set-sla" data-value="${settings.sla_minutes}">Изменить время</button>
+                </div>
+            </div>
+        `;
+    }
+
+    function renderSupportModerators(moderators) {
+        if (!els.supportModerators) return;
+        if (!Array.isArray(moderators) || !moderators.length) {
+            els.supportModerators.textContent = 'Модераторы не назначены';
+            return;
+        }
+        els.supportModerators.innerHTML = moderators
+            .map((id) => `<div class="setting-item"><div>Telegram ID: ${id}</div><div class="setting-actions"><button class="setting-button" data-action="support-remove-moderator" data-id="${id}">Удалить</button></div></div>`)
+            .join('');
+    }
+
+    async function loadSupportSection(force = false) {
+        if (!force && state.loadedSections.has('support')) {
+            return;
+        }
+        els.supportSettingsContainer.innerHTML = '<div class="settings-empty">Загрузка…</div>';
+        try {
+            const [settings, moderators] = await Promise.all([
+                callApi('/api/support/settings'),
+                callApi('/api/support/moderators'),
+            ]);
+            renderSupportSettings(settings);
+            renderSupportModerators(moderators?.moderators || []);
+            state.loadedSections.add('support');
+        } catch (error) {
+            els.supportSettingsContainer.innerHTML = `<div class="settings-empty">${error.message}</div>`;
+        }
+    }
+
+    function renderUpdatesInfo(info) {
+        if (!els.updatesInfo) return;
+        if (!info) {
+            els.updatesInfo.innerHTML = '<div class="settings-empty">Нет данных</div>';
+            return;
+        }
+        els.updatesInfo.innerHTML = `
+            <div class="settings-group">
+                <h4>Текущая версия</h4>
+                <p>${info.current_version || '—'}</p>
+                <p>Последняя стабильная: ${info.latest_stable_version || '—'}</p>
+            </div>
+        `;
+    }
+
+    function renderUpdatesReleases(releases) {
+        if (!els.updatesReleases) return;
+        if (!Array.isArray(releases) || !releases.length) {
+            els.updatesReleases.textContent = 'Новых релизов нет';
+            return;
+        }
+        els.updatesReleases.innerHTML = releases
+            .map((release) => `
+                <div class="settings-group">
+                    <div class="setting-name">${release.name || release.tag}</div>
+                    <div class="setting-key">${release.tag}</div>
+                    <div class="setting-value">${formatDateTime(release.published_at)}</div>
+                    <p style="margin-top: 8px; color: var(--text-secondary);">${release.description || 'Без описания'}</p>
+                </div>
+            `)
+            .join('');
+    }
+
+    async function loadUpdatesSection(force = false) {
+        if (!force && state.loadedSections.has('updates')) {
+            return;
+        }
+        els.updatesInfo.innerHTML = '<div class="settings-empty">Загрузка…</div>';
+        els.updatesReleases.innerHTML = '<div class="settings-empty">Загрузка…</div>';
+        try {
+            const info = await callApi('/api/updates/info');
+            renderUpdatesInfo(info);
+            renderUpdatesReleases(info?.releases || []);
+            state.loadedSections.add('updates');
+        } catch (error) {
+            els.updatesInfo.innerHTML = `<div class="settings-empty">${error.message}</div>`;
+            els.updatesReleases.innerHTML = '';
+        }
+    }
+
+    async function loadSettingsSection(force = false) {
+        if (!force && state.loadedSections.has('settings')) {
+            return;
+        }
+        els.settingsContainer.innerHTML = '<div class="settings-empty">Загрузка…</div>';
+        try {
+            const categories = await callApi('/api/settings/categories');
+            renderSettingsCategories(categories);
+            state.loadedSections.add('settings');
+        } catch (error) {
+            els.settingsContainer.innerHTML = `<div class="settings-empty">${error.message}</div>`;
+        }
     }
 
     function renderSettingsCategories(categories) {
@@ -1909,45 +3032,520 @@
     }
 
     async function loadAllData() {
-        const [health, summary, revenue, users, servers, categories] = await Promise.all([
-            callApi('/api/health'),
-            callApi('/api/dashboard/summary'),
-            callApi('/api/dashboard/revenue?days=14'),
-            callApi('/api/users/recent?limit=8'),
-            callApi('/api/servers'),
-            callApi('/api/settings/categories'),
-        ]);
-        renderHealth(health);
-        renderSummary(summary);
-        renderRevenue(revenue);
-        renderUsers(users);
-        renderServers(servers);
-        renderSettingsCategories(categories);
+        const sectionsToReload = new Set(state.loadedSections);
+        sectionsToReload.add('dashboard');
+        if (state.activeSection) {
+            sectionsToReload.add(state.activeSection);
+        }
+        state.loadedSections.clear();
+        await Promise.all(
+            Array.from(sectionsToReload).map((sectionKey) => {
+                const loader = sectionLoaders[sectionKey];
+                return typeof loader === 'function' ? loader(true) : Promise.resolve();
+            }),
+        );
     }
 
-    async function handleAction(action) {
+    async function handleUsersAction(action, element) {
+        switch (action) {
+            case 'users-refresh':
+                state.users.offset = 0;
+                await loadUsersSection(true);
+                showToast('Список пользователей обновлен', 'success');
+                break;
+            case 'users-page': {
+                if (!element) break;
+                const page = Number(element.dataset.page);
+                if (!Number.isFinite(page)) break;
+                const limit = state.users.limit || 20;
+                const normalizedPage = Math.max(1, Math.floor(page));
+                state.users.offset = Math.max(0, (normalizedPage - 1) * limit);
+                await loadUsersSection(true);
+                break;
+            }
+            case 'view-user': {
+                const userId = Number(element?.dataset.userId);
+                if (!Number.isFinite(userId) || userId <= 0) {
+                    showToast('Некорректный пользователь', 'error');
+                    return;
+                }
+                await viewUser(userId);
+                break;
+            }
+            default:
+                break;
+        }
+    }
+
+    async function handleRemnawaveAction(action, element) {
+        switch (action) {
+            case 'rw-refresh-overview':
+                await loadRemnawaveOverview(true);
+                showToast('Данные Remnawave обновлены', 'success');
+                break;
+            case 'rw-refresh-nodes':
+                await loadRemnawaveNodes(true);
+                showToast('Список нод обновлен', 'success');
+                break;
+            case 'rw-refresh-squads':
+                await loadRemnawaveSquads(true);
+                showToast('Список сквадов обновлен', 'success');
+                break;
+            case 'rw-refresh-sync':
+                await loadRemnawaveSync(true);
+                showToast('Рекомендации обновлены', 'success');
+                break;
+            case 'rw-restart-all-nodes':
+                if (!confirm('Перезапустить все ноды Remnawave?')) return;
+                await callApi('/api/remnawave/nodes/actions/restart-all', { method: 'POST' });
+                showToast('Команда отправлена', 'success');
+                await loadRemnawaveNodes(true);
+                break;
+            case 'rw-node-action': {
+                const nodeUuid = element?.dataset.node;
+                const command = element?.dataset.command;
+                if (!nodeUuid || !command) return;
+                if (command === 'restart' && !confirm('Перезапустить выбранную ноду?')) return;
+                if (command === 'disable' && !confirm('Отключить выбранную ноду?')) return;
+                await callApi(`/api/remnawave/nodes/${encodeURIComponent(nodeUuid)}/action`, {
+                    method: 'POST',
+                    body: { action: command },
+                });
+                showToast('Команда выполнена', 'success');
+                await loadRemnawaveNodes(true);
+                break;
+            }
+            case 'rw-node-details': {
+                const nodeUuid = element?.dataset.node;
+                if (!nodeUuid) return;
+                const details = await callApi(`/api/remnawave/nodes/${encodeURIComponent(nodeUuid)}`);
+                const message = typeof details === 'object' && details
+                    ? Object.entries(details)
+                        .map(([key, value]) => `${key}: ${typeof value === 'object' ? JSON.stringify(value) : value}`)
+                        .join('\n') || 'Нет данных'
+                    : 'Нет данных';
+                alert(message);
+                break;
+            }
+            case 'rw-create-squad': {
+                const nameInput = prompt('Введите название сквада');
+                if (nameInput === null) return;
+                const cleanName = nameInput.trim();
+                if (!cleanName) {
+                    showToast('Название не может быть пустым', 'error');
+                    return;
+                }
+                const availableInbounds = (state.remnawave.inbounds || [])
+                    .map((item) => item?.tag || item?.remark || item?.uuid || item?.id)
+                    .filter(Boolean);
+                const hint = availableInbounds.length
+                    ? `\nДоступные инбаунды: ${availableInbounds.join(', ')}`
+                    : '';
+                const inboundsInput = prompt(`Укажите инбаунды через запятую${hint}`, '');
+                const inbounds = inboundsInput
+                    ? inboundsInput
+                        .split(',')
+                        .map((value) => value.trim())
+                        .filter(Boolean)
+                    : [];
+                await callApi('/api/remnawave/squads', {
+                    method: 'POST',
+                    body: { name: cleanName, inbounds },
+                });
+                showToast('Сквад создан', 'success');
+                await loadRemnawaveSquads(true);
+                break;
+            }
+            case 'rw-squad-rename': {
+                const squadUuid = element?.dataset.squad;
+                if (!squadUuid) return;
+                const currentName = element?.dataset.name || '';
+                const newNameInput = prompt('Введите новое название сквада', currentName);
+                if (newNameInput === null) return;
+                const newName = newNameInput.trim();
+                if (!newName) {
+                    showToast('Название не может быть пустым', 'error');
+                    return;
+                }
+                await callApi(`/api/remnawave/squads/${encodeURIComponent(squadUuid)}`, {
+                    method: 'PUT',
+                    body: { name: newName },
+                });
+                showToast('Название сквада обновлено', 'success');
+                await loadRemnawaveSquads(true);
+                break;
+            }
+            case 'rw-squad-inbounds': {
+                const squadUuid = element?.dataset.squad;
+                if (!squadUuid) return;
+                const details = await callApi(`/api/remnawave/squads/${encodeURIComponent(squadUuid)}`);
+                const current = Array.isArray(details?.inbounds) ? details.inbounds : [];
+                const availableInbounds = (state.remnawave.inbounds || [])
+                    .map((item) => item?.tag || item?.remark || item?.uuid || item?.id)
+                    .filter(Boolean);
+                const hint = availableInbounds.length
+                    ? `\nДоступные инбаунды: ${availableInbounds.join(', ')}`
+                    : '';
+                const input = prompt(`Введите инбаунды через запятую${hint}`, current.join(', '));
+                if (input === null) return;
+                const inbounds = input
+                    .split(',')
+                    .map((value) => value.trim())
+                    .filter(Boolean);
+                await callApi(`/api/remnawave/squads/${encodeURIComponent(squadUuid)}`, {
+                    method: 'PUT',
+                    body: { inbounds },
+                });
+                showToast('Инбаунды обновлены', 'success');
+                await loadRemnawaveSquads(true);
+                break;
+            }
+            case 'rw-squad-add-users':
+            case 'rw-squad-remove-users': {
+                const squadUuid = element?.dataset.squad;
+                if (!squadUuid) return;
+                const isAdd = action === 'rw-squad-add-users';
+                const message = isAdd
+                    ? 'Добавить всех пользователей в этот сквад?'
+                    : 'Удалить всех пользователей из сквада?';
+                if (!confirm(message)) return;
+                const payload = { action: isAdd ? 'add_all_users' : 'remove_all_users' };
+                await callApi(`/api/remnawave/squads/${encodeURIComponent(squadUuid)}/actions`, {
+                    method: 'POST',
+                    body: payload,
+                });
+                showToast('Команда отправлена', 'success');
+                await loadRemnawaveSquads(true);
+                break;
+            }
+            case 'rw-squad-delete': {
+                const squadUuid = element?.dataset.squad;
+                if (!squadUuid) return;
+                if (!confirm('Удалить сквад навсегда?')) return;
+                await callApi(`/api/remnawave/squads/${encodeURIComponent(squadUuid)}`, { method: 'DELETE' });
+                showToast('Сквад удален', 'success');
+                await loadRemnawaveSquads(true);
+                break;
+            }
+            case 'rw-sync-run': {
+                const syncAction = element?.dataset.syncAction;
+                if (!syncAction) return;
+                appendSyncLog(`Запуск синхронизации «${syncAction}»`, 'info');
+                try {
+                    const result = await callApi('/api/remnawave/sync', {
+                        method: 'POST',
+                        body: { action: syncAction },
+                    });
+                    const summary = typeof result?.result === 'object'
+                        ? JSON.stringify(result.result)
+                        : String(result?.result ?? 'готово');
+                    appendSyncLog(`Синхронизация ${syncAction}: ${summary}`, 'success');
+                    showToast('Синхронизация завершена', 'success');
+                    await loadRemnawaveSync(true);
+                } catch (error) {
+                    appendSyncLog(`Ошибка синхронизации ${syncAction}: ${error.message}`, 'error');
+                    throw error;
+                }
+                break;
+            }
+            default:
+                break;
+        }
+    }
+
+    async function handleServerAction(action, element) {
+        const serverId = Number(element?.dataset.server);
+        if (['server-toggle', 'server-edit', 'server-promo', 'server-delete'].includes(action)) {
+            if (!Number.isFinite(serverId) || serverId <= 0) {
+                showToast('Некорректный сервер', 'error');
+                return;
+            }
+        }
+        switch (action) {
+            case 'server-toggle': {
+                const current = parseBoolean(element?.dataset.available);
+                await callApi(`/api/servers/${serverId}`, {
+                    method: 'PUT',
+                    body: { is_available: !current },
+                });
+                showToast(current ? 'Сервер отключен' : 'Сервер включен', 'success');
+                await loadServersSection(true);
+                break;
+            }
+            case 'server-edit': {
+                const server = await callApi(`/api/servers/${serverId}`);
+                const nameInput = prompt('Название сервера', server?.name || server?.original_name || '');
+                if (nameInput === null) return;
+                const cleanName = nameInput.trim();
+                if (!cleanName) {
+                    showToast('Название не может быть пустым', 'error');
+                    return;
+                }
+                const countryInput = prompt('Код страны (например, RU)', server?.country_code || '');
+                if (countryInput === null) return;
+                const priceInput = prompt('Цена (в рублях)', server?.price_rub ?? 0);
+                if (priceInput === null) return;
+                const maxUsersInput = prompt('Максимум пользователей (оставьте пусто для безлимита)', server?.max_users ?? '');
+                if (maxUsersInput === null) return;
+                const descriptionInput = prompt('Описание', server?.description || '');
+                if (descriptionInput === null) return;
+                const payload = {
+                    display_name: cleanName,
+                    country_code: countryInput.trim(),
+                    price_rub: priceInput.trim(),
+                    description: descriptionInput.trim(),
+                };
+                if (maxUsersInput.trim() !== '') {
+                    payload.max_users = maxUsersInput.trim();
+                }
+                await callApi(`/api/servers/${serverId}`, { method: 'PUT', body: payload });
+                showToast('Сервер обновлен', 'success');
+                await loadServersSection(true);
+                break;
+            }
+            case 'server-promo': {
+                const groups = await callApi('/api/promo-groups');
+                const list = Array.isArray(groups)
+                    ? groups
+                        .map((group) => `${group.id}: ${group.name} (участников: ${group.members_count})`)
+                        .join('\n')
+                    : '';
+                const promptMessage = list
+                    ? `Введите ID промогрупп через запятую.\n${list}`
+                    : 'Введите ID промогрупп через запятую';
+                const input = prompt(promptMessage, '');
+                if (input === null) return;
+                const ids = input
+                    .split(',')
+                    .map((value) => Number(value.trim()))
+                    .filter((value) => Number.isFinite(value) && value > 0);
+                if (!ids.length) {
+                    showToast('Укажите хотя бы одну промогруппу', 'error');
+                    return;
+                }
+                await callApi(`/api/servers/${serverId}/promo-groups`, {
+                    method: 'POST',
+                    body: { promo_group_ids: ids },
+                });
+                showToast('Промогруппы обновлены', 'success');
+                await loadServersSection(true);
+                break;
+            }
+            case 'server-delete':
+                if (!confirm('Удалить сервер? Это действие необратимо.')) return;
+                await callApi(`/api/servers/${serverId}`, { method: 'DELETE' });
+                showToast('Сервер удален', 'success');
+                await loadServersSection(true);
+                break;
+            default:
+                break;
+        }
+    }
+
+    async function handlePromocodeAction(action, element) {
+        switch (action) {
+            case 'promocode-create': {
+                const codeInput = prompt('Введите код промокода');
+                if (codeInput === null) return;
+                const code = codeInput.trim().toUpperCase();
+                if (!code) {
+                    showToast('Код не может быть пустым', 'error');
+                    return;
+                }
+                const typeInput = prompt('Тип промокода (balance, subscription, traffic)', 'balance');
+                if (typeInput === null) return;
+                const bonusInput = prompt('Бонус на баланс (руб)', '0');
+                if (bonusInput === null) return;
+                const daysInput = prompt('Количество бонусных дней подписки', '0');
+                if (daysInput === null) return;
+                const maxUsesInput = prompt('Лимит использований', '1');
+                if (maxUsesInput === null) return;
+                const payload = {
+                    code,
+                    type: typeInput.trim().toLowerCase(),
+                    balance_bonus_rub: parseFloat(bonusInput.replace(',', '.')) || 0,
+                    subscription_days: Number.parseInt(daysInput, 10) || 0,
+                    max_uses: Math.max(1, Number.parseInt(maxUsesInput, 10) || 1),
+                };
+                await callApi('/api/promocodes', { method: 'POST', body: payload });
+                showToast('Промокод создан', 'success');
+                state.promocodes.offset = 0;
+                await loadPromocodesSection(true);
+                break;
+            }
+            case 'promocodes-refresh':
+                await loadPromocodesSection(true);
+                showToast('Список промокодов обновлен', 'success');
+                break;
+            case 'promocodes-page': {
+                if (!element) break;
+                const page = Number(element.dataset.page);
+                if (!Number.isFinite(page)) break;
+                const limit = state.promocodes.limit || 20;
+                const normalizedPage = Math.max(1, Math.floor(page));
+                state.promocodes.offset = Math.max(0, (normalizedPage - 1) * limit);
+                await loadPromocodesSection(true);
+                break;
+            }
+            case 'promocode-toggle': {
+                const id = Number(element?.dataset.id);
+                if (!Number.isFinite(id) || id <= 0) {
+                    showToast('Некорректный промокод', 'error');
+                    return;
+                }
+                await callApi(`/api/promocodes/${id}/toggle`, { method: 'POST' });
+                showToast('Статус промокода обновлен', 'success');
+                await loadPromocodesSection(true);
+                break;
+            }
+            case 'promocode-edit': {
+                const id = Number(element?.dataset.id);
+                if (!Number.isFinite(id) || id <= 0) {
+                    showToast('Некорректный промокод', 'error');
+                    return;
+                }
+                const promo = await callApi(`/api/promocodes/${id}`);
+                const codeInput = prompt('Код промокода', promo?.code ?? '');
+                if (codeInput === null) return;
+                const typeInput = prompt('Тип промокода (balance, subscription, traffic)', promo?.type ?? 'balance');
+                if (typeInput === null) return;
+                const bonusInput = prompt('Бонус на баланс (руб)', String(promo?.balance_bonus_rub ?? 0));
+                if (bonusInput === null) return;
+                const daysInput = prompt('Количество бонусных дней подписки', String(promo?.subscription_days ?? 0));
+                if (daysInput === null) return;
+                const maxUsesInput = prompt('Лимит использований', String(promo?.max_uses ?? 1));
+                if (maxUsesInput === null) return;
+                const validUntilInput = prompt('Дата окончания (ISO 8601) или оставьте пустым', promo?.valid_until ?? '');
+                if (validUntilInput === null) return;
+                const statusInput = prompt('Статус (on/off)', promo?.is_active ? 'on' : 'off');
+                if (statusInput === null) return;
+                const payload = {
+                    code: codeInput.trim().toUpperCase(),
+                    type: typeInput.trim().toLowerCase(),
+                    balance_bonus_rub: parseFloat((bonusInput || '0').replace(',', '.')) || 0,
+                    subscription_days: Number.parseInt(daysInput, 10) || 0,
+                    max_uses: Math.max(1, Number.parseInt(maxUsesInput, 10) || 1),
+                    valid_until: validUntilInput.trim() || null,
+                    is_active: parseBoolean(statusInput),
+                };
+                await callApi(`/api/promocodes/${id}`, { method: 'PUT', body: payload });
+                showToast('Промокод обновлен', 'success');
+                await loadPromocodesSection(true);
+                break;
+            }
+            case 'promocode-delete': {
+                const id = Number(element?.dataset.id);
+                if (!Number.isFinite(id) || id <= 0) {
+                    showToast('Некорректный промокод', 'error');
+                    return;
+                }
+                if (!confirm('Удалить промокод?')) return;
+                await callApi(`/api/promocodes/${id}`, { method: 'DELETE' });
+                showToast('Промокод удален', 'success');
+                await loadPromocodesSection(true);
+                break;
+            }
+            default:
+                break;
+        }
+    }
+
+    async function handleSupportAction(action, element) {
+        switch (action) {
+            case 'support-refresh':
+                await loadSupportSection(true);
+                showToast('Настройки поддержки обновлены', 'success');
+                break;
+            case 'support-toggle': {
+                const key = element?.dataset.key;
+                if (!key) return;
+                const value = parseBoolean(element?.dataset.value ?? 'false');
+                await callApi('/api/support/settings', {
+                    method: 'PUT',
+                    body: { [key]: value },
+                });
+                showToast('Настройка обновлена', 'success');
+                await loadSupportSection(true);
+                break;
+            }
+            case 'support-set-sla': {
+                const current = Number(element?.dataset.value || 0) || 0;
+                const input = prompt('Введите SLA в минутах', current ? String(current) : '60');
+                if (input === null) return;
+                const minutes = Number.parseInt(input, 10);
+                if (!Number.isFinite(minutes) || minutes <= 0) {
+                    showToast('Некорректное значение SLA', 'error');
+                    return;
+                }
+                await callApi('/api/support/settings', {
+                    method: 'PUT',
+                    body: { sla_minutes: minutes },
+                });
+                showToast('SLA обновлен', 'success');
+                await loadSupportSection(true);
+                break;
+            }
+            case 'support-add-moderator': {
+                const input = prompt('Введите Telegram ID модератора');
+                if (input === null) return;
+                const moderatorId = Number.parseInt(input.trim(), 10);
+                if (!Number.isFinite(moderatorId) || moderatorId <= 0) {
+                    showToast('Некорректный Telegram ID', 'error');
+                    return;
+                }
+                await callApi('/api/support/moderators', {
+                    method: 'POST',
+                    body: { telegram_id: moderatorId },
+                });
+                showToast('Модератор добавлен', 'success');
+                await loadSupportSection(true);
+                break;
+            }
+            case 'support-remove-moderator': {
+                const moderatorId = element?.dataset.id;
+                if (!moderatorId) return;
+                if (!confirm('Удалить модератора?')) return;
+                await callApi(`/api/support/moderators/${encodeURIComponent(moderatorId)}`, { method: 'DELETE' });
+                showToast('Модератор удален', 'success');
+                await loadSupportSection(true);
+                break;
+            }
+            default:
+                break;
+        }
+    }
+
+    async function handleUpdatesAction(action) {
+        if (action === 'updates-refresh') {
+            const info = await callApi('/api/updates/check?force=true');
+            showToast(info?.has_updates ? 'Найдены новые обновления' : 'Обновлений нет', 'success');
+            await loadUpdatesSection(true);
+        }
+    }
+
+    async function handleAction(action, element = null) {
         try {
             switch (action) {
                 case 'refresh':
                     await loadAllData();
                     showToast('Данные обновлены', 'success');
-                    break;
+                    return;
                 case 'refresh-users':
-                    renderUsers(await callApi('/api/users/recent?limit=8'));
+                    renderRecentUsers(await callApi('/api/users/recent?limit=8'));
                     showToast('Список пользователей обновлен', 'success');
-                    break;
+                    return;
                 case 'reload-config':
                     await callApi('/api/bot/control', { method: 'POST', body: { action: 'reload_configuration' } });
                     showToast('Конфигурация перезагружена', 'success');
-                    break;
+                    return;
                 case 'create-backup':
                     await callApi('/api/bot/control', { method: 'POST', body: { action: 'create_backup' } });
                     showToast('Задача на бекап создана', 'success');
-                    break;
+                    return;
                 case 'send-report':
                     await callApi('/api/bot/control', { method: 'POST', body: { action: 'send_daily_report' } });
                     showToast('Отчет сформирован', 'success');
-                    break;
+                    return;
                 case 'toggle-maintenance':
                     if (state.health?.bot?.maintenance) {
                         await callApi('/api/bot/control', { method: 'POST', body: { action: 'disable_maintenance' } });
@@ -1956,9 +3554,33 @@
                     }
                     showToast('Статус техработ обновлен', 'success');
                     await refreshHealth();
-                    break;
+                    return;
                 default:
                     break;
+            }
+
+            if (action.startsWith('users') || action === 'view-user') {
+                await handleUsersAction(action, element);
+                return;
+            }
+            if (action.startsWith('rw-')) {
+                await handleRemnawaveAction(action, element);
+                return;
+            }
+            if (action.startsWith('server-')) {
+                await handleServerAction(action, element);
+                return;
+            }
+            if (action.startsWith('promocode') || action.startsWith('promocodes')) {
+                await handlePromocodeAction(action, element);
+                return;
+            }
+            if (action.startsWith('support-')) {
+                await handleSupportAction(action, element);
+                return;
+            }
+            if (action.startsWith('updates-')) {
+                await handleUpdatesAction(action);
             }
         } catch (error) {
             showToast(error.message, 'error');
@@ -1996,34 +3618,97 @@
         });
 
         els.botDropdown.addEventListener('click', async (event) => {
-            const action = event.target.closest('[data-action]')?.dataset.action;
+            const target = event.target.closest('[data-action]');
+            if (!target) return;
+            const action = target.dataset.action;
             if (!action) return;
             els.botDropdown.classList.remove('open');
             if (action === 'logout') {
                 state.token = '';
+                state.activeSection = 'dashboard';
+                state.loadedSections.clear();
+                state.settingsCache.clear();
+                state.syncLog = [];
+                state.users.search = '';
+                state.users.offset = 0;
+                state.users.total = 0;
+                state.promocodes.offset = 0;
+                state.promocodes.total = 0;
+                state.remnawave.inbounds = [];
+                renderSyncLog();
+                if (els.usersSearchInput) {
+                    els.usersSearchInput.value = '';
+                }
+                els.navItems.forEach((item) => {
+                    item.classList.toggle('active', item.dataset.sectionTarget === 'dashboard');
+                });
+                els.sections.forEach((section) => {
+                    section.classList.toggle('active', section.dataset.section === 'dashboard');
+                });
                 localStorage.removeItem('webadminToken');
                 showToast('Вы вышли из панели', 'success');
                 showLogin();
                 return;
             }
-            await handleAction(action);
+            await handleAction(action, target);
         });
 
-        document.querySelectorAll('[data-action]').forEach((button) => {
-            button.addEventListener('click', async () => {
-                const action = button.dataset.action;
-                if (['reload-config', 'create-backup', 'toggle-maintenance', 'refresh', 'refresh-users'].includes(action)) {
-                    await handleAction(action);
+        els.navItems.forEach((item) => {
+            item.addEventListener('click', async (event) => {
+                event.preventDefault();
+                const targetSection = item.dataset.sectionTarget;
+                if (!targetSection) return;
+                try {
+                    await activateSection(targetSection);
+                } catch (error) {
+                    showToast(error.message, 'error');
                 }
             });
         });
 
-        els.recentUsersBody.addEventListener('click', async (event) => {
-            const button = event.target.closest('[data-action="view-user"]');
-            if (!button) return;
-            const userId = Number(button.dataset.userId);
-            if (!Number.isFinite(userId)) return;
-            await viewUser(userId);
+        if (els.usersSearchInput) {
+            els.usersSearchInput.addEventListener('input', () => {
+                state.users.search = els.usersSearchInput.value.trim();
+                state.users.offset = 0;
+                if (usersSearchTimeout) {
+                    clearTimeout(usersSearchTimeout);
+                }
+                usersSearchTimeout = setTimeout(() => {
+                    usersSearchTimeout = null;
+                    loadUsersSection(true);
+                }, 400);
+            });
+            els.usersSearchInput.addEventListener('keydown', (event) => {
+                if (event.key === 'Enter') {
+                    event.preventDefault();
+                    if (usersSearchTimeout) {
+                        clearTimeout(usersSearchTimeout);
+                        usersSearchTimeout = null;
+                    }
+                    loadUsersSection(true);
+                }
+            });
+        }
+
+        document.body.addEventListener('click', async (event) => {
+            const target = event.target.closest('[data-action]');
+            if (!target || target.closest('#bot-dropdown')) {
+                return;
+            }
+            const action = target.dataset.action;
+            if (!action || ['edit-setting', 'reset-setting'].includes(action)) {
+                return;
+            }
+            if (target.tagName === 'A') {
+                event.preventDefault();
+            }
+            if (target.tagName === 'BUTTON' && target.disabled) {
+                return;
+            }
+            if (target.hasAttribute('disabled')) {
+                return;
+            }
+            await handleAction(action, target);
         });
 
         els.settingsContainer.addEventListener('click', async (event) => {
