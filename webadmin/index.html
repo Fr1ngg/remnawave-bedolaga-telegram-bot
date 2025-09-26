@@ -839,6 +839,126 @@
             background: var(--bg-hover);
             transform: scale(1.1);
         }
+        .section-block {
+            margin-bottom: 48px;
+        }
+
+        .section-header {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 16px;
+            margin-bottom: 16px;
+        }
+
+        .section-header h2 {
+            font-size: 22px;
+            font-weight: 600;
+            margin-bottom: 6px;
+        }
+
+        .section-header p {
+            color: var(--text-secondary);
+            max-width: 520px;
+            line-height: 1.5;
+        }
+
+        .section-controls {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            align-items: center;
+        }
+
+        .section-controls input,
+        .section-controls select {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 10px 14px;
+            color: var(--text-primary);
+            font-size: 14px;
+            min-width: 180px;
+        }
+
+        .section-controls input:focus,
+        .section-controls select:focus {
+            outline: none;
+            border-color: var(--accent-primary);
+            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+        }
+
+        .section-controls .action-btn {
+            min-width: 120px;
+        }
+
+        .table-header.compact {
+            padding: 16px 24px;
+        }
+
+        .pagination {
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            gap: 12px;
+            padding: 16px 24px;
+            background: var(--bg-tertiary);
+            border-top: 1px solid var(--border);
+        }
+
+        .pagination-btn {
+            padding: 8px 16px;
+            border-radius: 12px;
+            border: 1px solid var(--border);
+            background: var(--bg-secondary);
+            color: var(--text-primary);
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .pagination-btn:hover:not(:disabled) {
+            background: var(--bg-hover);
+        }
+
+        .pagination-btn:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+
+        .pagination-info {
+            font-size: 14px;
+            color: var(--text-secondary);
+        }
+
+        .info-card {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 24px;
+            line-height: 1.6;
+        }
+
+        .backup-result {
+            margin-top: 16px;
+            font-size: 14px;
+            color: var(--text-secondary);
+            word-break: break-word;
+        }
+
+        .backup-result a {
+            color: var(--accent-primary);
+        }
+
+        .status-badge.success {
+            background: rgba(16, 185, 129, 0.12);
+            color: var(--success);
+        }
+
+        .status-badge.warning {
+            background: rgba(245, 158, 11, 0.15);
+            color: var(--warning);
+        }
         .settings-section {
             margin-bottom: 48px;
         }
@@ -1224,26 +1344,26 @@
         <nav class="nav">
             <div class="nav-section">
                 <div class="nav-section-title">Обзор</div>
-                <a href="#" class="nav-item active">
+                <a href="#dashboard" class="nav-item active" data-section="dashboard">
                     <span class="nav-icon">📊</span>
                     <span>Панель управления</span>
                 </a>
-                <a href="#" class="nav-item">
+                <a href="#transactions" class="nav-item" data-section="transactions">
                     <span class="nav-icon">🧾</span>
                     <span>История операций</span>
                 </a>
             </div>
             <div class="nav-section">
                 <div class="nav-section-title">Управление</div>
-                <a href="#" class="nav-item">
+                <a href="#users-admin" class="nav-item" data-section="users">
                     <span class="nav-icon">👥</span>
                     <span>Пользователи</span>
                 </a>
-                <a href="#" class="nav-item">
+                <a href="#subscriptions" class="nav-item" data-section="subscriptions">
                     <span class="nav-icon">💳</span>
                     <span>Подписки</span>
                 </a>
-                <a href="#" class="nav-item">
+                <a href="#servers" class="nav-item" data-section="servers">
                     <span class="nav-icon">🖥️</span>
                     <span>Серверы</span>
                     <span class="nav-badge" id="nav-servers-count">—</span>
@@ -1251,11 +1371,11 @@
             </div>
             <div class="nav-section">
                 <div class="nav-section-title">Система</div>
-                <a href="#settings" class="nav-item">
+                <a href="#settings" class="nav-item" data-section="settings">
                     <span class="nav-icon">⚙️</span>
                     <span>Конфигурация бота</span>
                 </a>
-                <a href="#" class="nav-item">
+                <a href="#backups" class="nav-item" data-section="backups">
                     <span class="nav-icon">💾</span>
                     <span>Бекапы</span>
                 </a>
@@ -1311,7 +1431,7 @@
             </div>
         </header>
         <div class="content">
-            <h1 class="page-title">Панель управления</h1>
+            <h1 class="page-title" id="dashboard">Панель управления</h1>
             <p class="page-subtitle">Добро пожаловать в систему управления VPN ботом</p>
             <div class="stats-grid">
                 <div class="stat-card">
@@ -1415,6 +1535,171 @@
                     </tbody>
                 </table>
             </section>
+            <section class="section-block" id="transactions">
+                <div class="section-header">
+                    <div>
+                        <h2>🧾 История операций</h2>
+                        <p>Следите за платежами и балансами пользователей по всем каналам оплаты.</p>
+                    </div>
+                    <div class="section-controls">
+                        <input id="transactions-search" type="text" placeholder="Поиск по описанию, ID, пользователю">
+                        <select id="transactions-type-filter">
+                            <option value="all">Все типы</option>
+                            <option value="subscription_payment">Оплата подписки</option>
+                            <option value="deposit">Пополнение баланса</option>
+                            <option value="withdrawal">Списание</option>
+                            <option value="refund">Возврат</option>
+                            <option value="referral_reward">Реферальное вознаграждение</option>
+                        </select>
+                        <select id="transactions-status-filter">
+                            <option value="all">Все статусы</option>
+                            <option value="completed">Завершено</option>
+                            <option value="pending">В обработке</option>
+                        </select>
+                        <button class="action-btn" id="transactions-apply-filter">
+                            <span>🔍</span>
+                            <span>Применить</span>
+                        </button>
+                    </div>
+                </div>
+                <div class="table-container">
+                    <div class="table-header compact">
+                        <h3>Последние операции</h3>
+                    </div>
+                    <table class="data-table">
+                        <thead>
+                        <tr>
+                            <th>Дата</th>
+                            <th>Пользователь</th>
+                            <th>Тип</th>
+                            <th>Статус</th>
+                            <th>Сумма</th>
+                            <th>Описание</th>
+                        </tr>
+                        </thead>
+                        <tbody id="transactions-body">
+                        <tr>
+                            <td colspan="6" style="padding: 32px; text-align: center; color: var(--text-tertiary);">
+                                Нет данных
+                            </td>
+                        </tr>
+                        </tbody>
+                    </table>
+                    <div class="pagination" id="transactions-pagination">
+                        <button class="pagination-btn" id="transactions-prev">Назад</button>
+                        <span class="pagination-info" id="transactions-page-info">Стр. 1</span>
+                        <button class="pagination-btn" id="transactions-next">Вперед</button>
+                    </div>
+                </div>
+            </section>
+            <section class="section-block" id="users-admin">
+                <div class="section-header">
+                    <div>
+                        <h2>👥 Управление пользователями</h2>
+                        <p>Просматривайте и находите пользователей, управляйте балансом и статусом подписки.</p>
+                    </div>
+                    <div class="section-controls">
+                        <input id="users-admin-search" type="text" placeholder="Поиск по имени, username или ID">
+                        <button class="action-btn" id="users-admin-apply">
+                            <span>🔍</span>
+                            <span>Найти</span>
+                        </button>
+                    </div>
+                </div>
+                <div class="table-container">
+                    <div class="table-header compact">
+                        <h3>Список пользователей</h3>
+                    </div>
+                    <table class="data-table">
+                        <thead>
+                        <tr>
+                            <th>Пользователь</th>
+                            <th>Подписка</th>
+                            <th>Баланс</th>
+                            <th>Статус</th>
+                            <th>Создан</th>
+                            <th></th>
+                        </tr>
+                        </thead>
+                        <tbody id="users-admin-body">
+                        <tr>
+                            <td colspan="6" style="padding: 32px; text-align: center; color: var(--text-tertiary);">
+                                Нет данных
+                            </td>
+                        </tr>
+                        </tbody>
+                    </table>
+                    <div class="pagination" id="users-admin-pagination">
+                        <button class="pagination-btn" id="users-admin-prev">Назад</button>
+                        <span class="pagination-info" id="users-admin-page-info">Стр. 1</span>
+                        <button class="pagination-btn" id="users-admin-next">Вперед</button>
+                    </div>
+                </div>
+            </section>
+            <section class="section-block" id="subscriptions">
+                <div class="section-header">
+                    <div>
+                        <h2>💳 Подписки</h2>
+                        <p>Контролируйте активные и истекающие подписки, следите за автопродлением.</p>
+                    </div>
+                    <div class="section-controls">
+                        <select id="subscriptions-status-filter">
+                            <option value="all">Все подписки</option>
+                            <option value="active">Активные</option>
+                            <option value="trial">Триалы</option>
+                            <option value="expired">Истекшие</option>
+                            <option value="disabled">Отключенные</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="table-container">
+                    <div class="table-header compact">
+                        <h3>Текущие подписки</h3>
+                    </div>
+                    <table class="data-table">
+                        <thead>
+                        <tr>
+                            <th>Пользователь</th>
+                            <th>Статус</th>
+                            <th>Окончание</th>
+                            <th>Осталось</th>
+                            <th>Лимиты</th>
+                            <th>Автопродление</th>
+                        </tr>
+                        </thead>
+                        <tbody id="subscriptions-body">
+                        <tr>
+                            <td colspan="6" style="padding: 32px; text-align: center; color: var(--text-tertiary);">
+                                Нет данных
+                            </td>
+                        </tr>
+                        </tbody>
+                    </table>
+                    <div class="pagination" id="subscriptions-pagination">
+                        <button class="pagination-btn" id="subscriptions-prev">Назад</button>
+                        <span class="pagination-info" id="subscriptions-page-info">Стр. 1</span>
+                        <button class="pagination-btn" id="subscriptions-next">Вперед</button>
+                    </div>
+                </div>
+            </section>
+            <section class="section-block" id="backups">
+                <div class="section-header">
+                    <div>
+                        <h2>💾 Управление бекапами</h2>
+                        <p>Создавайте и скачивайте резервные копии базы данных бота.</p>
+                    </div>
+                    <div class="section-controls">
+                        <button class="action-btn primary" id="backup-create">
+                            <span>🛟</span>
+                            <span>Создать бекап</span>
+                        </button>
+                    </div>
+                </div>
+                <div class="info-card" id="backup-info">
+                    <p>Нажмите «Создать бекап», чтобы инициировать резервное копирование. Ссылка на файл появится здесь после завершения операции.</p>
+                    <div class="backup-result" id="backup-result"></div>
+                </div>
+            </section>
             <section class="settings-section" id="settings">
                 <h2>⚙️ Конфигурация бота</h2>
                 <p>Просматривайте и обновляйте ключевые параметры без перезапуска бота. Значения сохраняются в базе данных.</p>
@@ -1432,6 +1717,10 @@
         token: localStorage.getItem('webadminToken') || '',
         health: null,
         settingsCache: new Map(),
+        transactions: { limit: 20, offset: 0, total: 0, type: 'all', status: 'all', search: '' },
+        usersList: { limit: 20, offset: 0, total: 0, search: '' },
+        subscriptions: { limit: 20, offset: 0, total: 0, status: 'all' },
+        backup: { lastResult: null },
     };
 
     const els = {
@@ -1460,6 +1749,27 @@
         recentUsersBody: document.getElementById('recent-users-body'),
         settingsContainer: document.getElementById('settings-container'),
         searchInput: document.getElementById('search-input'),
+        transactionsBody: document.getElementById('transactions-body'),
+        transactionsPageInfo: document.getElementById('transactions-page-info'),
+        transactionsPrev: document.getElementById('transactions-prev'),
+        transactionsNext: document.getElementById('transactions-next'),
+        transactionsTypeFilter: document.getElementById('transactions-type-filter'),
+        transactionsStatusFilter: document.getElementById('transactions-status-filter'),
+        transactionsSearch: document.getElementById('transactions-search'),
+        transactionsApply: document.getElementById('transactions-apply-filter'),
+        usersAdminBody: document.getElementById('users-admin-body'),
+        usersAdminPageInfo: document.getElementById('users-admin-page-info'),
+        usersAdminPrev: document.getElementById('users-admin-prev'),
+        usersAdminNext: document.getElementById('users-admin-next'),
+        usersAdminSearch: document.getElementById('users-admin-search'),
+        usersAdminApply: document.getElementById('users-admin-apply'),
+        subscriptionsBody: document.getElementById('subscriptions-body'),
+        subscriptionsPageInfo: document.getElementById('subscriptions-page-info'),
+        subscriptionsPrev: document.getElementById('subscriptions-prev'),
+        subscriptionsNext: document.getElementById('subscriptions-next'),
+        subscriptionsStatusFilter: document.getElementById('subscriptions-status-filter'),
+        backupButton: document.getElementById('backup-create'),
+        backupResult: document.getElementById('backup-result'),
     };
 
     function toLocaleCurrency(value) {
@@ -1471,6 +1781,62 @@
             return '—';
         }
         return `${value.toFixed(1)}%`;
+    }
+
+    function formatDateTime(value) {
+        if (!value) {
+            return '—';
+        }
+        try {
+            return new Date(value).toLocaleString('ru-RU');
+        } catch (error) {
+            return value;
+        }
+    }
+
+    function formatDate(value) {
+        if (!value) {
+            return '—';
+        }
+        try {
+            return new Date(value).toLocaleDateString('ru-RU');
+        } catch (error) {
+            return value;
+        }
+    }
+
+    function formatDaysLeft(days) {
+        if (days === null || days === undefined) {
+            return '—';
+        }
+        if (days <= 0) {
+            return 'Истекла';
+        }
+        return `${days} дн.`;
+    }
+
+    const TRANSACTION_TYPE_LABELS = {
+        deposit: 'Пополнение',
+        withdrawal: 'Списание',
+        subscription_payment: 'Оплата подписки',
+        refund: 'Возврат',
+        referral_reward: 'Реферальный бонус',
+    };
+
+    function formatTransactionType(type) {
+        if (!type) return '—';
+        return TRANSACTION_TYPE_LABELS[type] || type;
+    }
+
+    const USER_STATUS_LABELS = {
+        active: 'Активен',
+        blocked: 'Заблокирован',
+        deleted: 'Удален',
+    };
+
+    function formatUserStatus(status) {
+        if (!status) return '—';
+        return USER_STATUS_LABELS[status] || status;
     }
 
     function showToast(message, type = 'info') {
@@ -1770,6 +2136,349 @@
         els.recentUsersBody.appendChild(fragment);
     }
 
+    function createUserCell(user) {
+        const cell = document.createElement('td');
+        const container = document.createElement('div');
+        container.className = 'user-cell';
+
+        const avatar = document.createElement('div');
+        avatar.className = 'user-avatar-small';
+        const displayName = (user?.full_name || user?.username || 'Без имени').trim();
+        avatar.textContent = (displayName || 'U').charAt(0).toUpperCase();
+
+        const info = document.createElement('div');
+        info.className = 'user-info';
+
+        const name = document.createElement('div');
+        name.className = 'user-name';
+        name.textContent = displayName || 'Без имени';
+
+        const id = document.createElement('div');
+        id.className = 'user-id';
+        const idValue = user?.id ?? user?.telegram_id ?? '—';
+        id.textContent = `ID ${idValue}`;
+
+        info.appendChild(name);
+        info.appendChild(id);
+        container.appendChild(avatar);
+        container.appendChild(info);
+        cell.appendChild(container);
+        return cell;
+    }
+
+    function renderTransactions(items) {
+        if (!els.transactionsBody) return;
+        if (!Array.isArray(items) || !items.length) {
+            els.transactionsBody.innerHTML = '<tr><td colspan="6" style="padding: 32px; text-align: center; color: var(--text-tertiary);">Нет данных</td></tr>';
+            return;
+        }
+
+        const fragment = document.createDocumentFragment();
+        items.forEach((item) => {
+            const row = document.createElement('tr');
+
+            const dateCell = document.createElement('td');
+            dateCell.textContent = formatDateTime(item.created_at);
+            row.appendChild(dateCell);
+
+            row.appendChild(createUserCell(item.user));
+
+            const typeCell = document.createElement('td');
+            typeCell.textContent = formatTransactionType(item.type);
+            row.appendChild(typeCell);
+
+            const statusCell = document.createElement('td');
+            const statusBadge = document.createElement('span');
+            statusBadge.className = `status-badge ${item.is_completed ? 'success' : 'warning'}`;
+            statusBadge.textContent = item.is_completed ? 'Завершено' : 'В обработке';
+            statusCell.appendChild(statusBadge);
+            row.appendChild(statusCell);
+
+            const amountCell = document.createElement('td');
+            amountCell.textContent = toLocaleCurrency(item.amount_rub);
+            row.appendChild(amountCell);
+
+            const descriptionCell = document.createElement('td');
+            descriptionCell.textContent = item.description || '—';
+            row.appendChild(descriptionCell);
+
+            fragment.appendChild(row);
+        });
+
+        els.transactionsBody.textContent = '';
+        els.transactionsBody.appendChild(fragment);
+        updateTransactionsPagination();
+    }
+
+    function updateTransactionsPagination() {
+        if (!els.transactionsPageInfo) return;
+        const { offset, limit, total } = state.transactions;
+        const currentPage = Math.floor(offset / limit) + 1;
+        const totalPages = Math.max(1, Math.ceil(total / limit || 1));
+        els.transactionsPageInfo.textContent = `Стр. ${Math.min(currentPage, totalPages)} из ${totalPages}`;
+        if (els.transactionsPrev) {
+            els.transactionsPrev.disabled = offset <= 0;
+        }
+        if (els.transactionsNext) {
+            els.transactionsNext.disabled = offset + limit >= total;
+        }
+    }
+
+    function renderUsersAdminTable(users) {
+        if (!els.usersAdminBody) return;
+        if (!Array.isArray(users) || !users.length) {
+            els.usersAdminBody.innerHTML = '<tr><td colspan="6" style="padding: 32px; text-align: center; color: var(--text-tertiary);">Нет данных</td></tr>';
+            updateUsersAdminPagination();
+            return;
+        }
+
+        const fragment = document.createDocumentFragment();
+        users.forEach((user) => {
+            const row = document.createElement('tr');
+            row.appendChild(createUserCell(user));
+
+            const subscriptionCell = document.createElement('td');
+            if (user.subscription) {
+                const badge = document.createElement('span');
+                badge.className = 'status-badge';
+                if (user.subscription.is_trial) {
+                    badge.classList.add('trial');
+                }
+                if (user.subscription.status === 'expired') {
+                    badge.classList.add('expired');
+                }
+                badge.textContent = user.subscription.status_display || (user.subscription.is_trial ? 'Триал' : 'Активна');
+                subscriptionCell.appendChild(badge);
+                const ends = document.createElement('div');
+                ends.className = 'user-id';
+                ends.textContent = `До ${formatDate(user.subscription.end_date)}`;
+                subscriptionCell.appendChild(ends);
+            } else {
+                subscriptionCell.textContent = '—';
+            }
+            row.appendChild(subscriptionCell);
+
+            const balanceCell = document.createElement('td');
+            balanceCell.textContent = toLocaleCurrency(user.balance_rub ?? 0);
+            row.appendChild(balanceCell);
+
+            const statusCell = document.createElement('td');
+            const statusBadge = document.createElement('span');
+            statusBadge.className = 'status-badge';
+            if (user.status === 'blocked') {
+                statusBadge.classList.add('expired');
+            }
+            statusBadge.textContent = formatUserStatus(user.status);
+            statusCell.appendChild(statusBadge);
+            row.appendChild(statusCell);
+
+            const createdCell = document.createElement('td');
+            createdCell.textContent = formatDateTime(user.created_at);
+            row.appendChild(createdCell);
+
+            const actionsCell = document.createElement('td');
+            actionsCell.className = 'table-actions-cell';
+            const viewButton = document.createElement('button');
+            viewButton.className = 'icon-btn';
+            viewButton.dataset.action = 'view-user';
+            if (user.id != null) {
+                viewButton.dataset.userId = String(user.id);
+            }
+            viewButton.title = 'Подробнее';
+            viewButton.textContent = 'ℹ️';
+            actionsCell.appendChild(viewButton);
+            row.appendChild(actionsCell);
+
+            fragment.appendChild(row);
+        });
+
+        els.usersAdminBody.textContent = '';
+        els.usersAdminBody.appendChild(fragment);
+        updateUsersAdminPagination();
+    }
+
+    function updateUsersAdminPagination() {
+        if (!els.usersAdminPageInfo) return;
+        const { offset, limit, total } = state.usersList;
+        const currentPage = Math.floor(offset / limit) + 1;
+        const totalPages = Math.max(1, Math.ceil(total / limit || 1));
+        els.usersAdminPageInfo.textContent = `Стр. ${Math.min(currentPage, totalPages)} из ${totalPages}`;
+        if (els.usersAdminPrev) {
+            els.usersAdminPrev.disabled = offset <= 0;
+        }
+        if (els.usersAdminNext) {
+            els.usersAdminNext.disabled = offset + limit >= total;
+        }
+    }
+
+    function renderSubscriptions(items) {
+        if (!els.subscriptionsBody) return;
+        if (!Array.isArray(items) || !items.length) {
+            els.subscriptionsBody.innerHTML = '<tr><td colspan="6" style="padding: 32px; text-align: center; color: var(--text-tertiary);">Нет данных</td></tr>';
+            updateSubscriptionsPagination();
+            return;
+        }
+
+        const fragment = document.createDocumentFragment();
+        items.forEach((subscription) => {
+            const row = document.createElement('tr');
+            row.appendChild(createUserCell(subscription.user));
+
+            const statusCell = document.createElement('td');
+            const statusBadge = document.createElement('span');
+            statusBadge.className = 'status-badge';
+            if (subscription.is_trial) {
+                statusBadge.classList.add('trial');
+            }
+            const isExpired =
+                subscription.status === 'expired' ||
+                (typeof subscription.days_left === 'number' && subscription.days_left <= 0);
+            if (isExpired) {
+                statusBadge.classList.add('expired');
+            }
+            statusBadge.textContent = subscription.status_display || '—';
+            statusCell.appendChild(statusBadge);
+            row.appendChild(statusCell);
+
+            const endCell = document.createElement('td');
+            endCell.textContent = formatDate(subscription.end_date);
+            row.appendChild(endCell);
+
+            const remainingCell = document.createElement('td');
+            remainingCell.textContent = formatDaysLeft(subscription.days_left);
+            row.appendChild(remainingCell);
+
+            const limitsCell = document.createElement('td');
+            const limit = subscription.traffic_limit_gb ?? 0;
+            const used = subscription.traffic_used_gb ?? 0;
+            limitsCell.textContent = `${used.toFixed(1)} / ${limit} ГБ • ${subscription.device_limit ?? 0} устройств`;
+            row.appendChild(limitsCell);
+
+            const autopayCell = document.createElement('td');
+            const autopayBadge = document.createElement('span');
+            autopayBadge.className = `status-badge ${subscription.autopay_enabled ? 'success' : 'warning'}`;
+            autopayBadge.textContent = subscription.autopay_enabled ? 'Включено' : 'Выключено';
+            autopayCell.appendChild(autopayBadge);
+            row.appendChild(autopayCell);
+
+            fragment.appendChild(row);
+        });
+
+        els.subscriptionsBody.textContent = '';
+        els.subscriptionsBody.appendChild(fragment);
+        updateSubscriptionsPagination();
+    }
+
+    function updateSubscriptionsPagination() {
+        if (!els.subscriptionsPageInfo) return;
+        const { offset, limit, total } = state.subscriptions;
+        const currentPage = Math.floor(offset / limit) + 1;
+        const totalPages = Math.max(1, Math.ceil(total / limit || 1));
+        els.subscriptionsPageInfo.textContent = `Стр. ${Math.min(currentPage, totalPages)} из ${totalPages}`;
+        if (els.subscriptionsPrev) {
+            els.subscriptionsPrev.disabled = offset <= 0;
+        }
+        if (els.subscriptionsNext) {
+            els.subscriptionsNext.disabled = offset + limit >= total;
+        }
+    }
+
+    function updateBackupResultView(result) {
+        if (!els.backupResult) return;
+        state.backup.lastResult = result || null;
+        if (!result) {
+            els.backupResult.textContent = '';
+            return;
+        }
+        const fragment = document.createDocumentFragment();
+        if (result.message) {
+            const message = document.createElement('div');
+            message.textContent = result.message;
+            fragment.appendChild(message);
+        }
+        if (result.file) {
+            const link = document.createElement('a');
+            link.href = result.file;
+            link.target = '_blank';
+            link.rel = 'noopener';
+            link.textContent = 'Скачать бекап';
+            fragment.appendChild(link);
+        }
+        const timestamp = document.createElement('div');
+        timestamp.className = 'user-id';
+        timestamp.textContent = `Время: ${new Date().toLocaleString('ru-RU')}`;
+        fragment.appendChild(timestamp);
+
+        els.backupResult.textContent = '';
+        els.backupResult.appendChild(fragment);
+    }
+
+    async function loadTransactions({ reset = false } = {}) {
+        if (!els.transactionsBody) return;
+        if (reset) {
+            state.transactions.offset = 0;
+        }
+        const params = new URLSearchParams({
+            limit: String(state.transactions.limit),
+            offset: String(state.transactions.offset),
+        });
+        if (state.transactions.type && state.transactions.type !== 'all') {
+            params.set('type', state.transactions.type);
+        }
+        if (state.transactions.status && state.transactions.status !== 'all') {
+            params.set('status', state.transactions.status);
+        }
+        if (state.transactions.search) {
+            params.set('search', state.transactions.search);
+        }
+
+        const data = await callApi(`/api/transactions?${params.toString()}`);
+        state.transactions.total = data.total ?? 0;
+        state.transactions.limit = data.limit ?? state.transactions.limit;
+        state.transactions.offset = data.offset ?? state.transactions.offset;
+        renderTransactions(data.items || []);
+    }
+
+    async function loadUsersList({ reset = false } = {}) {
+        if (!els.usersAdminBody) return;
+        if (reset) {
+            state.usersList.offset = 0;
+        }
+        const params = new URLSearchParams({
+            limit: String(state.usersList.limit),
+            offset: String(state.usersList.offset),
+        });
+        if (state.usersList.search) {
+            params.set('search', state.usersList.search);
+        }
+
+        const data = await callApi(`/api/users?${params.toString()}`);
+        state.usersList.total = data.total ?? 0;
+        state.usersList.limit = data.limit ?? state.usersList.limit;
+        state.usersList.offset = data.offset ?? state.usersList.offset;
+        renderUsersAdminTable(data.items || []);
+    }
+
+    async function loadSubscriptions({ reset = false } = {}) {
+        if (!els.subscriptionsBody) return;
+        if (reset) {
+            state.subscriptions.offset = 0;
+        }
+        const params = new URLSearchParams({
+            limit: String(state.subscriptions.limit),
+            offset: String(state.subscriptions.offset),
+        });
+        if (state.subscriptions.status && state.subscriptions.status !== 'all') {
+            params.set('status', state.subscriptions.status);
+        }
+
+        const data = await callApi(`/api/subscriptions?${params.toString()}`);
+        state.subscriptions.total = data.total ?? 0;
+        state.subscriptions.limit = data.limit ?? state.subscriptions.limit;
+        state.subscriptions.offset = data.offset ?? state.subscriptions.offset;
+        renderSubscriptions(data.items || []);
+    }
+
     function renderSettingsCategories(categories) {
         els.settingsContainer.innerHTML = '';
         if (!Array.isArray(categories) || !categories.length) {
@@ -1923,6 +2632,26 @@
         renderUsers(users);
         renderServers(servers);
         renderSettingsCategories(categories);
+        if (els.transactionsTypeFilter) {
+            els.transactionsTypeFilter.value = state.transactions.type;
+        }
+        if (els.transactionsStatusFilter) {
+            els.transactionsStatusFilter.value = state.transactions.status;
+        }
+        if (els.transactionsSearch) {
+            els.transactionsSearch.value = state.transactions.search;
+        }
+        if (els.usersAdminSearch) {
+            els.usersAdminSearch.value = state.usersList.search;
+        }
+        if (els.subscriptionsStatusFilter) {
+            els.subscriptionsStatusFilter.value = state.subscriptions.status;
+        }
+        await Promise.all([
+            loadTransactions({ reset: true }),
+            loadUsersList({ reset: true }),
+            loadSubscriptions({ reset: true }),
+        ]);
     }
 
     async function handleAction(action) {
@@ -1934,6 +2663,7 @@
                     break;
                 case 'refresh-users':
                     renderUsers(await callApi('/api/users/recent?limit=8'));
+                    await loadUsersList({ reset: true });
                     showToast('Список пользователей обновлен', 'success');
                     break;
                 case 'reload-config':
@@ -1941,7 +2671,8 @@
                     showToast('Конфигурация перезагружена', 'success');
                     break;
                 case 'create-backup':
-                    await callApi('/api/bot/control', { method: 'POST', body: { action: 'create_backup' } });
+                    const backupResult = await callApi('/api/bot/control', { method: 'POST', body: { action: 'create_backup' } });
+                    updateBackupResultView(backupResult);
                     showToast('Задача на бекап создана', 'success');
                     break;
                 case 'send-report':
@@ -2037,6 +2768,113 @@
                 await resetSetting(key, category);
             }
         });
+
+        if (els.transactionsApply) {
+            els.transactionsApply.addEventListener('click', async () => {
+                state.transactions.type = els.transactionsTypeFilter?.value || 'all';
+                state.transactions.status = els.transactionsStatusFilter?.value || 'all';
+                state.transactions.search = (els.transactionsSearch?.value || '').trim();
+                await loadTransactions({ reset: true });
+            });
+        }
+
+        if (els.transactionsSearch) {
+            els.transactionsSearch.addEventListener('keydown', async (event) => {
+                if (event.key === 'Enter') {
+                    event.preventDefault();
+                    state.transactions.search = event.target.value.trim();
+                    await loadTransactions({ reset: true });
+                }
+            });
+        }
+
+        if (els.transactionsPrev) {
+            els.transactionsPrev.addEventListener('click', async () => {
+                if (state.transactions.offset <= 0) return;
+                state.transactions.offset = Math.max(0, state.transactions.offset - state.transactions.limit);
+                await loadTransactions();
+            });
+        }
+
+        if (els.transactionsNext) {
+            els.transactionsNext.addEventListener('click', async () => {
+                if (state.transactions.offset + state.transactions.limit >= state.transactions.total) return;
+                state.transactions.offset += state.transactions.limit;
+                await loadTransactions();
+            });
+        }
+
+        if (els.usersAdminApply) {
+            els.usersAdminApply.addEventListener('click', async () => {
+                state.usersList.search = (els.usersAdminSearch?.value || '').trim();
+                await loadUsersList({ reset: true });
+            });
+        }
+
+        if (els.usersAdminSearch) {
+            els.usersAdminSearch.addEventListener('keydown', async (event) => {
+                if (event.key === 'Enter') {
+                    event.preventDefault();
+                    state.usersList.search = event.target.value.trim();
+                    await loadUsersList({ reset: true });
+                }
+            });
+        }
+
+        if (els.usersAdminPrev) {
+            els.usersAdminPrev.addEventListener('click', async () => {
+                if (state.usersList.offset <= 0) return;
+                state.usersList.offset = Math.max(0, state.usersList.offset - state.usersList.limit);
+                await loadUsersList();
+            });
+        }
+
+        if (els.usersAdminNext) {
+            els.usersAdminNext.addEventListener('click', async () => {
+                if (state.usersList.offset + state.usersList.limit >= state.usersList.total) return;
+                state.usersList.offset += state.usersList.limit;
+                await loadUsersList();
+            });
+        }
+
+        if (els.usersAdminBody) {
+            els.usersAdminBody.addEventListener('click', async (event) => {
+                const button = event.target.closest('[data-action="view-user"]');
+                if (!button) return;
+                const userId = Number(button.dataset.userId);
+                if (!Number.isFinite(userId)) return;
+                await viewUser(userId);
+            });
+        }
+
+        if (els.subscriptionsStatusFilter) {
+            els.subscriptionsStatusFilter.addEventListener('change', async () => {
+                state.subscriptions.status = els.subscriptionsStatusFilter.value || 'all';
+                await loadSubscriptions({ reset: true });
+            });
+        }
+
+        if (els.subscriptionsPrev) {
+            els.subscriptionsPrev.addEventListener('click', async () => {
+                if (state.subscriptions.offset <= 0) return;
+                state.subscriptions.offset = Math.max(0, state.subscriptions.offset - state.subscriptions.limit);
+                await loadSubscriptions();
+            });
+        }
+
+        if (els.subscriptionsNext) {
+            els.subscriptionsNext.addEventListener('click', async () => {
+                if (state.subscriptions.offset + state.subscriptions.limit >= state.subscriptions.total) return;
+                state.subscriptions.offset += state.subscriptions.limit;
+                await loadSubscriptions();
+            });
+        }
+
+        if (els.backupButton) {
+            els.backupButton.addEventListener('click', async () => {
+                await handleAction('create-backup');
+            });
+        }
     }
 
     async function init() {
