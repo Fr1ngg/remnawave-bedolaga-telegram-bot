@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass
 from datetime import datetime
-from typing import Any, Dict, Optional
+from typing import Optional
 
 from app.database.models import ServerSquad, Subscription, Transaction, User
 
@@ -62,7 +62,6 @@ class UserView:
 @dataclass(slots=True)
 class TransactionView:
     id: int
-    user_id: int
     type: str
     amount_kopeks: int
     amount_rub: float
@@ -70,7 +69,6 @@ class TransactionView:
     payment_method: Optional[str]
     created_at: Optional[str]
     is_completed: bool
-    user: Optional[Dict[str, Any]] = None
 
 
 @dataclass(slots=True)
@@ -143,19 +141,8 @@ def serialize_user(user: User) -> dict:
 
 
 def serialize_transaction(transaction: Transaction) -> dict:
-    related_user = transaction.__dict__.get("user")
-    user_data: Optional[Dict[str, Any]] = None
-    if isinstance(related_user, User):
-        user_data = {
-            "id": related_user.id,
-            "telegram_id": related_user.telegram_id,
-            "username": related_user.username,
-            "full_name": related_user.full_name,
-        }
-
     view = TransactionView(
         id=transaction.id,
-        user_id=transaction.user_id,
         type=transaction.type,
         amount_kopeks=transaction.amount_kopeks,
         amount_rub=_round_currency(transaction.amount_kopeks),
@@ -163,7 +150,6 @@ def serialize_transaction(transaction: Transaction) -> dict:
         payment_method=transaction.payment_method,
         created_at=_isoformat(transaction.created_at),
         is_completed=bool(transaction.is_completed),
-        user=user_data,
     )
     return asdict(view)
 
