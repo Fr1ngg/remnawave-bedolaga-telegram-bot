@@ -17,6 +17,8 @@ from app.database.database import AsyncSessionLocal
 from app.database.models import (
     Subscription,
     SubscriptionConversion,
+    Ticket,
+    TicketStatus,
     Transaction,
     TransactionType,
 )
@@ -203,6 +205,10 @@ class ReportingService:
             f"• Активных сейчас: {totals['active_paid']}",
             f"• Новых за период: {period_stats['new_paid_subscriptions']}",
             "",
+            "🎟️ <b>Тикеты поддержки</b>",
+            f"• Активных сейчас: {totals['open_tickets']}",
+            f"• Новых за период: {period_stats['new_tickets']}",
+            "",
             "💰 <b>Платежи</b>",
             f"• Оплат подписок: {period_stats['subscription_payments_count']} на сумму "
             f"{self._format_amount(period_stats['subscription_payments_amount'])}",
@@ -243,9 +249,22 @@ class ReportingService:
 
     async def _collect_current_totals(self, session) -> dict:
         stats = await get_subscriptions_statistics(session)
+        open_tickets_result = await session.execute(
+            select(func.count(Ticket.id)).where(
+                Ticket.status.in_(
+                    [
+                        TicketStatus.OPEN.value,
+                        TicketStatus.ANSWERED.value,
+                        TicketStatus.PENDING.value,
+                    ]
+                )
+            )
+        )
+        open_tickets = int(open_tickets_result.scalar() or 0)
         return {
             "active_trials": stats.get("trial_subscriptions", 0) or 0,
             "active_paid": stats.get("paid_subscriptions", 0) or 0,
+            "open_tickets": open_tickets,
         }
 
     async def _collect_period_stats(
@@ -315,6 +334,13 @@ class ReportingService:
 
         total_payments_count = subscription_payments_count + deposits_count
         total_payments_amount = subscription_payments_amount + deposits_amount
+        new_tickets_result = await session.execute(
+            select(func.count(Ticket.id)).where(
+                Ticket.created_at >= start_utc,
+                Ticket.created_at < end_utc,
+            )
+        )
+        new_tickets = int(new_tickets_result.scalar() or 0)
 
         return {
             "new_trials": new_trials,
@@ -325,6 +351,7 @@ class ReportingService:
             "deposits_amount": deposits_amount,
             "total_payments_count": total_payments_count,
             "total_payments_amount": total_payments_amount,
+            "new_tickets": new_tickets,
         }
 
     def _format_period_label(self, start: datetime, end: datetime) -> str:
