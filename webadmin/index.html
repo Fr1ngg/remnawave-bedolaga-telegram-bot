@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>BedolagaAdmin • Панель управления</title>
+    <title>{{WEBADMIN_TITLE}} • Панель управления</title>
     <style>
         * {
             margin: 0;
@@ -37,7 +37,6 @@
             overflow-x: hidden;
         }
 
-        /* Animated Background */
         .bg-animation {
             position: fixed;
             width: 100%;
@@ -59,13 +58,11 @@
             75% { transform: translate(-30px, 20px) scale(1.05); }
         }
 
-        /* Layout */
         .container {
             display: flex;
             min-height: 100vh;
         }
 
-        /* Sidebar */
         .sidebar {
             width: 280px;
             background: var(--bg-secondary);
@@ -219,14 +216,12 @@
             font-weight: 600;
         }
 
-        /* Main Content */
         .main {
             flex: 1;
             display: flex;
             flex-direction: column;
         }
 
-        /* Header */
         .header {
             background: var(--bg-secondary);
             border-bottom: 1px solid var(--border);
@@ -235,6 +230,9 @@
             align-items: center;
             justify-content: space-between;
             backdrop-filter: blur(10px);
+            position: sticky;
+            top: 0;
+            z-index: 5;
         }
 
         .header-left {
@@ -310,7 +308,7 @@
             color: white;
             font-size: 10px;
             border-radius: 50%;
-            display: flex;
+            display: none;
             align-items: center;
             justify-content: center;
             font-weight: 600;
@@ -337,14 +335,13 @@
             border-radius: 8px;
             background: var(--accent-gradient);
             display: flex;
-            align-items: center;
+            align.items: center;
             justify-content: center;
             font-weight: 600;
             font-size: 14px;
             color: white;
         }
 
-        /* Content Area */
         .content {
             flex: 1;
             padding: 32px;
@@ -365,8 +362,6 @@
             color: var(--text-secondary);
             margin-bottom: 32px;
         }
-
-        /* Stats Grid */
         .stats-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
@@ -448,6 +443,7 @@
             border-radius: 20px;
             font-size: 12px;
             font-weight: 600;
+            background: rgba(255, 255, 255, 0.05);
         }
 
         .stat-change.positive {
@@ -460,17 +456,13 @@
             color: var(--danger);
         }
 
-        /* Chart Container */
         .chart-container {
             background: var(--bg-secondary);
             border: 1px solid var(--border);
             border-radius: 16px;
             padding: 24px;
             margin-bottom: 32px;
-            height: 400px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
+            min-height: 320px;
             position: relative;
             overflow: hidden;
         }
@@ -494,7 +486,44 @@
             color: var(--text-tertiary);
         }
 
-        /* Quick Actions */
+        .chart-bars {
+            position: relative;
+            display: flex;
+            align-items: flex-end;
+            justify-content: flex-start;
+            gap: 16px;
+            height: 240px;
+            padding: 24px 12px 12px;
+        }
+
+        .chart-bar {
+            position: relative;
+            flex: 1;
+            min-width: 32px;
+            border-radius: 10px 10px 0 0;
+            background: linear-gradient(180deg, rgba(99, 102, 241, 0.85), rgba(139, 92, 246, 0.4));
+            overflow: hidden;
+        }
+
+        .chart-bar-value {
+            position: absolute;
+            top: -28px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 12px;
+            color: var(--text-secondary);
+        }
+
+        .chart-bar-label {
+            position: absolute;
+            bottom: -24px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 11px;
+            color: var(--text-tertiary);
+            white-space: nowrap;
+        }
+
         .quick-actions {
             display: flex;
             gap: 16px;
@@ -517,135 +546,193 @@
             font-weight: 500;
         }
 
+        .action-btn.primary {
+            background: var(--accent-gradient);
+            color: white;
+            border: none;
+        }
+
         .action-btn:hover {
             background: var(--bg-tertiary);
             transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-        }
-
-        .action-btn.primary {
-            background: var(--accent-primary);
-            border-color: var(--accent-primary);
-            color: white;
         }
 
         .action-btn.primary:hover {
-            background: var(--accent-secondary);
-            border-color: var(--accent-secondary);
+            opacity: 0.95;
+            transform: translateY(-2px);
         }
 
-        /* Bot Control Dropdown */
-        .bot-control {
-            position: relative;
-        }
-        
-        .bot-control-btn {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            padding: 8px 16px;
-            background: var(--bg-tertiary);
-            border: 1px solid var(--border);
-            border-radius: 12px;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            color: var(--text-primary);
-            font-size: 14px;
-            font-weight: 500;
-        }
-        
-        .bot-control-btn:hover {
-            background: var(--bg-hover);
-            border-color: var(--accent-primary);
-        }
-        
-        .bot-status {
-            width: 8px;
-            height: 8px;
-            background: var(--success);
-            border-radius: 50%;
-            animation: pulse 2s infinite;
-        }
-        
-        .bot-dropdown {
-            position: absolute;
-            top: 100%;
-            right: 0;
-            margin-top: 8px;
-            background: var(--bg-secondary);
-            border: 1px solid var(--border);
-            border-radius: 12px;
-            padding: 8px;
-            min-width: 200px;
-            opacity: 0;
-            visibility: hidden;
-            transform: translateY(-10px);
-            transition: all 0.3s ease;
-            z-index: 1000;
-            box-shadow: var(--shadow);
-        }
-        
-        .bot-control:hover .bot-dropdown {
-            opacity: 1;
-            visibility: visible;
-            transform: translateY(0);
-        }
-        
-        .bot-dropdown-item {
+        .servers-section-title {
+            font-size: 20px;
+            font-weight: 600;
+            margin-bottom: 20px;
             display: flex;
             align-items: center;
             gap: 12px;
-            padding: 10px 12px;
-            border-radius: 8px;
-            color: var(--text-secondary);
-            cursor: pointer;
-            transition: all 0.2s ease;
-            font-size: 14px;
-        }
-        
-        .bot-dropdown-item:hover {
-            background: var(--bg-tertiary);
-            color: var(--text-primary);
-        }
-        
-        .bot-dropdown-item.danger {
-            color: var(--danger);
-        }
-        
-        .bot-dropdown-item.warning {
-            color: var(--warning);
-        }
-        
-        .bot-dropdown-divider {
-            height: 1px;
-            background: var(--border);
-            margin: 8px 0;
         }
 
-        /* Enhanced Table */
+        .server-card {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            margin-bottom: 16px;
+            overflow: hidden;
+            transition: all 0.3s ease;
+        }
+
+        .server-card.expanded {
+            border-color: rgba(99, 102, 241, 0.3);
+            box-shadow: var(--shadow);
+        }
+
+        .server-card-header {
+            padding: 20px 24px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            cursor: pointer;
+            transition: background 0.2s ease;
+        }
+
+        .server-card-header:hover {
+            background: rgba(99, 102, 241, 0.05);
+        }
+
+        .server-info {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .server-flag {
+            font-size: 32px;
+        }
+
+        .server-name {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+
+        .server-status-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 10px;
+            border-radius: 10px;
+            font-size: 12px;
+            background: rgba(99, 102, 241, 0.12);
+            color: var(--accent-primary);
+        }
+
+        .server-status-badge.offline {
+            background: rgba(239, 68, 68, 0.12);
+            color: var(--danger);
+        }
+
+        .server-stats {
+            display: flex;
+            gap: 32px;
+            align-items: center;
+        }
+
+        .server-stat {
+            text-align: center;
+        }
+
+        .server-stat-value {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+
+        .server-stat-label {
+            font-size: 12px;
+            color: var(--text-tertiary);
+            text-transform: uppercase;
+        }
+
+        .expand-icon {
+            width: 32px;
+            height: 32px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 8px;
+            background: var(--bg-tertiary);
+            transition: transform 0.3s ease;
+        }
+
+        .server-card.expanded .expand-icon {
+            transform: rotate(180deg);
+        }
+
+        .server-expanded-content {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.3s ease;
+            border-top: 1px solid var(--border);
+        }
+
+        .server-card.expanded .server-expanded-content {
+            max-height: 400px;
+        }
+
+        .server-expanded-inner {
+            padding: 20px 24px 24px;
+        }
+
+        .server-details-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 16px;
+        }
+
+        .server-detail {
+            background: var(--bg-tertiary);
+            border-radius: 12px;
+            padding: 16px;
+            border: 1px solid rgba(99, 102, 241, 0.12);
+        }
+
+        .server-detail-title {
+            font-size: 12px;
+            text-transform: uppercase;
+            color: var(--text-tertiary);
+            margin-bottom: 6px;
+            letter-spacing: 0.5px;
+        }
+
+        .server-detail-value {
+            font-size: 16px;
+            font-weight: 600;
+        }
+
+        .server-description {
+            margin-top: 16px;
+            color: var(--text-secondary);
+            line-height: 1.5;
+        }
+
         .table-container {
             background: var(--bg-secondary);
             border: 1px solid var(--border);
             border-radius: 16px;
             overflow: hidden;
+            margin-bottom: 32px;
         }
 
         .table-header {
-            padding: 20px 24px;
-            border-bottom: 1px solid var(--border);
             display: flex;
             align-items: center;
             justify-content: space-between;
+            padding: 20px 24px;
+            border-bottom: 1px solid var(--border);
         }
 
-        .table-title {
+        .table-header h3 {
             font-size: 18px;
             font-weight: 600;
-        }
-
-        .table-actions {
-            display: flex;
-            gap: 12px;
         }
 
         table {
@@ -654,27 +741,21 @@
         }
 
         thead {
-            background: var(--bg-tertiary);
+            background: rgba(255, 255, 255, 0.02);
+        }
+
+        th, td {
+            padding: 16px 24px;
+            text-align: left;
+            font-size: 14px;
+            border-bottom: 1px solid var(--border);
         }
 
         th {
-            padding: 16px 24px;
-            text-align: left;
-            font-size: 12px;
+            color: var(--text-secondary);
             font-weight: 600;
             text-transform: uppercase;
-            color: var(--text-tertiary);
-            letter-spacing: 0.5px;
-        }
-
-        td {
-            padding: 16px 24px;
-            border-top: 1px solid var(--border);
-            font-size: 14px;
-        }
-
-        tbody tr {
-            transition: background 0.2s ease;
+            font-size: 12px;
         }
 
         tbody tr:hover {
@@ -721,11 +802,8 @@
             font-size: 12px;
             font-weight: 600;
             display: inline-block;
-        }
-
-        .status-badge.active {
-            background: rgba(16, 185, 129, 0.1);
-            color: var(--success);
+            background: rgba(99, 102, 241, 0.15);
+            color: var(--accent-primary);
         }
 
         .status-badge.trial {
@@ -761,32 +839,336 @@
             background: var(--bg-hover);
             transform: scale(1.1);
         }
+        .settings-section {
+            margin-bottom: 48px;
+        }
 
-        /* Floating Action Button */
-        .fab {
-            position: fixed;
-            bottom: 32px;
-            right: 32px;
-            width: 60px;
-            height: 60px;
+        .settings-section h2 {
+            font-size: 20px;
+            font-weight: 600;
+            margin-bottom: 12px;
+        }
+
+        .settings-section p {
+            color: var(--text-secondary);
+            margin-bottom: 24px;
+        }
+
+        .settings-container {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .setting-category {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            overflow: hidden;
+        }
+
+        .setting-category summary {
+            list-style: none;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 18px 24px;
+            font-weight: 600;
+            transition: background 0.2s ease;
+        }
+
+        .setting-category summary::-webkit-details-marker {
+            display: none;
+        }
+
+        .setting-category[open] summary {
+            background: rgba(99, 102, 241, 0.05);
+        }
+
+        .settings-count {
+            font-size: 12px;
+            background: rgba(99, 102, 241, 0.15);
+            color: var(--accent-primary);
+            padding: 4px 10px;
+            border-radius: 999px;
+        }
+
+        .setting-items {
+            border-top: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+        }
+
+        .setting-item {
+            display: grid;
+            grid-template-columns: minmax(220px, 1fr) minmax(200px, 1fr) 160px;
+            gap: 16px;
+            padding: 16px 24px;
+            border-bottom: 1px solid var(--border);
+            align-items: center;
+        }
+
+        .setting-item:last-child {
+            border-bottom: none;
+        }
+
+        .setting-name {
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+
+        .setting-key {
+            font-size: 12px;
+            color: var(--text-tertiary);
+        }
+
+        .setting-value {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .setting-actions {
+            display: flex;
+            gap: 8px;
+            justify-content: flex-end;
+        }
+
+        .setting-button {
+            padding: 8px 14px;
+            border-radius: 10px;
+            border: 1px solid var(--border);
+            background: var(--bg-tertiary);
+            color: var(--text-primary);
+            font-size: 13px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .setting-button:hover:enabled {
+            background: var(--bg-hover);
+        }
+
+        .setting-button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .setting-override {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 4px 10px;
+            border-radius: 999px;
+            font-size: 11px;
+            background: rgba(99, 102, 241, 0.15);
+            color: var(--accent-primary);
+            width: fit-content;
+        }
+
+        .settings-empty {
+            padding: 20px 24px;
+            color: var(--text-secondary);
+        }
+
+        .settings-empty small {
+            color: var(--text-tertiary);
+        }
+
+        .bot-control {
+            position: relative;
+        }
+
+        .bot-control-btn {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 16px;
+            border-radius: 12px;
+            border: 1px solid var(--border);
+            background: var(--bg-tertiary);
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .bot-control-btn:hover {
+            background: var(--bg-hover);
+        }
+
+        .bot-status {
+            width: 10px;
+            height: 10px;
             border-radius: 50%;
-            background: var(--accent-gradient);
+            background: var(--success);
+            box-shadow: 0 0 10px var(--success);
+        }
+
+        .bot-status.paused {
+            background: var(--warning);
+            box-shadow: 0 0 10px var(--warning);
+        }
+
+        .bot-status.stopped {
+            background: var(--danger);
+            box-shadow: 0 0 10px var(--danger);
+        }
+
+        .bot-dropdown {
+            position: absolute;
+            right: 0;
+            top: calc(100% + 8px);
+            width: 240px;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            padding: 8px;
+            display: none;
+            flex-direction: column;
+            gap: 4px;
+            box-shadow: var(--shadow);
+            z-index: 10;
+        }
+
+        .bot-dropdown.open {
+            display: flex;
+        }
+
+        .bot-dropdown-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 12px;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: background 0.2s ease;
+            color: var(--text-primary);
+        }
+
+        .bot-dropdown-item:hover {
+            background: var(--bg-tertiary);
+        }
+
+        .bot-dropdown-item.warning {
+            color: var(--warning);
+        }
+
+        .bot-dropdown-item.danger {
+            color: var(--danger);
+        }
+
+        .bot-dropdown-divider {
+            height: 1px;
+            background: var(--border);
+            margin: 4px 0;
+        }
+
+        .auth-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(10, 11, 13, 0.85);
+            backdrop-filter: blur(6px);
             display: flex;
             align-items: center;
             justify-content: center;
-            color: white;
-            font-size: 24px;
-            cursor: pointer;
+            z-index: 2000;
+        }
+
+        .auth-overlay.hidden {
+            display: none;
+        }
+
+        .auth-modal {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 18px;
+            padding: 32px;
+            width: min(420px, 92%);
             box-shadow: var(--shadow);
-            transition: all 0.3s ease;
-            z-index: 1000;
         }
 
-        .fab:hover {
-            transform: scale(1.1) rotate(90deg);
+        .auth-modal h2 {
+            font-size: 22px;
+            margin-bottom: 8px;
+            text-align: center;
         }
 
-        /* Responsive */
+        .auth-modal p {
+            color: var(--text-secondary);
+            margin-bottom: 20px;
+            text-align: center;
+        }
+
+        .auth-modal input {
+            width: 100%;
+            padding: 14px 16px;
+            border-radius: 12px;
+            border: 1px solid var(--border);
+            background: var(--bg-tertiary);
+            color: var(--text-primary);
+            font-size: 14px;
+        }
+
+        .auth-modal button {
+            margin-top: 18px;
+            width: 100%;
+            padding: 14px 18px;
+            border-radius: 12px;
+            border: none;
+            background: var(--accent-gradient);
+            color: white;
+            font-weight: 600;
+            cursor: pointer;
+            font-size: 14px;
+        }
+
+        .auth-error {
+            color: var(--danger);
+            margin-top: 12px;
+            text-align: center;
+            min-height: 20px;
+        }
+
+        .toast-container {
+            position: fixed;
+            right: 24px;
+            bottom: 24px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            z-index: 2100;
+        }
+
+        .toast {
+            min-width: 220px;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 14px 18px;
+            box-shadow: var(--shadow);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-size: 14px;
+        }
+
+        .toast.success {
+            border-color: rgba(16, 185, 129, 0.5);
+        }
+
+        .toast.error {
+            border-color: rgba(239, 68, 68, 0.5);
+        }
+
+        .toast.warning {
+            border-color: rgba(245, 158, 11, 0.5);
+        }
+
+        .maintenance-label {
+            font-weight: 600;
+            color: var(--accent-primary);
+        }
+
         @media (max-width: 1024px) {
             .sidebar {
                 position: fixed;
@@ -808,775 +1190,828 @@
             .stats-grid {
                 grid-template-columns: 1fr;
             }
-        }
 
-        /* Server Details Expansion */
-        .server-card {
-            background: var(--bg-secondary);
-            border: 1px solid var(--border);
-            border-radius: 16px;
-            margin-bottom: 24px;
-            overflow: hidden;
-            transition: all 0.3s ease;
-        }
-
-        .server-card-header {
-            padding: 20px 24px;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            cursor: pointer;
-            transition: background 0.2s ease;
-        }
-
-        .server-card-header:hover {
-            background: rgba(99, 102, 241, 0.05);
-        }
-
-        .server-info {
-            display: flex;
-            align-items: center;
-            gap: 16px;
-        }
-
-        .server-flag {
-            font-size: 32px;
-        }
-
-        .server-details {
-            flex: 1;
-        }
-
-        .server-name {
-            font-size: 18px;
-            font-weight: 600;
-            margin-bottom: 4px;
-        }
-
-        .server-location {
-            color: var(--text-secondary);
-            font-size: 14px;
-        }
-
-        .server-stats {
-            display: flex;
-            gap: 32px;
-            align-items: center;
-        }
-
-        .server-stat {
-            text-align: center;
-        }
-
-        .server-stat-value {
-            font-size: 20px;
-            font-weight: 600;
-            margin-bottom: 4px;
-        }
-
-        .server-stat-label {
-            font-size: 12px;
-            color: var(--text-tertiary);
-            text-transform: uppercase;
-        }
-
-        .expand-icon {
-            width: 32px;
-            height: 32px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            border-radius: 8px;
-            background: var(--bg-tertiary);
-            transition: transform 0.3s ease;
-        }
-
-        .server-card.expanded .expand-icon {
-            transform: rotate(180deg);
-        }
-
-        .server-expanded-content {
-            max-height: 0;
-            overflow: hidden;
-            transition: max-height 0.3s ease;
-            border-top: 1px solid var(--border);
-        }
-
-        .server-card.expanded .server-expanded-content {
-            max-height: 600px;
-        }
-
-        .server-expanded-inner {
-            padding: 24px;
-        }
-
-        .server-actions {
-            display: flex;
-            gap: 12px;
-            margin-bottom: 24px;
-        }
-
-        .speed-test-btn {
-            padding: 10px 20px;
-            background: var(--accent-gradient);
-            color: white;
-            border: none;
-            border-radius: 10px;
-            font-weight: 500;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-
-        .speed-test-btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
-        }
-
-        .speed-test-btn.testing {
-            background: var(--warning);
-            animation: pulse 1s infinite;
-        }
-
-        .server-metrics-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-            gap: 16px;
-            margin-bottom: 24px;
-        }
-
-        .metric-card {
-            background: var(--bg-tertiary);
-            padding: 16px;
-            border-radius: 12px;
-            text-align: center;
-        }
-
-        .metric-value {
-            font-size: 24px;
-            font-weight: 600;
-            margin-bottom: 4px;
-        }
-
-        .metric-label {
-            font-size: 12px;
-            color: var(--text-secondary);
-        }
-
-        .server-chart {
-            background: var(--bg-tertiary);
-            border-radius: 12px;
-            padding: 20px;
-            height: 200px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            position: relative;
-            overflow: hidden;
-        }
-
-        .chart-grid {
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background-image: 
-                linear-gradient(rgba(99, 102, 241, 0.1) 1px, transparent 1px),
-                linear-gradient(90deg, rgba(99, 102, 241, 0.1) 1px, transparent 1px);
-            background-size: 20px 20px;
-        }
-
-        .chart-line {
-            position: absolute;
-            bottom: 0;
-            left: 0;
-            right: 0;
-            height: 60%;
-            background: linear-gradient(to top, rgba(99, 102, 241, 0.2), transparent);
-            clip-path: polygon(
-                0% 100%,
-                5% 85%, 10% 70%, 15% 75%, 20% 60%, 25% 65%,
-                30% 50%, 35% 55%, 40% 45%, 45% 50%, 50% 40%,
-                55% 45%, 60% 35%, 65% 40%, 70% 30%, 75% 35%,
-                80% 25%, 85% 30%, 90% 20%, 95% 25%, 100% 15%,
-                100% 100%
-            );
-        }
-
-        /* Loading Animation */
-        .loading {
-            display: inline-block;
-            width: 20px;
-            height: 20px;
-            border: 3px solid var(--border);
-            border-top-color: var(--accent-primary);
-            border-radius: 50%;
-            animation: spin 1s linear infinite;
-        }
-
-        @keyframes spin {
-            to { transform: rotate(360deg); }
-        }
-
-        /* Tooltips */
-        [data-tooltip] {
-            position: relative;
-        }
-
-        [data-tooltip]:hover::after {
-            content: attr(data-tooltip);
-            position: absolute;
-            bottom: 100%;
-            left: 50%;
-            transform: translateX(-50%);
-            padding: 8px 12px;
-            background: var(--bg-tertiary);
-            color: var(--text-primary);
-            font-size: 12px;
-            border-radius: 8px;
-            white-space: nowrap;
-            z-index: 1000;
-            pointer-events: none;
-            animation: fadeIn 0.3s ease;
-        }
-
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateX(-50%) translateY(4px); }
-            to { opacity: 1; transform: translateX(-50%) translateY(0); }
+            .setting-item {
+                grid-template-columns: 1fr;
+                gap: 12px;
+                align-items: flex-start;
+            }
         }
     </style>
 </head>
 <body>
-    <div class="bg-animation"></div>
-    
-    <div class="container">
-        <!-- Sidebar -->
-        <aside class="sidebar">
-            <div class="logo">
-                <h1>BedolagaAdmin <span class="status"></span></h1>
+<div class="bg-animation"></div>
+<div id="auth-overlay" class="auth-overlay hidden">
+    <div class="auth-modal">
+        <h2>Добро пожаловать</h2>
+        <p>Введите админ-токен для доступа к панели управления</p>
+        <form id="login-form">
+            <input id="login-token" type="password" placeholder="API токен" autocomplete="off" required>
+            <button type="submit">Войти</button>
+            <div id="login-error" class="auth-error"></div>
+        </form>
+    </div>
+</div>
+<div id="toast-container" class="toast-container"></div>
+<div class="container">
+    <aside class="sidebar">
+        <div class="logo">
+            <h1>
+                <span class="status"></span>
+                <span id="sidebar-title">{{WEBADMIN_TITLE}}</span>
+            </h1>
+        </div>
+        <nav class="nav">
+            <div class="nav-section">
+                <div class="nav-section-title">Обзор</div>
+                <a href="#" class="nav-item active">
+                    <span class="nav-icon">📊</span>
+                    <span>Панель управления</span>
+                </a>
+                <a href="#" class="nav-item">
+                    <span class="nav-icon">🧾</span>
+                    <span>История операций</span>
+                </a>
             </div>
-            
-            <nav class="nav">
-                <div class="nav-section">
-                    <div class="nav-section-title">Аналитика</div>
-                    <a href="#" class="nav-item active">
-                        <span class="nav-icon">📊</span>
-                        <span>Дашборд</span>
-                    </a>
-                    <a href="#" class="nav-item">
-                        <span class="nav-icon">💰</span>
-                        <span>Финансы</span>
-                        <span class="nav-badge">12</span>
-                    </a>
-                    <a href="#" class="nav-item">
-                        <span class="nav-icon">📈</span>
-                        <span>Статистика</span>
-                    </a>
+            <div class="nav-section">
+                <div class="nav-section-title">Управление</div>
+                <a href="#" class="nav-item">
+                    <span class="nav-icon">👥</span>
+                    <span>Пользователи</span>
+                </a>
+                <a href="#" class="nav-item">
+                    <span class="nav-icon">💳</span>
+                    <span>Подписки</span>
+                </a>
+                <a href="#" class="nav-item">
+                    <span class="nav-icon">🖥️</span>
+                    <span>Серверы</span>
+                    <span class="nav-badge" id="nav-servers-count">—</span>
+                </a>
+            </div>
+            <div class="nav-section">
+                <div class="nav-section-title">Система</div>
+                <a href="#settings" class="nav-item">
+                    <span class="nav-icon">⚙️</span>
+                    <span>Конфигурация бота</span>
+                </a>
+                <a href="#" class="nav-item">
+                    <span class="nav-icon">💾</span>
+                    <span>Бекапы</span>
+                </a>
+            </div>
+        </nav>
+    </aside>
+    <main class="main">
+        <header class="header">
+            <div class="header-left">
+                <div class="search-box">
+                    <input type="text" placeholder="Поиск пользователей, ID, email..." id="search-input">
                 </div>
-                
-                <div class="nav-section">
-                    <div class="nav-section-title">Управление</div>
-                    <a href="#" class="nav-item">
-                        <span class="nav-icon">👥</span>
-                        <span>Пользователи</span>
-                    </a>
-                    <a href="#" class="nav-item">
-                        <span class="nav-icon">💳</span>
-                        <span>Подписки</span>
-                    </a>
-                    <a href="#" class="nav-item">
-                        <span class="nav-icon">🎫</span>
-                        <span>Промокоды</span>
-                    </a>
-                    <a href="#" class="nav-item">
-                        <span class="nav-icon">👫</span>
-                        <span>Промогруппы</span>
-                    </a>
-                    <a href="#" class="nav-item">
-                        <span class="nav-icon">🔗</span>
-                        <span>Рефералы</span>
-                    </a>
-                    <a href="#" class="nav-item">
-                        <span class="nav-icon">🖥️</span>
-                        <span>Серверы</span>
-                        <span class="nav-badge" style="background: var(--success);">✓</span>
-                    </a>
-                    <a href="#" class="nav-item">
-                        <span class="nav-icon">🌊</span>
-                        <span>Remnawave</span>
-                    </a>
-                    <a href="#" class="nav-item">
-                        <span class="nav-icon">📨</span>
-                        <span>Рассылки</span>
-                    </a>
-                    <a href="#" class="nav-item">
-                        <span class="nav-icon">📢</span>
-                        <span>Рекламные кампании</span>
-                    </a>
-                    <a href="#" class="nav-item">
-                        <span class="nav-icon">🎫</span>
-                        <span>Тикеты</span>
-                        <span class="nav-badge">5</span>
-                    </a>
-                </div>
-                
-                <div class="nav-section">
-                    <div class="nav-section-title">Система</div>
-                    <a href="#" class="nav-item">
-                        <span class="nav-icon">💳</span>
-                        <span>Платежные шлюзы</span>
-                    </a>
-                    <a href="#" class="nav-item">
-                        <span class="nav-icon">💸</span>
-                        <span>Настройка цен</span>
-                    </a>
-                    <a href="#" class="nav-item">
-                        <span class="nav-icon">💰</span>
-                        <span>Автоплатежи</span>
-                    </a>
-                    <a href="#" class="nav-item">
-                        <span class="nav-icon">🌍</span>
-                        <span>Локализация</span>
-                    </a>
-                    <a href="#" class="nav-item">
-                        <span class="nav-icon">📑</span>
-                        <span>Отчеты</span>
-                    </a>
-                    <a href="#" class="nav-item">
-                        <span class="nav-icon">🗄️</span>
-                        <span>Бекапы</span>
-                    </a>
-                    <a href="#" class="nav-item">
-                        <span class="nav-icon">📋</span>
-                        <span>Логи</span>
-                    </a>
-                    <a href="#" class="nav-item">
-                        <span class="nav-icon">⚙️</span>
-                        <span>Настройки</span>
-                    </a>
-                </div>
-            </nav>
-        </aside>
-        
-        <!-- Main Content -->
-        <main class="main">
-            <!-- Header -->
-            <header class="header">
-                <div class="header-left">
-                    <div class="search-box">
-                        <input type="text" placeholder="Поиск пользователей, ID, email...">
-                    </div>
-                </div>
-                
-                <div class="header-right">
-                    <div class="bot-control">
-                        <button class="bot-control-btn">
-                            <span class="bot-status"></span>
-                            <span>Бот активен</span>
-                            <span style="font-size: 12px;">▼</span>
-                        </button>
-                        <div class="bot-dropdown">
-                            <div class="bot-dropdown-item">
-                                <span>🔄</span>
-                                <span>Перезапустить бота</span>
-                            </div>
-                            <div class="bot-dropdown-item warning">
-                                <span>⏸️</span>
-                                <span>Остановить бота</span>
-                            </div>
-                            <div class="bot-dropdown-item">
-                                <span>▶️</span>
-                                <span>Запустить бота</span>
-                            </div>
-                            <div class="bot-dropdown-divider"></div>
-                            <div class="bot-dropdown-item">
-                                <span>🔄</span>
-                                <span>Синхронизация</span>
-                            </div>
-                            <div class="bot-dropdown-item danger">
-                                <span>🚧</span>
-                                <span>Режим техработ</span>
-                            </div>
+            </div>
+            <div class="header-right">
+                <div class="bot-control">
+                    <button class="bot-control-btn" id="bot-control-btn" type="button">
+                        <span class="bot-status" id="bot-status-indicator"></span>
+                        <span data-bot-state>Бот активен</span>
+                        <span class="bot-control-caret">▼</span>
+                    </button>
+                    <div class="bot-dropdown" id="bot-dropdown">
+                        <div class="bot-dropdown-item" data-action="reload-config">
+                            <span>🔄</span>
+                            <span>Перезагрузить конфигурацию</span>
+                        </div>
+                        <div class="bot-dropdown-item" data-action="create-backup">
+                            <span>💾</span>
+                            <span>Создать бекап</span>
+                        </div>
+                        <div class="bot-dropdown-item" data-action="send-report">
+                            <span>📬</span>
+                            <span>Отправить дневной отчет</span>
+                        </div>
+                        <div class="bot-dropdown-divider"></div>
+                        <div class="bot-dropdown-item warning" data-action="toggle-maintenance">
+                            <span>🚧</span>
+                            <span>Режим техработ: <span class="maintenance-label" data-maintenance-label>Выкл</span></span>
+                        </div>
+                        <div class="bot-dropdown-divider"></div>
+                        <div class="bot-dropdown-item danger" data-action="logout">
+                            <span>🚪</span>
+                            <span>Выйти</span>
                         </div>
                     </div>
-                    <button class="header-btn" data-tooltip="Уведомления">
-                        <span>🔔</span>
-                        <span class="notification-badge">3</span>
-                    </button>
-                    <div class="user-menu">
-                        <div class="user-avatar">A</div>
+                </div>
+                <div class="user-menu" id="user-menu">
+                    <div class="user-avatar" id="user-avatar">A</div>
+                    <div>
+                        <div style="font-size: 14px; font-weight: 500;" id="user-name">Admin</div>
+                        <div style="font-size: 12px; color: var(--text-tertiary);">Супер админ</div>
+                    </div>
+                </div>
+            </div>
+        </header>
+        <div class="content">
+            <h1 class="page-title">Панель управления</h1>
+            <p class="page-subtitle">Добро пожаловать в систему управления VPN ботом</p>
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-header">
                         <div>
-                            <div style="font-size: 14px; font-weight: 500;">Admin</div>
-                            <div style="font-size: 12px; color: var(--text-tertiary);">Супер админ</div>
+                            <div class="stat-value" id="stat-total-users">—</div>
+                            <div class="stat-label">Всего пользователей</div>
                         </div>
+                        <div class="stat-icon users">👥</div>
                     </div>
+                    <span class="stat-change" id="stat-users-change">—</span>
                 </div>
-            </header>
-            
-            <!-- Content Area -->
-            <div class="content">
-                <h1 class="page-title">Панель управления</h1>
-                <p class="page-subtitle">Добро пожаловать в систему управления VPN ботом</p>
-                
-                <!-- Stats Grid -->
-                <div class="stats-grid">
-                    <div class="stat-card">
-                        <div class="stat-header">
-                            <div>
-                                <div class="stat-value">1,284</div>
-                                <div class="stat-label">Всего пользователей</div>
-                            </div>
-                            <div class="stat-icon users">👥</div>
+                <div class="stat-card">
+                    <div class="stat-header">
+                        <div>
+                            <div class="stat-value" id="stat-revenue">—</div>
+                            <div class="stat-label">Доход за 30 дней</div>
                         </div>
-                        <span class="stat-change positive">↑ 12% за неделю</span>
+                        <div class="stat-icon money">💰</div>
                     </div>
-                    
-                    <div class="stat-card">
-                        <div class="stat-header">
-                            <div>
-                                <div class="stat-value">₽84,290</div>
-                                <div class="stat-label">Доход за месяц</div>
-                            </div>
-                            <div class="stat-icon money">💰</div>
-                        </div>
-                        <span class="stat-change positive">↑ 23% к прошлому</span>
-                    </div>
-                    
-                    <div class="stat-card">
-                        <div class="stat-header">
-                            <div>
-                                <div class="stat-value">8 / 8</div>
-                                <div class="stat-label">Активные серверы</div>
-                            </div>
-                            <div class="stat-icon servers">🖥️</div>
-                        </div>
-                        <span class="stat-change positive">100% uptime</span>
-                    </div>
-                    
-                    <div class="stat-card">
-                        <div class="stat-header">
-                            <div>
-                                <div class="stat-value">68%</div>
-                                <div class="stat-label">Конверсия триал → платная</div>
-                            </div>
-                            <div class="stat-icon chart">📈</div>
-                        </div>
-                        <span class="stat-change positive">↑ 5% за месяц</span>
-                    </div>
+                    <span class="stat-change" id="stat-revenue-change">—</span>
                 </div>
-                
-                <!-- Chart -->
-                <div class="chart-container">
-                    <div class="chart-placeholder">
-                        <div style="font-size: 48px; margin-bottom: 16px;">📊</div>
-                        <div style="font-size: 18px; font-weight: 500; margin-bottom: 8px;">График продаж</div>
-                        <div style="font-size: 14px;">Динамика подписок за последние 30 дней</div>
+                <div class="stat-card">
+                    <div class="stat-header">
+                        <div>
+                            <div class="stat-value" id="stat-servers">—</div>
+                            <div class="stat-label">Доступные серверы</div>
+                        </div>
+                        <div class="stat-icon servers">🖥️</div>
                     </div>
+                    <span class="stat-change" id="stat-servers-change">—</span>
                 </div>
-                
-                <!-- Quick Actions -->
-                <div class="quick-actions">
-                    <button class="action-btn primary">
-                        <span>➕</span>
-                        <span>Создать промокод</span>
-                    </button>
-                    <button class="action-btn">
-                        <span>📢</span>
-                        <span>Массовая рассылка</span>
-                    </button>
-                    <button class="action-btn">
-                        <span>💾</span>
-                        <span>Создать бекап</span>
-                    </button>
-                    <button class="action-btn">
+                <div class="stat-card">
+                    <div class="stat-header">
+                        <div>
+                            <div class="stat-value" id="stat-conversion">—</div>
+                            <div class="stat-label">Конверсия триал → платная</div>
+                        </div>
+                        <div class="stat-icon chart">📈</div>
+                    </div>
+                    <span class="stat-change" id="stat-conversion-change">—</span>
+                </div>
+            </div>
+            <div class="chart-container" id="revenue-chart">
+                <div class="chart-placeholder">
+                    <div style="font-size: 42px; margin-bottom: 12px;">📊</div>
+                    <div style="font-size: 18px; font-weight: 500; margin-bottom: 8px;">График продаж</div>
+                    <div style="font-size: 14px;">Динамика подписок за последние 30 дней</div>
+                </div>
+            </div>
+            <div class="quick-actions">
+                <button class="action-btn primary" data-action="refresh">
+                    <span>🔄</span>
+                    <span>Обновить данные</span>
+                </button>
+                <button class="action-btn" data-action="reload-config">
+                    <span>⚙️</span>
+                    <span>Перезагрузить конфигурацию</span>
+                </button>
+                <button class="action-btn" data-action="create-backup">
+                    <span>💾</span>
+                    <span>Создать бекап</span>
+                </button>
+                <button class="action-btn" data-action="toggle-maintenance">
+                    <span>🚧</span>
+                    <span id="maintenance-action-label">Включить техработы</span>
+                </button>
+            </div>
+            <section style="margin-bottom: 32px;">
+                <h2 class="servers-section-title">
+                    <span>🖥️</span>
+                    <span>Активные серверы</span>
+                    <span style="background: var(--success); color: white; font-size: 12px; padding: 4px 12px; border-radius: 20px;" id="servers-online-badge">— онлайн</span>
+                </h2>
+                <div id="servers-list"></div>
+            </section>
+            <section class="table-container">
+                <div class="table-header">
+                    <h3>Последние пользователи</h3>
+                    <button class="action-btn" data-action="refresh-users">
                         <span>🔄</span>
-                        <span>Синхронизация</span>
+                        <span>Обновить</span>
                     </button>
                 </div>
-                
-                <!-- Active Servers Section -->
-                <div style="margin-bottom: 32px;">
-                    <h2 style="font-size: 20px; font-weight: 600; margin-bottom: 20px; display: flex; align-items: center; gap: 12px;">
-                        <span>🖥️</span>
-                        <span>Активные серверы</span>
-                        <span style="background: var(--success); color: white; font-size: 12px; padding: 4px 12px; border-radius: 20px;">8 онлайн</span>
-                    </h2>
-                    
-                    <!-- Server Card 1 - Expanded Example -->
-                    <div class="server-card expanded">
-                        <div class="server-card-header" onclick="this.parentElement.classList.toggle('expanded')">
-                            <div class="server-info">
-                                <span class="server-flag">🇳🇱</span>
-                                <div class="server-details">
-                                    <div class="server-name">Netherlands-1</div>
-                                    <div class="server-location">Amsterdam, Digital Ocean</div>
-                                </div>
-                            </div>
-                            <div class="server-stats">
-                                <div class="server-stat">
-                                    <div class="server-stat-value" style="color: var(--success);">342</div>
-                                    <div class="server-stat-label">Пользователей</div>
-                                </div>
-                                <div class="server-stat">
-                                    <div class="server-stat-value">45%</div>
-                                    <div class="server-stat-label">CPU</div>
-                                </div>
-                                <div class="server-stat">
-                                    <div class="server-stat-value">2.4GB</div>
-                                    <div class="server-stat-label">RAM</div>
-                                </div>
-                                <div class="server-stat">
-                                    <div class="server-stat-value" style="color: var(--success);">99.9%</div>
-                                    <div class="server-stat-label">Uptime</div>
-                                </div>
-                                <div class="expand-icon">▼</div>
-                            </div>
-                        </div>
-                        
-                        <div class="server-expanded-content">
-                            <div class="server-expanded-inner">
-                                <div class="server-actions">
-                                    <button class="speed-test-btn">
-                                        <span>⚡</span>
-                                        <span>Speed Test</span>
-                                    </button>
-                                    <button class="action-btn">
-                                        <span>🔄</span>
-                                        <span>Перезагрузить</span>
-                                    </button>
-                                    <button class="action-btn">
-                                        <span>📊</span>
-                                        <span>Детальная статистика</span>
-                                    </button>
-                                    <button class="action-btn" style="background: rgba(239, 68, 68, 0.1); color: var(--danger);">
-                                        <span>⏸️</span>
-                                        <span>Остановить</span>
-                                    </button>
-                                </div>
-                                
-                                <div class="server-metrics-grid">
-                                    <div class="metric-card">
-                                        <div class="metric-value" style="color: var(--success);">12ms</div>
-                                        <div class="metric-label">Ping</div>
-                                    </div>
-                                    <div class="metric-card">
-                                        <div class="metric-value">945 Mbps</div>
-                                        <div class="metric-label">Download</div>
-                                    </div>
-                                    <div class="metric-card">
-                                        <div class="metric-value">892 Mbps</div>
-                                        <div class="metric-label">Upload</div>
-                                    </div>
-                                    <div class="metric-card">
-                                        <div class="metric-value">1.2TB</div>
-                                        <div class="metric-label">Трафик/день</div>
-                                    </div>
-                                    <div class="metric-card">
-                                        <div class="metric-value">28°C</div>
-                                        <div class="metric-label">Температура</div>
-                                    </div>
-                                    <div class="metric-card">
-                                        <div class="metric-value">14d 6h</div>
-                                        <div class="metric-label">Работает</div>
-                                    </div>
-                                </div>
-                                
-                                <div style="margin-bottom: 12px; color: var(--text-secondary); font-size: 14px;">
-                                    📈 Нагрузка сервера (последние 24 часа)
-                                </div>
-                                <div class="server-chart">
-                                    <div class="chart-grid"></div>
-                                    <div class="chart-line"></div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <!-- Server Card 2 -->
-                    <div class="server-card">
-                        <div class="server-card-header" onclick="this.parentElement.classList.toggle('expanded')">
-                            <div class="server-info">
-                                <span class="server-flag">🇩🇪</span>
-                                <div class="server-details">
-                                    <div class="server-name">Germany-2</div>
-                                    <div class="server-location">Frankfurt, Hetzner</div>
-                                </div>
-                            </div>
-                            <div class="server-stats">
-                                <div class="server-stat">
-                                    <div class="server-stat-value" style="color: var(--warning);">298</div>
-                                    <div class="server-stat-label">Пользователей</div>
-                                </div>
-                                <div class="server-stat">
-                                    <div class="server-stat-value" style="color: var(--warning);">68%</div>
-                                    <div class="server-stat-label">CPU</div>
-                                </div>
-                                <div class="server-stat">
-                                    <div class="server-stat-value">3.1GB</div>
-                                    <div class="server-stat-label">RAM</div>
-                                </div>
-                                <div class="server-stat">
-                                    <div class="server-stat-value" style="color: var(--success);">100%</div>
-                                    <div class="server-stat-label">Uptime</div>
-                                </div>
-                                <div class="expand-icon">▼</div>
-                            </div>
-                        </div>
-                        
-                        <div class="server-expanded-content">
-                            <div class="server-expanded-inner">
-                                <div class="server-actions">
-                                    <button class="speed-test-btn">
-                                        <span>⚡</span>
-                                        <span>Speed Test</span>
-                                    </button>
-                                    <button class="action-btn">
-                                        <span>🔄</span>
-                                        <span>Перезагрузить</span>
-                                    </button>
-                                    <button class="action-btn">
-                                        <span>📊</span>
-                                        <span>Детальная статистика</span>
-                                    </button>
-                                    <button class="action-btn" style="background: rgba(239, 68, 68, 0.1); color: var(--danger);">
-                                        <span>⏸️</span>
-                                        <span>Остановить</span>
-                                    </button>
-                                </div>
-                                
-                                <div class="server-metrics-grid">
-                                    <div class="metric-card">
-                                        <div class="metric-value" style="color: var(--success);">8ms</div>
-                                        <div class="metric-label">Ping</div>
-                                    </div>
-                                    <div class="metric-card">
-                                        <div class="metric-value">1024 Mbps</div>
-                                        <div class="metric-label">Download</div>
-                                    </div>
-                                    <div class="metric-card">
-                                        <div class="metric-value">976 Mbps</div>
-                                        <div class="metric-label">Upload</div>
-                                    </div>
-                                    <div class="metric-card">
-                                        <div class="metric-value">980GB</div>
-                                        <div class="metric-label">Трафик/день</div>
-                                    </div>
-                                    <div class="metric-card">
-                                        <div class="metric-value">32°C</div>
-                                        <div class="metric-label">Температура</div>
-                                    </div>
-                                    <div class="metric-card">
-                                        <div class="metric-value">28d 12h</div>
-                                        <div class="metric-label">Работает</div>
-                                    </div>
-                                </div>
-                                
-                                <div style="margin-bottom: 12px; color: var(--text-secondary); font-size: 14px;">
-                                    📈 Нагрузка сервера (последние 24 часа)
-                                </div>
-                                <div class="server-chart">
-                                    <div class="chart-grid"></div>
-                                    <div class="chart-line"></div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <!-- Server Card 3 -->
-                    <div class="server-card">
-                        <div class="server-card-header" onclick="this.parentElement.classList.toggle('expanded')">
-                            <div class="server-info">
-                                <span class="server-flag">🇸🇪</span>
-                                <div class="server-details">
-                                    <div class="server-name">Sweden-1</div>
-                                    <div class="server-location">Stockholm, OVH</div>
-                                </div>
-                            </div>
-                            <div class="server-stats">
-                                <div class="server-stat">
-                                    <div class="server-stat-value" style="color: var(--success);">256</div>
-                                    <div class="server-stat-label">Пользователей</div>
-                                </div>
-                                <div class="server-stat">
-                                    <div class="server-stat-value" style="color: var(--success);">32%</div>
-                                    <div class="server-stat-label">CPU</div>
-                                </div>
-                                <div class="server-stat">
-                                    <div class="server-stat-value">1.8GB</div>
-                                    <div class="server-stat-label">RAM</div>
-                                </div>
-                                <div class="server-stat">
-                                    <div class="server-stat-value" style="color: var(--success);">99.8%</div>
-                                    <div class="server-stat-label">Uptime</div>
-                                </div>
-                                <div class="expand-icon">▼</div>
-                            </div>
-                        </div>
-                        
-                        <div class="server-expanded-content">
-                            <div class="server-expanded-inner">
-                                <div class="server-actions">
-                                    <button class="speed-test-btn">
-                                        <span>⚡</span>
-                                        <span>Speed Test</span>
-                                    </button>
-                                    <button class="action-btn">
-                                        <span>🔄</span>
-                                        <span>Перезагрузить</span>
-                                    </button>
-                                    <button class="action-btn">
-                                        <span>📊</span>
-                                        <span>Детальная статистика</span>
-                                    </button>
-                                    <button class="action-btn" style="background: rgba(239, 68, 68, 0.1); color: var(--danger);">
-                                        <span>⏸️</span>
-                                        <span>Остановить</span>
-                                    </button>
-                                </div>
-                                
-                                <div class="server-metrics-grid">
-                                    <div class="metric-card">
-                                        <div class="metric-value" style="color: var(--success);">15ms</div>
-                                        <div class="metric-label">Ping</div>
-                                    </div>
-                                    <div class="metric-card">
-                                        <div class="metric-value">850 Mbps</div>
-                                        <div class="metric-label">Download</div>
-                                    </div>
-                                    <div class="metric-card">
-                                        <div class="metric-value">820 Mbps</div>
-                                        <div class="metric-label">Upload</div>
-                                    </div>
-                                    <div class="metric-card">
-                                        <div class="metric-value">650GB</div>
-                                        <div class="metric-label">Трафик/день</div>
-                                    </div>
-                                    <div class="metric-card">
-                                        <div class="metric-value">26°C</div>
-                                        <div class="metric-label">Температура</div>
-                                    </div>
-                                    <div class="metric-card">
-                                        <div class="metric-value">7d 18h</div>
-                                        <div class="metric-label">Работает</div>
-                                    </div>
-                                </div>
-                                
-                                <div style="margin-bottom: 12px; color: var(--text-secondary); font-size: 14px;">
-                                    📈 Нагрузка сервера (последние 24 часа)
-                                </div>
-                                <div class="server-chart">
-                                    <div class="chart-grid"></div>
-                                    <div class="chart-line"></div>
-                                </div>
-                            </div>
-                        </div>
+                <table>
+                    <thead>
+                    <tr>
+                        <th>Пользователь</th>
+                        <th>Статус</th>
+                        <th>Подписка</th>
+                        <th>Баланс</th>
+                        <th></th>
+                    </tr>
+                    </thead>
+                    <tbody id="recent-users-body">
+                    <tr>
+                        <td colspan="5" style="padding: 32px; text-align: center; color: var(--text-tertiary);">
+                            Нет данных
+                        </td>
+                    </tr>
+                    </tbody>
+                </table>
+            </section>
+            <section class="settings-section" id="settings">
+                <h2>⚙️ Конфигурация бота</h2>
+                <p>Просматривайте и обновляйте ключевые параметры без перезапуска бота. Значения сохраняются в базе данных.</p>
+                <div id="settings-container" class="settings-container">
+                    <div class="settings-empty">Загрузка категорий настроек…</div>
+                </div>
+            </section>
+        </div>
+    </main>
+</div>
+</div>
+<script>
+(() => {
+    const state = {
+        token: localStorage.getItem('webadminToken') || '',
+        health: null,
+        settingsCache: new Map(),
+    };
+
+    const els = {
+        authOverlay: document.getElementById('auth-overlay'),
+        loginForm: document.getElementById('login-form'),
+        loginToken: document.getElementById('login-token'),
+        loginError: document.getElementById('login-error'),
+        toastContainer: document.getElementById('toast-container'),
+        botControlBtn: document.getElementById('bot-control-btn'),
+        botDropdown: document.getElementById('bot-dropdown'),
+        botStatusIndicator: document.getElementById('bot-status-indicator'),
+        maintenanceActionLabel: document.getElementById('maintenance-action-label'),
+        maintenanceLabel: document.querySelector('[data-maintenance-label]'),
+        statUsers: document.getElementById('stat-total-users'),
+        statUsersChange: document.getElementById('stat-users-change'),
+        statRevenue: document.getElementById('stat-revenue'),
+        statRevenueChange: document.getElementById('stat-revenue-change'),
+        statServers: document.getElementById('stat-servers'),
+        statServersChange: document.getElementById('stat-servers-change'),
+        statConversion: document.getElementById('stat-conversion'),
+        statConversionChange: document.getElementById('stat-conversion-change'),
+        revenueChart: document.getElementById('revenue-chart'),
+        serversList: document.getElementById('servers-list'),
+        serversBadge: document.getElementById('servers-online-badge'),
+        navServersCount: document.getElementById('nav-servers-count'),
+        recentUsersBody: document.getElementById('recent-users-body'),
+        settingsContainer: document.getElementById('settings-container'),
+        searchInput: document.getElementById('search-input'),
+    };
+
+    function toLocaleCurrency(value) {
+        return new Intl.NumberFormat('ru-RU', { style: 'currency', currency: 'RUB', maximumFractionDigits: 0 }).format(value || 0);
+    }
+
+    function toPercent(value) {
+        if (value === null || value === undefined || Number.isNaN(value)) {
+            return '—';
+        }
+        return `${value.toFixed(1)}%`;
+    }
+
+    function showToast(message, type = 'info') {
+        const toast = document.createElement('div');
+        toast.className = `toast ${type}`;
+        toast.textContent = message;
+        els.toastContainer.appendChild(toast);
+        setTimeout(() => {
+            toast.classList.add('fade');
+            setTimeout(() => toast.remove(), 200);
+        }, 4000);
+    }
+
+    function showLogin(message = '') {
+        els.authOverlay.classList.remove('hidden');
+        els.loginError.textContent = message;
+        setTimeout(() => els.loginToken.focus(), 50);
+    }
+
+    function hideLogin() {
+        els.authOverlay.classList.add('hidden');
+        els.loginError.textContent = '';
+        els.loginToken.value = '';
+    }
+
+    async function callApi(path, { method = 'GET', body, skipAuth = false } = {}) {
+        const headers = {};
+        if (!skipAuth && state.token) {
+            headers.Authorization = `Bearer ${state.token}`;
+        }
+        const options = { method, headers };
+        if (body !== undefined) {
+            headers['Content-Type'] = 'application/json';
+            options.body = JSON.stringify(body);
+        }
+
+        const response = await fetch(path, options).catch((error) => {
+            throw new Error(`Сеть недоступна: ${error.message}`);
+        });
+
+        let payload = {};
+        if (response.status !== 204) {
+            try {
+                payload = await response.json();
+            } catch (error) {
+                payload = {};
+            }
+        }
+
+        if (response.status === 401 && !skipAuth) {
+            state.token = '';
+            localStorage.removeItem('webadminToken');
+            showLogin('Требуется повторный вход');
+            throw new Error('Не авторизовано');
+        }
+
+        if (!response.ok || payload.status === 'error') {
+            const message = payload.message || `Ошибка ${response.status}`;
+            throw new Error(message);
+        }
+
+        return payload.data !== undefined ? payload.data : payload;
+    }
+
+    function applyTrend(element, value) {
+        element.classList.remove('positive', 'negative');
+        if (value === null || value === undefined) {
+            element.textContent = '—';
+            return;
+        }
+        const formatted = value > 0 ? `↑ ${value.toFixed(1)}%` : value < 0 ? `↓ ${(Math.abs(value)).toFixed(1)}%` : '0%';
+        element.textContent = formatted;
+        if (value > 0) {
+            element.classList.add('positive');
+        } else if (value < 0) {
+            element.classList.add('negative');
+        }
+    }
+
+    function countryCodeToEmoji(code) {
+        if (!code) return '🌍';
+        const upper = code.trim().slice(0, 2).toUpperCase();
+        return upper.replace(/./g, (char) => String.fromCodePoint(char.charCodeAt(0) + 127397));
+    }
+
+    function renderHealth(data) {
+        state.health = data;
+        const maintenance = data?.bot?.maintenance;
+        els.botStatusIndicator.classList.remove('paused', 'stopped');
+        if (maintenance) {
+            els.botStatusIndicator.classList.add('paused');
+        }
+        if (els.maintenanceLabel) {
+            els.maintenanceLabel.textContent = maintenance ? 'Вкл' : 'Выкл';
+        }
+        if (els.maintenanceActionLabel) {
+            els.maintenanceActionLabel.textContent = maintenance ? 'Выключить техработы' : 'Включить техработы';
+        }
+        if (data?.services?.auto_backup_enabled) {
+            els.navServersCount.classList.add('active');
+        }
+    }
+
+    function renderSummary(summary) {
+        if (!summary) return;
+        els.statUsers.textContent = summary.total_users?.toLocaleString('ru-RU') ?? '—';
+        applyTrend(els.statUsersChange, summary.user_growth_percent ?? 0);
+        els.statRevenue.textContent = toLocaleCurrency(summary.monthly_revenue);
+        applyTrend(els.statRevenueChange, summary.monthly_revenue_change_percent ?? 0);
+        els.statServers.textContent = `${summary.available_servers ?? 0} / ${summary.total_servers ?? 0}`;
+        applyTrend(els.statServersChange, summary.active_servers_percent ?? 0);
+        els.statConversion.textContent = toPercent(summary.conversion_rate_percent ?? 0);
+        applyTrend(els.statConversionChange, summary.conversion_rate_percent ?? 0);
+    }
+
+    function renderRevenue(series) {
+        if (!Array.isArray(series) || !series.length) {
+            return;
+        }
+        const chart = document.createElement('div');
+        chart.className = 'chart-bars';
+        const max = Math.max(...series.map((item) => item.revenue || 0));
+        series.forEach((item) => {
+            const bar = document.createElement('div');
+            bar.className = 'chart-bar';
+            const percent = max > 0 ? Math.max((item.revenue / max) * 100, 5) : 5;
+            bar.style.height = `${percent}%`;
+            const value = document.createElement('div');
+            value.className = 'chart-bar-value';
+            value.textContent = toLocaleCurrency(item.revenue);
+            const label = document.createElement('div');
+            label.className = 'chart-bar-label';
+            label.textContent = new Date(item.date).toLocaleDateString('ru-RU', { day: '2-digit', month: 'short' });
+            bar.appendChild(value);
+            bar.appendChild(label);
+            chart.appendChild(bar);
+        });
+        els.revenueChart.innerHTML = '';
+        els.revenueChart.appendChild(chart);
+    }
+
+    function renderServers(servers) {
+        els.serversList.innerHTML = '';
+        if (!Array.isArray(servers) || !servers.length) {
+            els.serversList.innerHTML = '<div class="settings-empty">Нет доступных серверов</div>';
+            els.serversBadge.textContent = '0 онлайн';
+            els.navServersCount.textContent = '0';
+            return;
+        }
+        els.serversBadge.textContent = `${servers.filter((s) => s.is_available).length} онлайн`;
+        els.navServersCount.textContent = servers.length.toString();
+        servers.forEach((server) => {
+            const card = document.createElement('div');
+            card.className = 'server-card';
+            const header = document.createElement('div');
+            header.className = 'server-card-header';
+            header.innerHTML = `
+                <div class="server-info">
+                    <span class="server-flag">${countryCodeToEmoji(server.country_code)}</span>
+                    <div>
+                        <div class="server-name">${server.name}</div>
+                        <div class="server-status-badge ${server.is_available ? '' : 'offline'}">${server.status_label}</div>
                     </div>
                 </div>
+                <div class="server-stats">
+                    <div class="server-stat">
+                        <div class="server-stat-value">${server.current_users}</div>
+                        <div class="server-stat-label">Пользователей</div>
+                    </div>
+                    <div class="server-stat">
+                        <div class="server-stat-value">${server.max_users ?? '∞'}</div>
+                        <div class="server-stat-label">Лимит</div>
+                    </div>
+                    <div class="server-stat">
+                        <div class="server-stat-value">${server.capacity_percent}%</div>
+                        <div class="server-stat-label">Заполнен</div>
+                    </div>
+                    <div class="expand-icon">▼</div>
+                </div>
+            `;
+            const expanded = document.createElement('div');
+            expanded.className = 'server-expanded-content';
+            expanded.innerHTML = `
+                <div class="server-expanded-inner">
+                    <div class="server-details-grid">
+                        <div class="server-detail">
+                            <div class="server-detail-title">Цена</div>
+                            <div class="server-detail-value">${toLocaleCurrency(server.price_rub)}</div>
+                        </div>
+                        <div class="server-detail">
+                            <div class="server-detail-title">UUID</div>
+                            <div class="server-detail-value" style="font-size: 12px; color: var(--text-tertiary);">${server.squad_uuid}</div>
+                        </div>
+                        <div class="server-detail">
+                            <div class="server-detail-title">Статус</div>
+                            <div class="server-detail-value">${server.status_label}</div>
+                        </div>
+                    </div>
+                    ${server.description ? `<div class="server-description">${server.description}</div>` : ''}
+                </div>
+            `;
+            header.addEventListener('click', () => {
+                card.classList.toggle('expanded');
+            });
+            card.appendChild(header);
+            card.appendChild(expanded);
+            els.serversList.appendChild(card);
+        });
+    }
 
-                <!-- Recent Users Table -->
-                <div class="table-container">
-                    <div class="table-header">
-                        <h3 class="table
+    function renderUsers(users) {
+        if (!Array.isArray(users) || !users.length) {
+            els.recentUsersBody.innerHTML = '<tr><td colspan="5" style="padding: 32px; text-align: center; color: var(--text-tertiary);">Нет данных</td></tr>';
+            return;
+        }
+        const fragment = document.createDocumentFragment();
+        users.forEach((user) => {
+            const row = document.createElement('tr');
+            const subscription = user.subscription;
+            let badgeClass = 'status-badge';
+            let badgeText = '—';
+            if (subscription) {
+                if (subscription.is_trial) {
+                    badgeClass += ' trial';
+                    badgeText = 'Триал';
+                } else if (subscription.status === 'expired') {
+                    badgeClass += ' expired';
+                    badgeText = 'Истекла';
+                } else {
+                    badgeText = 'Активна';
+                }
+            }
+            const balance = toLocaleCurrency(user.balance_rub ?? 0);
+            row.innerHTML = `
+                <td>
+                    <div class="user-cell">
+                        <div class="user-avatar-small">${(user.full_name || 'U').charAt(0).toUpperCase()}</div>
+                        <div class="user-info">
+                            <div class="user-name">${user.full_name || 'Без имени'}</div>
+                            <div class="user-id">ID ${user.id}</div>
+                        </div>
+                    </div>
+                </td>
+                <td><span class="status-badge">${user.status}</span></td>
+                <td><span class="${badgeClass}">${badgeText}</span></td>
+                <td>${balance}</td>
+                <td class="table-actions-cell">
+                    <button class="icon-btn" data-action="view-user" data-user-id="${user.id}" title="Подробнее">ℹ️</button>
+                </td>
+            `;
+            fragment.appendChild(row);
+        });
+        els.recentUsersBody.innerHTML = '';
+        els.recentUsersBody.appendChild(fragment);
+    }
+
+    function renderSettingsCategories(categories) {
+        els.settingsContainer.innerHTML = '';
+        if (!Array.isArray(categories) || !categories.length) {
+            els.settingsContainer.innerHTML = '<div class="settings-empty">Нет доступных настроек</div>';
+            return;
+        }
+        categories.forEach((category) => {
+            const details = document.createElement('details');
+            details.className = 'setting-category';
+            details.dataset.category = category.key;
+            const summary = document.createElement('summary');
+            summary.innerHTML = `<span>${category.label}</span><span class="settings-count">${category.count}</span>`;
+            const itemsContainer = document.createElement('div');
+            itemsContainer.className = 'setting-items';
+            itemsContainer.innerHTML = '<div class="settings-empty">Откройте категорию, чтобы загрузить настройки…</div>';
+            details.appendChild(summary);
+            details.appendChild(itemsContainer);
+            details.addEventListener('toggle', async () => {
+                if (details.open && !state.settingsCache.has(category.key)) {
+                    await loadSettingsCategory(category.key, itemsContainer);
+                }
+            });
+            els.settingsContainer.appendChild(details);
+        });
+    }
+
+    async function loadSettingsCategory(key, container) {
+        container.innerHTML = '<div class="settings-empty">Загрузка…</div>';
+        try {
+            const items = await callApi(`/api/settings/category/${key}`);
+            state.settingsCache.set(key, items);
+            renderSettingItems(key, items, container);
+        } catch (error) {
+            container.innerHTML = `<div class="settings-empty">${error.message}</div>`;
+        }
+    }
+
+    function renderSettingItems(categoryKey, items, container) {
+        if (!items.length) {
+            container.innerHTML = '<div class="settings-empty">Нет настроек в этой категории</div>';
+            return;
+        }
+        const fragment = document.createDocumentFragment();
+        items.forEach((item) => {
+            const row = document.createElement('div');
+            row.className = 'setting-item';
+            row.dataset.key = item.key;
+            row.innerHTML = `
+                <div>
+                    <div class="setting-name">${item.name}</div>
+                    <div class="setting-key">${item.key}</div>
+                </div>
+                <div class="setting-value">
+                    <span>${item.value_formatted}</span>
+                    ${item.has_override ? '<span class="setting-override">Изменено</span>' : ''}
+                </div>
+                <div class="setting-actions">
+                    <button class="setting-button" data-action="edit-setting" data-key="${item.key}" data-category="${categoryKey}">Изменить</button>
+                    <button class="setting-button" data-action="reset-setting" data-key="${item.key}" data-category="${categoryKey}" ${item.has_override ? '' : 'disabled'}>Сбросить</button>
+                </div>
+            `;
+            fragment.appendChild(row);
+        });
+        container.innerHTML = '';
+        container.appendChild(fragment);
+    }
+
+    async function editSetting(key, category) {
+        const items = state.settingsCache.get(category) || [];
+        const item = items.find((entry) => entry.key === key);
+        if (!item) return;
+        const choices = item.choices || [];
+        const hint = choices.length
+            ? `\nВозможные значения:\n${choices.map((choice) => `• ${choice.label} (${choice.value})`).join('\n')}`
+            : '';
+        const currentValue = item.value ?? '';
+        const input = prompt(`Введите новое значение для «${item.name}»${hint}`, currentValue);
+        if (input === null) {
+            return;
+        }
+        try {
+            const payload = { value: input };
+            if (input.trim().toLowerCase() === 'null' || input.trim() === '') {
+                payload.value = null;
+            }
+            const updated = await callApi(`/api/settings/${key}`, { method: 'PUT', body: payload });
+            showToast('Настройка обновлена', 'success');
+            state.settingsCache.delete(category);
+            const details = els.settingsContainer.querySelector(`details[data-category="${category}"]`);
+            if (details) {
+                const itemsContainer = details.querySelector('.setting-items');
+                await loadSettingsCategory(category, itemsContainer);
+            }
+        } catch (error) {
+            showToast(error.message, 'error');
+        }
+    }
+
+    async function resetSetting(key, category) {
+        if (!confirm('Сбросить настройку к значению по умолчанию?')) {
+            return;
+        }
+        try {
+            await callApi(`/api/settings/${key}`, { method: 'DELETE' });
+            showToast('Настройка сброшена', 'success');
+            state.settingsCache.delete(category);
+            const details = els.settingsContainer.querySelector(`details[data-category="${category}"]`);
+            if (details) {
+                const itemsContainer = details.querySelector('.setting-items');
+                await loadSettingsCategory(category, itemsContainer);
+            }
+        } catch (error) {
+            showToast(error.message, 'error');
+        }
+    }
+
+    async function viewUser(userId) {
+        try {
+            const details = await callApi(`/api/users/${userId}`);
+            const user = details.user;
+            const transactions = details.transactions || [];
+            const lastTransaction = transactions[0];
+            const info = [
+                `Имя: ${user.full_name}`,
+                `Баланс: ${toLocaleCurrency(user.balance_rub)}`,
+                lastTransaction ? `Последняя операция: ${toLocaleCurrency(lastTransaction.amount_rub)} (${new Date(lastTransaction.created_at).toLocaleString('ru-RU')})` : 'Последняя операция: —',
+            ].join('\n');
+            alert(info);
+        } catch (error) {
+            showToast(error.message, 'error');
+        }
+    }
+
+    async function refreshHealth() {
+        const data = await callApi('/api/health');
+        renderHealth(data);
+    }
+
+    async function loadAllData() {
+        const [health, summary, revenue, users, servers, categories] = await Promise.all([
+            callApi('/api/health'),
+            callApi('/api/dashboard/summary'),
+            callApi('/api/dashboard/revenue?days=14'),
+            callApi('/api/users/recent?limit=8'),
+            callApi('/api/servers'),
+            callApi('/api/settings/categories'),
+        ]);
+        renderHealth(health);
+        renderSummary(summary);
+        renderRevenue(revenue);
+        renderUsers(users);
+        renderServers(servers);
+        renderSettingsCategories(categories);
+    }
+
+    async function handleAction(action) {
+        try {
+            switch (action) {
+                case 'refresh':
+                    await loadAllData();
+                    showToast('Данные обновлены', 'success');
+                    break;
+                case 'refresh-users':
+                    renderUsers(await callApi('/api/users/recent?limit=8'));
+                    showToast('Список пользователей обновлен', 'success');
+                    break;
+                case 'reload-config':
+                    await callApi('/api/bot/control', { method: 'POST', body: { action: 'reload_configuration' } });
+                    showToast('Конфигурация перезагружена', 'success');
+                    break;
+                case 'create-backup':
+                    await callApi('/api/bot/control', { method: 'POST', body: { action: 'create_backup' } });
+                    showToast('Задача на бекап создана', 'success');
+                    break;
+                case 'send-report':
+                    await callApi('/api/bot/control', { method: 'POST', body: { action: 'send_daily_report' } });
+                    showToast('Отчет сформирован', 'success');
+                    break;
+                case 'toggle-maintenance':
+                    if (state.health?.bot?.maintenance) {
+                        await callApi('/api/bot/control', { method: 'POST', body: { action: 'disable_maintenance' } });
+                    } else {
+                        await callApi('/api/bot/control', { method: 'POST', body: { action: 'enable_maintenance' } });
+                    }
+                    showToast('Статус техработ обновлен', 'success');
+                    await refreshHealth();
+                    break;
+                default:
+                    break;
+            }
+        } catch (error) {
+            showToast(error.message, 'error');
+        }
+    }
+
+    function bindEvents() {
+        els.loginForm.addEventListener('submit', async (event) => {
+            event.preventDefault();
+            const token = els.loginToken.value.trim();
+            if (!token) {
+                els.loginError.textContent = 'Введите токен';
+                return;
+            }
+            try {
+                await callApi('/api/auth/login', { method: 'POST', body: { token }, skipAuth: true });
+                state.token = token;
+                localStorage.setItem('webadminToken', token);
+                hideLogin();
+                await loadAllData();
+            } catch (error) {
+                els.loginError.textContent = error.message;
+            }
+        });
+
+        document.addEventListener('click', (event) => {
+            if (!els.botDropdown.contains(event.target) && !els.botControlBtn.contains(event.target)) {
+                els.botDropdown.classList.remove('open');
+            }
+        });
+
+        els.botControlBtn.addEventListener('click', (event) => {
+            event.stopPropagation();
+            els.botDropdown.classList.toggle('open');
+        });
+
+        els.botDropdown.addEventListener('click', async (event) => {
+            const action = event.target.closest('[data-action]')?.dataset.action;
+            if (!action) return;
+            els.botDropdown.classList.remove('open');
+            if (action === 'logout') {
+                state.token = '';
+                localStorage.removeItem('webadminToken');
+                showToast('Вы вышли из панели', 'success');
+                showLogin();
+                return;
+            }
+            await handleAction(action);
+        });
+
+        document.querySelectorAll('[data-action]').forEach((button) => {
+            button.addEventListener('click', async () => {
+                const action = button.dataset.action;
+                if (['reload-config', 'create-backup', 'toggle-maintenance', 'refresh', 'refresh-users'].includes(action)) {
+                    await handleAction(action);
+                }
+            });
+        });
+
+        els.recentUsersBody.addEventListener('click', async (event) => {
+            const button = event.target.closest('[data-action="view-user"]');
+            if (!button) return;
+            const userId = Number(button.dataset.userId);
+            if (!Number.isFinite(userId)) return;
+            await viewUser(userId);
+        });
+
+        els.settingsContainer.addEventListener('click', async (event) => {
+            const target = event.target.closest('[data-action]');
+            if (!target) return;
+            const { action, key, category } = target.dataset;
+            if (!key || !category) return;
+            if (action === 'edit-setting') {
+                await editSetting(key, category);
+            } else if (action === 'reset-setting') {
+                await resetSetting(key, category);
+            }
+        });
+    }
+
+    async function init() {
+        bindEvents();
+        if (state.token) {
+            try {
+                await loadAllData();
+            } catch (error) {
+                showToast(error.message, 'error');
+                showLogin('Сессия истекла, выполните вход заново');
+            }
+        } else {
+            showLogin();
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', init);
+})();
+</script>
+</body>
+</html>

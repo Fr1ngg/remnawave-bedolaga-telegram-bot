@@ -100,6 +100,7 @@ class BotConfigurationService:
         "LOG": "Логирование",
         "WEBHOOK": "Вебхуки",
         "DEBUG": "Режим разработки",
+        "WEBADMIN": "Веб-админка",
     }
 
     CATEGORY_KEY_OVERRIDES: Dict[str, str] = {
@@ -194,6 +195,7 @@ class BotConfigurationService:
         "WEBHOOK_": "WEBHOOK",
         "LOG_": "LOG",
         "DEBUG": "DEBUG",
+        "WEBADMIN_": "WEBADMIN",
     }
 
     CHOICES: Dict[str, List[ChoiceOption]] = {

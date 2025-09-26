@@ -251,6 +251,13 @@ class Settings(BaseSettings):
     BACKUP_SEND_CHAT_ID: Optional[str] = None
     BACKUP_SEND_TOPIC_ID: Optional[int] = None
 
+    WEBADMIN_ENABLED: bool = False
+    WEBADMIN_HOST: str = "0.0.0.0"
+    WEBADMIN_PORT: int = 8090
+    WEBADMIN_API_KEY: Optional[str] = None
+    WEBADMIN_ALLOWED_ORIGINS: str = ""
+    WEBADMIN_TITLE: str = "BedolagaAdmin"
+
     @field_validator('SERVER_STATUS_MODE', mode='before')
     @classmethod
     def normalize_server_status_mode(cls, value: Optional[str]) -> str:
@@ -954,21 +961,47 @@ class Settings(BaseSettings):
 
     def get_server_status_request_timeout(self) -> int:
         return max(1, self.SERVER_STATUS_REQUEST_TIMEOUT)
-    
+
     def get_support_system_mode(self) -> str:
         mode = (self.SUPPORT_SYSTEM_MODE or "both").strip().lower()
         return mode if mode in {"tickets", "contact", "both"} else "both"
-    
+
     def is_support_tickets_enabled(self) -> bool:
         return self.get_support_system_mode() in {"tickets", "both"}
-    
+
     def is_support_contact_enabled(self) -> bool:
         return self.get_support_system_mode() in {"contact", "both"}
-    
+
+    def is_webadmin_enabled(self) -> bool:
+        return self.WEBADMIN_ENABLED and bool((self.WEBADMIN_API_KEY or "").strip())
+
+    def get_webadmin_host(self) -> str:
+        host = (self.WEBADMIN_HOST or "").strip()
+        return host or "0.0.0.0"
+
+    def get_webadmin_port(self) -> int:
+        try:
+            return int(self.WEBADMIN_PORT)
+        except (TypeError, ValueError):
+            return 8090
+
+    def get_webadmin_allowed_origins(self) -> List[str]:
+        if not self.WEBADMIN_ALLOWED_ORIGINS:
+            return []
+
+        return [
+            origin.strip()
+            for origin in self.WEBADMIN_ALLOWED_ORIGINS.split(",")
+            if origin.strip()
+        ]
+
+    def get_webadmin_title(self) -> str:
+        return (self.WEBADMIN_TITLE or "BedolagaAdmin").strip() or "BedolagaAdmin"
+
     model_config = {
         "env_file": ".env",
         "env_file_encoding": "utf-8",
-        "extra": "ignore"  
+        "extra": "ignore"
     }
 
 

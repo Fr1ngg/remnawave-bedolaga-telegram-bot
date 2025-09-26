@@ -22,6 +22,7 @@ from app.services.backup_service import backup_service
 from app.services.reporting_service import reporting_service
 from app.localization.loader import ensure_locale_templates
 from app.services.system_settings_service import bot_configuration_service
+from app.webadmin import WebAdminServer
 
 
 class GracefulExit:
@@ -63,6 +64,7 @@ async def main():
     maintenance_task = None
     version_check_task = None
     polling_task = None
+    webadmin_server: WebAdminServer | None = None
     
     try:
         logger.info("📊 Инициализация базы данных...")
@@ -127,6 +129,22 @@ async def main():
             await reporting_service.start()
         except Exception as e:
             logger.error(f"❌ Ошибка запуска сервиса отчетов: {e}")
+
+        if settings.is_webadmin_enabled():
+            try:
+                webadmin_server = WebAdminServer(
+                    bot=bot,
+                    maintenance_service=maintenance_service,
+                    monitoring_service=monitoring_service,
+                    reporting_service=reporting_service,
+                    version_service=version_service,
+                    backup_service=backup_service,
+                )
+                await webadmin_server.start()
+            except Exception as error:
+                logger.error(f"❌ Не удалось запустить веб-админку: {error}")
+        else:
+            logger.info("ℹ️ Веб-админка отключена")
 
         payment_service = PaymentService(bot)
         
@@ -317,6 +335,13 @@ async def main():
             except asyncio.CancelledError:
                 pass
         
+        if webadmin_server:
+            logger.info("ℹ️ Остановка веб-админки...")
+            try:
+                await webadmin_server.stop()
+            except Exception as e:
+                logger.error(f"Ошибка остановки веб-админки: {e}")
+
         if webhook_server:
             logger.info("ℹ️ Остановка webhook сервера...")
             await webhook_server.stop()
