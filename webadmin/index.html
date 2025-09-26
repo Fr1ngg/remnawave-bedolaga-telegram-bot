@@ -1704,23 +1704,62 @@
                 }
             }
             const balance = toLocaleCurrency(user.balance_rub ?? 0);
-            row.innerHTML = `
-                <td>
-                    <div class="user-cell">
-                        <div class="user-avatar-small">${(user.full_name || 'U').charAt(0).toUpperCase()}</div>
-                        <div class="user-info">
-                            <div class="user-name">${user.full_name || 'Без имени'}</div>
-                            <div class="user-id">ID ${user.id}</div>
-                        </div>
-                    </div>
-                </td>
-                <td><span class="status-badge">${user.status}</span></td>
-                <td><span class="${badgeClass}">${badgeText}</span></td>
-                <td>${balance}</td>
-                <td class="table-actions-cell">
-                    <button class="icon-btn" data-action="view-user" data-user-id="${user.id}" title="Подробнее">ℹ️</button>
-                </td>
-            `;
+
+            const userCell = document.createElement('td');
+            const userContainer = document.createElement('div');
+            userContainer.className = 'user-cell';
+
+            const avatar = document.createElement('div');
+            avatar.className = 'user-avatar-small';
+            avatar.textContent = (user.full_name || 'U').charAt(0).toUpperCase();
+
+            const info = document.createElement('div');
+            info.className = 'user-info';
+
+            const name = document.createElement('div');
+            name.className = 'user-name';
+            name.textContent = user.full_name || 'Без имени';
+
+            const id = document.createElement('div');
+            id.className = 'user-id';
+            id.textContent = `ID ${user.id}`;
+
+            info.appendChild(name);
+            info.appendChild(id);
+            userContainer.appendChild(avatar);
+            userContainer.appendChild(info);
+            userCell.appendChild(userContainer);
+            row.appendChild(userCell);
+
+            const statusCell = document.createElement('td');
+            const statusBadge = document.createElement('span');
+            statusBadge.className = 'status-badge';
+            statusBadge.textContent = user.status;
+            statusCell.appendChild(statusBadge);
+            row.appendChild(statusCell);
+
+            const subscriptionCell = document.createElement('td');
+            const subscriptionBadge = document.createElement('span');
+            subscriptionBadge.className = badgeClass;
+            subscriptionBadge.textContent = badgeText;
+            subscriptionCell.appendChild(subscriptionBadge);
+            row.appendChild(subscriptionCell);
+
+            const balanceCell = document.createElement('td');
+            balanceCell.textContent = balance;
+            row.appendChild(balanceCell);
+
+            const actionsCell = document.createElement('td');
+            actionsCell.className = 'table-actions-cell';
+            const button = document.createElement('button');
+            button.className = 'icon-btn';
+            button.dataset.action = 'view-user';
+            button.dataset.userId = String(user.id);
+            button.title = 'Подробнее';
+            button.textContent = 'ℹ️';
+            actionsCell.appendChild(button);
+            row.appendChild(actionsCell);
+
             fragment.appendChild(row);
         });
         els.recentUsersBody.innerHTML = '';
