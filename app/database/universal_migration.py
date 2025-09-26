@@ -774,12 +774,11 @@ async def ensure_promo_groups_setup():
     logger.info("=== НАСТРОЙКА ПРОМО ГРУПП ===")
 
     try:
+        db_type = await get_database_type()
         promo_table_exists = await check_table_exists("promo_groups")
 
-        async with engine.begin() as conn:
-            db_type = await get_database_type()
-
-            if not promo_table_exists:
+        if not promo_table_exists:
+            async with engine.begin() as conn:
                 if db_type == "sqlite":
                     await conn.execute(
                         text(
@@ -842,67 +841,75 @@ async def ensure_promo_groups_setup():
                     logger.error(f"Неподдерживаемый тип БД для promo_groups: {db_type}")
                     return False
 
-                logger.info("Создана таблица promo_groups")
+            logger.info("Создана таблица promo_groups")
 
-            if db_type == "postgresql" and not await check_constraint_exists(
-                "promo_groups", "uq_promo_groups_name"
-            ):
-                try:
+        if db_type == "postgresql" and not await check_constraint_exists(
+            "promo_groups", "uq_promo_groups_name"
+        ):
+            try:
+                async with engine.begin() as conn:
                     await conn.execute(
                         text(
                             "ALTER TABLE promo_groups ADD CONSTRAINT uq_promo_groups_name UNIQUE (name)"
                         )
                     )
-                except Exception as e:
-                    logger.warning(
-                        f"Не удалось добавить уникальное ограничение uq_promo_groups_name: {e}"
-                    )
+            except Exception as e:
+                logger.warning(
+                    f"Не удалось добавить уникальное ограничение uq_promo_groups_name: {e}"
+                )
 
-            period_discounts_column_exists = await check_column_exists(
-                "promo_groups", "period_discounts"
-            )
+        period_discounts_column_exists = await check_column_exists(
+            "promo_groups", "period_discounts"
+        )
 
-            if not period_discounts_column_exists:
-                if db_type == "sqlite":
+        if not period_discounts_column_exists:
+            if db_type == "sqlite":
+                async with engine.begin() as conn:
                     await conn.execute(
                         text("ALTER TABLE promo_groups ADD COLUMN period_discounts JSON")
                     )
+                async with engine.begin() as conn:
                     await conn.execute(
                         text("UPDATE promo_groups SET period_discounts = '{}' WHERE period_discounts IS NULL")
                     )
-                elif db_type == "postgresql":
+            elif db_type == "postgresql":
+                async with engine.begin() as conn:
                     await conn.execute(
                         text(
                             "ALTER TABLE promo_groups ADD COLUMN period_discounts JSONB"
                         )
                     )
+                async with engine.begin() as conn:
                     await conn.execute(
                         text(
                             "UPDATE promo_groups SET period_discounts = '{}'::jsonb WHERE period_discounts IS NULL"
                         )
                     )
-                elif db_type == "mysql":
+            elif db_type == "mysql":
+                async with engine.begin() as conn:
                     await conn.execute(
                         text("ALTER TABLE promo_groups ADD COLUMN period_discounts JSON")
                     )
+                async with engine.begin() as conn:
                     await conn.execute(
                         text(
                             "UPDATE promo_groups SET period_discounts = JSON_OBJECT() WHERE period_discounts IS NULL"
                         )
                     )
-                else:
-                    logger.error(
-                        f"Неподдерживаемый тип БД для promo_groups.period_discounts: {db_type}"
-                    )
-                    return False
+            else:
+                logger.error(
+                    f"Неподдерживаемый тип БД для promo_groups.period_discounts: {db_type}"
+                )
+                return False
 
-                logger.info("Добавлена колонка promo_groups.period_discounts")
+            logger.info("Добавлена колонка promo_groups.period_discounts")
 
-            auto_assign_column_exists = await check_column_exists(
-                "promo_groups", "auto_assign_total_spent_kopeks"
-            )
+        auto_assign_column_exists = await check_column_exists(
+            "promo_groups", "auto_assign_total_spent_kopeks"
+        )
 
-            if not auto_assign_column_exists:
+        if not auto_assign_column_exists:
+            async with engine.begin() as conn:
                 if db_type == "sqlite":
                     await conn.execute(
                         text(
@@ -927,61 +934,68 @@ async def ensure_promo_groups_setup():
                     )
                     return False
 
-                logger.info(
-                    "Добавлена колонка promo_groups.auto_assign_total_spent_kopeks"
-                )
-
-            addon_discount_column_exists = await check_column_exists(
-                "promo_groups", "apply_discounts_to_addons"
+            logger.info(
+                "Добавлена колонка promo_groups.auto_assign_total_spent_kopeks"
             )
 
-            if not addon_discount_column_exists:
-                if db_type == "sqlite":
+        addon_discount_column_exists = await check_column_exists(
+            "promo_groups", "apply_discounts_to_addons"
+        )
+
+        if not addon_discount_column_exists:
+            if db_type == "sqlite":
+                async with engine.begin() as conn:
                     await conn.execute(
                         text(
                             "ALTER TABLE promo_groups ADD COLUMN apply_discounts_to_addons BOOLEAN NOT NULL DEFAULT 1"
                         )
                     )
+                async with engine.begin() as conn:
                     await conn.execute(
                         text(
                             "UPDATE promo_groups SET apply_discounts_to_addons = 1 WHERE apply_discounts_to_addons IS NULL"
                         )
                     )
-                elif db_type == "postgresql":
+            elif db_type == "postgresql":
+                async with engine.begin() as conn:
                     await conn.execute(
                         text(
                             "ALTER TABLE promo_groups ADD COLUMN apply_discounts_to_addons BOOLEAN NOT NULL DEFAULT TRUE"
                         )
                     )
+                async with engine.begin() as conn:
                     await conn.execute(
                         text(
                             "UPDATE promo_groups SET apply_discounts_to_addons = TRUE WHERE apply_discounts_to_addons IS NULL"
                         )
                     )
-                elif db_type == "mysql":
+            elif db_type == "mysql":
+                async with engine.begin() as conn:
                     await conn.execute(
                         text(
                             "ALTER TABLE promo_groups ADD COLUMN apply_discounts_to_addons TINYINT(1) NOT NULL DEFAULT 1"
                         )
                     )
+                async with engine.begin() as conn:
                     await conn.execute(
                         text(
                             "UPDATE promo_groups SET apply_discounts_to_addons = 1 WHERE apply_discounts_to_addons IS NULL"
                         )
                     )
-                else:
-                    logger.error(
-                        f"Неподдерживаемый тип БД для promo_groups.apply_discounts_to_addons: {db_type}"
-                    )
-                    return False
-
-                logger.info(
-                    "Добавлена колонка promo_groups.apply_discounts_to_addons"
+            else:
+                logger.error(
+                    f"Неподдерживаемый тип БД для promo_groups.apply_discounts_to_addons: {db_type}"
                 )
+                return False
 
-            column_exists = await check_column_exists("users", "promo_group_id")
+            logger.info(
+                "Добавлена колонка promo_groups.apply_discounts_to_addons"
+            )
 
-            if not column_exists:
+        column_exists = await check_column_exists("users", "promo_group_id")
+
+        if not column_exists:
+            async with engine.begin() as conn:
                 if db_type == "sqlite":
                     await conn.execute(text("ALTER TABLE users ADD COLUMN promo_group_id INTEGER"))
                 elif db_type == "postgresql":
@@ -992,13 +1006,14 @@ async def ensure_promo_groups_setup():
                     logger.error(f"Неподдерживаемый тип БД для promo_group_id: {db_type}")
                     return False
 
-                logger.info("Добавлена колонка users.promo_group_id")
+            logger.info("Добавлена колонка users.promo_group_id")
 
-            auto_promo_flag_exists = await check_column_exists(
-                "users", "auto_promo_group_assigned"
-            )
+        auto_promo_flag_exists = await check_column_exists(
+            "users", "auto_promo_group_assigned"
+        )
 
-            if not auto_promo_flag_exists:
+        if not auto_promo_flag_exists:
+            async with engine.begin() as conn:
                 if db_type == "sqlite":
                     await conn.execute(
                         text(
@@ -1023,13 +1038,14 @@ async def ensure_promo_groups_setup():
                     )
                     return False
 
-                logger.info("Добавлена колонка users.auto_promo_group_assigned")
+            logger.info("Добавлена колонка users.auto_promo_group_assigned")
 
-            threshold_column_exists = await check_column_exists(
-                "users", "auto_promo_group_threshold_kopeks"
-            )
+        threshold_column_exists = await check_column_exists(
+            "users", "auto_promo_group_threshold_kopeks"
+        )
 
-            if not threshold_column_exists:
+        if not threshold_column_exists:
+            async with engine.begin() as conn:
                 if db_type == "sqlite":
                     await conn.execute(
                         text(
@@ -1054,14 +1070,15 @@ async def ensure_promo_groups_setup():
                     )
                     return False
 
-                logger.info(
-                    "Добавлена колонка users.auto_promo_group_threshold_kopeks"
-                )
+            logger.info(
+                "Добавлена колонка users.auto_promo_group_threshold_kopeks"
+            )
 
-            index_exists = await check_index_exists("users", "ix_users_promo_group_id")
+        index_exists = await check_index_exists("users", "ix_users_promo_group_id")
 
-            if not index_exists:
-                try:
+        if not index_exists:
+            try:
+                async with engine.begin() as conn:
                     if db_type == "sqlite":
                         await conn.execute(
                             text("CREATE INDEX IF NOT EXISTS ix_users_promo_group_id ON users(promo_group_id)")
@@ -1074,13 +1091,14 @@ async def ensure_promo_groups_setup():
                         await conn.execute(
                             text("CREATE INDEX ix_users_promo_group_id ON users(promo_group_id)")
                         )
-                    logger.info("Создан индекс ix_users_promo_group_id")
-                except Exception as e:
-                    logger.warning(f"Не удалось создать индекс ix_users_promo_group_id: {e}")
+                logger.info("Создан индекс ix_users_promo_group_id")
+            except Exception as e:
+                logger.warning(f"Не удалось создать индекс ix_users_promo_group_id: {e}")
 
-            default_group_name = "Базовый юзер"
-            default_group_id = None
+        default_group_name = "Базовый юзер"
+        default_group_id = None
 
+        async with engine.begin() as conn:
             result = await conn.execute(
                 text(
                     "SELECT id, is_default FROM promo_groups WHERE name = :name LIMIT 1"
@@ -1149,12 +1167,13 @@ async def ensure_promo_groups_setup():
                 {"group_id": default_group_id},
             )
 
-            if db_type == "postgresql":
-                constraint_exists = await check_constraint_exists(
-                    "users", "fk_users_promo_group_id_promo_groups"
-                )
-                if not constraint_exists:
-                    try:
+        if db_type == "postgresql":
+            constraint_exists = await check_constraint_exists(
+                "users", "fk_users_promo_group_id_promo_groups"
+            )
+            if not constraint_exists:
+                try:
+                    async with engine.begin() as conn:
                         await conn.execute(
                             text(
                                 """
@@ -1166,29 +1185,31 @@ async def ensure_promo_groups_setup():
                             """
                             )
                         )
-                        logger.info("Добавлен внешний ключ users -> promo_groups")
-                    except Exception as e:
-                        logger.warning(
-                            f"Не удалось добавить внешний ключ users.promo_group_id: {e}"
-                        )
+                    logger.info("Добавлен внешний ключ users -> promo_groups")
+                except Exception as e:
+                    logger.warning(
+                        f"Не удалось добавить внешний ключ users.promo_group_id: {e}"
+                    )
 
-                try:
+            try:
+                async with engine.begin() as conn:
                     await conn.execute(
                         text(
                             "ALTER TABLE users ALTER COLUMN promo_group_id SET NOT NULL"
                         )
                     )
-                except Exception as e:
-                    logger.warning(
-                        f"Не удалось сделать users.promo_group_id NOT NULL: {e}"
-                    )
-
-            elif db_type == "mysql":
-                constraint_exists = await check_constraint_exists(
-                    "users", "fk_users_promo_group_id_promo_groups"
+            except Exception as e:
+                logger.warning(
+                    f"Не удалось сделать users.promo_group_id NOT NULL: {e}"
                 )
-                if not constraint_exists:
-                    try:
+
+        elif db_type == "mysql":
+            constraint_exists = await check_constraint_exists(
+                "users", "fk_users_promo_group_id_promo_groups"
+            )
+            if not constraint_exists:
+                try:
+                    async with engine.begin() as conn:
                         await conn.execute(
                             text(
                                 """
@@ -1200,29 +1221,31 @@ async def ensure_promo_groups_setup():
                             """
                             )
                         )
-                        logger.info("Добавлен внешний ключ users -> promo_groups")
-                    except Exception as e:
-                        logger.warning(
-                            f"Не удалось добавить внешний ключ users.promo_group_id: {e}"
-                        )
+                    logger.info("Добавлен внешний ключ users -> promo_groups")
+                except Exception as e:
+                    logger.warning(
+                        f"Не удалось добавить внешний ключ users.promo_group_id: {e}"
+                    )
 
-                try:
+            try:
+                async with engine.begin() as conn:
                     await conn.execute(
                         text(
                             "ALTER TABLE users MODIFY promo_group_id INT NOT NULL"
                         )
                     )
-                except Exception as e:
-                    logger.warning(
-                        f"Не удалось сделать users.promo_group_id NOT NULL: {e}"
-                    )
+            except Exception as e:
+                logger.warning(
+                    f"Не удалось сделать users.promo_group_id NOT NULL: {e}"
+                )
 
-            logger.info("✅ Промо группы настроены")
-            return True
+        logger.info("✅ Промо группы настроены")
+        return True
 
     except Exception as e:
         logger.error(f"Ошибка настройки промо групп: {e}")
         return False
+
 
 async def add_welcome_text_is_enabled_column():
     column_exists = await check_column_exists('welcome_texts', 'is_enabled')
