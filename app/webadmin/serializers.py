@@ -140,7 +140,7 @@ def serialize_user(user: User) -> dict:
     return asdict(view)
 
 
-def serialize_transaction(transaction: Transaction) -> dict:
+def serialize_transaction(transaction: Transaction, *, include_user: bool = False) -> dict:
     view = TransactionView(
         id=transaction.id,
         type=transaction.type,
@@ -151,7 +151,34 @@ def serialize_transaction(transaction: Transaction) -> dict:
         created_at=_isoformat(transaction.created_at),
         is_completed=bool(transaction.is_completed),
     )
-    return asdict(view)
+    data = asdict(view)
+    if include_user and transaction.user:
+        data["user"] = {
+            "id": transaction.user.id,
+            "full_name": transaction.user.full_name,
+            "username": transaction.user.username,
+            "telegram_id": transaction.user.telegram_id,
+            "status": transaction.user.status,
+        }
+    return data
+
+
+def serialize_subscription_listing(subscription: Subscription) -> dict:
+    subscription_view = serialize_subscription(subscription)
+    data = asdict(subscription_view)
+    user = subscription.user
+    if user:
+        data["user"] = {
+            "id": user.id,
+            "full_name": user.full_name,
+            "username": user.username,
+            "telegram_id": user.telegram_id,
+            "status": user.status,
+            "balance_rub": _round_currency(user.balance_kopeks or 0),
+        }
+    else:
+        data["user"] = None
+    return data
 
 
 def serialize_server(server: ServerSquad) -> dict:
