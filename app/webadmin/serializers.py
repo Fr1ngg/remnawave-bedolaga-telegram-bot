@@ -62,13 +62,24 @@ class UserView:
 @dataclass(slots=True)
 class TransactionView:
     id: int
+    user_id: int
     type: str
     amount_kopeks: int
     amount_rub: float
     description: Optional[str]
     payment_method: Optional[str]
+    external_id: Optional[str]
     created_at: Optional[str]
+    completed_at: Optional[str]
     is_completed: bool
+
+
+@dataclass(slots=True)
+class TransactionUserView:
+    id: int
+    telegram_id: Optional[int]
+    username: Optional[str]
+    full_name: str
 
 
 @dataclass(slots=True)
@@ -140,18 +151,35 @@ def serialize_user(user: User) -> dict:
     return asdict(view)
 
 
+def _serialize_transaction_user(user: Optional[User]) -> Optional[dict]:
+    if not user:
+        return None
+    view = TransactionUserView(
+        id=user.id,
+        telegram_id=user.telegram_id,
+        username=user.username,
+        full_name=user.full_name,
+    )
+    return asdict(view)
+
+
 def serialize_transaction(transaction: Transaction) -> dict:
     view = TransactionView(
         id=transaction.id,
+        user_id=transaction.user_id,
         type=transaction.type,
         amount_kopeks=transaction.amount_kopeks,
         amount_rub=_round_currency(transaction.amount_kopeks),
         description=transaction.description,
         payment_method=transaction.payment_method,
+        external_id=transaction.external_id,
         created_at=_isoformat(transaction.created_at),
+        completed_at=_isoformat(transaction.completed_at),
         is_completed=bool(transaction.is_completed),
     )
-    return asdict(view)
+    data = asdict(view)
+    data["user"] = _serialize_transaction_user(transaction.user)
+    return data
 
 
 def serialize_server(server: ServerSquad) -> dict:

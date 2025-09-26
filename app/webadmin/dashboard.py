@@ -7,7 +7,7 @@ from collections import defaultdict
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional, Tuple
 
-from sqlalchemy import and_, func, or_, select
+from sqlalchemy import and_, case, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -262,6 +262,131 @@ async def list_users(
 
     total = await session.scalar(count_query) or 0
     return [serialize_user(user) for user in users], int(total)
+
+
+async def list_transactions(
+    session: AsyncSession,
+    *,
+    limit: int = 20,
+    offset: int = 0,
+    search: Optional[str] = None,
+    transaction_type: Optional[str] = None,
+    status: Optional[str] = None,
+    payment_method: Optional[str] = None,
+) -> Dict[str, Any]:
+    limit = max(1, min(limit, 200))
+    offset = max(0, offset)
+
+    base_query = (
+        select(Transaction)
+        .options(selectinload(Transaction.user))
+        .order_by(Transaction.created_at.desc())
+    )
+    count_query = select(func.count(Transaction.id))
+    summary_query = select(
+        func.coalesce(func.sum(Transaction.amount_kopeks), 0).label("total_amount"),
+        func.coalesce(
+            func.sum(
+                case((Transaction.amount_kopeks > 0, Transaction.amount_kopeks), else_=0)
+            ),
+            0,
+        ).label("income_amount"),
+        func.coalesce(
+            func.sum(
+                case((Transaction.amount_kopeks < 0, Transaction.amount_kopeks), else_=0)
+            ),
+            0,
+        ).label("expense_amount"),
+        func.coalesce(
+            func.sum(case((Transaction.is_completed.is_(True), 1), else_=0)), 0
+        ).label("completed_count"),
+        func.coalesce(
+            func.sum(case((Transaction.is_completed.is_(False), 1), else_=0)), 0
+        ).label("pending_count"),
+    )
+
+    conditions = []
+    join_user = False
+
+    if transaction_type:
+        conditions.append(Transaction.type == transaction_type)
+
+    if status == "completed":
+        conditions.append(Transaction.is_completed.is_(True))
+    elif status == "pending":
+        conditions.append(Transaction.is_completed.is_(False))
+
+    if payment_method:
+        conditions.append(Transaction.payment_method == payment_method)
+
+    if search:
+        normalized = search.strip()
+        if normalized:
+            join_user = True
+            pattern = f"%{normalized.lower()}%"
+            search_conditions = [
+                func.lower(func.coalesce(Transaction.description, "")).like(pattern),
+                func.lower(func.coalesce(Transaction.payment_method, "")).like(pattern),
+                func.lower(func.coalesce(Transaction.external_id, "")).like(pattern),
+            ]
+            search_conditions.extend(
+                [
+                    func.lower(func.coalesce(User.username, "")).like(pattern),
+                    func.lower(func.coalesce(User.first_name, "")).like(pattern),
+                    func.lower(func.coalesce(User.last_name, "")).like(pattern),
+                ]
+            )
+            if normalized.isdigit():
+                numeric = int(normalized)
+                search_conditions.extend(
+                    [Transaction.id == numeric, User.telegram_id == numeric, User.id == numeric]
+                )
+            conditions.append(or_(*search_conditions))
+
+    if join_user:
+        base_query = base_query.join(User)
+        count_query = count_query.join(User)
+        summary_query = summary_query.join(User)
+
+    for condition in conditions:
+        base_query = base_query.where(condition)
+        count_query = count_query.where(condition)
+        summary_query = summary_query.where(condition)
+
+    base_query = base_query.offset(offset).limit(limit)
+
+    result = await session.execute(base_query)
+    transactions = result.scalars().unique().all()
+
+    total = await session.scalar(count_query) or 0
+
+    summary_result = await session.execute(summary_query)
+    summary_row = summary_result.one()
+
+    income_amount = int(summary_row.income_amount or 0)
+    expense_raw = int(summary_row.expense_amount or 0)
+    completed_count = int(summary_row.completed_count or 0)
+    pending_count = int(summary_row.pending_count or 0)
+
+    summary = {
+        "total_count": int(total),
+        "completed_count": completed_count,
+        "pending_count": pending_count,
+        "income_kopeks": income_amount,
+        "expense_kopeks": abs(expense_raw),
+        "net_kopeks": income_amount + expense_raw,
+        "income_rub": round(income_amount / 100, 2),
+        "expense_rub": round(abs(expense_raw) / 100, 2),
+        "net_rub": round((income_amount + expense_raw) / 100, 2),
+    }
+
+    return {
+        "items": [serialize_transaction(tx) for tx in transactions],
+        "total": int(total),
+        "limit": limit,
+        "offset": offset,
+        "summary": summary,
+    }
 
 
 async def get_user_details(

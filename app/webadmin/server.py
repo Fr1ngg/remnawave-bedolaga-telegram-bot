@@ -33,7 +33,13 @@ from app.database.crud.server_squad import (
     update_server_squad,
     update_server_squad_promo_groups,
 )
-from app.database.models import PromoCode, PromoCodeType, ServerSquad
+from app.database.models import (
+    PaymentMethod,
+    PromoCode,
+    PromoCodeType,
+    ServerSquad,
+    TransactionType,
+)
 from app.services.backup_service import BackupService
 from app.services.maintenance_service import MaintenanceService
 from app.services.monitoring_service import MonitoringService
@@ -51,6 +57,7 @@ from app.webadmin.dashboard import (
     fetch_recent_users,
     fetch_server_overview,
     get_user_details,
+    list_transactions,
     list_users,
 )
 from app.webadmin.serializers import serialize_server
@@ -218,6 +225,8 @@ class WebAdminServer:
         app.router.add_get("/api/users/recent", self.handle_recent_users)
         app.router.add_get("/api/users", self.handle_users)
         app.router.add_get("/api/users/{user_id}", self.handle_user_details)
+
+        app.router.add_get("/api/transactions", self.handle_transactions)
 
         app.router.add_get("/api/servers", self.handle_servers)
 
@@ -440,6 +449,8 @@ class WebAdminServer:
             offset = int(request.query.get("offset", "0"))
         except ValueError:
             offset = 0
+        limit = max(1, limit)
+        offset = max(0, offset)
         search = request.query.get("search")
 
         async with AsyncSessionLocal() as session:
@@ -460,6 +471,53 @@ class WebAdminServer:
 
         if not data:
             return self._error("Пользователь не найден", status=404)
+
+        return self._success(data)
+
+    async def handle_transactions(self, request: web.Request) -> web.Response:
+        try:
+            limit = int(request.query.get("limit", "20"))
+        except ValueError:
+            limit = 20
+        try:
+            offset = int(request.query.get("offset", "0"))
+        except ValueError:
+            offset = 0
+
+        transaction_type = request.query.get("type")
+        if transaction_type:
+            try:
+                transaction_type = TransactionType(transaction_type).value
+            except ValueError:
+                return self._error("Некорректный тип транзакции", status=400)
+
+        status = request.query.get("status")
+        if status and status not in {"completed", "pending"}:
+            return self._error("Некорректный статус транзакции", status=400)
+
+        payment_method = request.query.get("payment")
+        if payment_method:
+            try:
+                payment_method = PaymentMethod(payment_method).value
+            except ValueError:
+                return self._error("Некорректный метод оплаты", status=400)
+
+        search = request.query.get("search")
+        if search:
+            search = search.strip()
+        else:
+            search = None
+
+        async with AsyncSessionLocal() as session:
+            data = await list_transactions(
+                session,
+                limit=limit,
+                offset=offset,
+                search=search,
+                transaction_type=transaction_type,
+                status=status,
+                payment_method=payment_method,
+            )
 
         return self._success(data)
 

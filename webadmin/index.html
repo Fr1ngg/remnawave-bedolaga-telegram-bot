@@ -874,6 +874,123 @@
             color: var(--danger);
         }
 
+        .status-badge.completed {
+            background: rgba(16, 185, 129, 0.12);
+            color: var(--success);
+        }
+
+        .status-badge.pending {
+            background: rgba(245, 158, 11, 0.12);
+            color: var(--warning);
+        }
+
+        .filters-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            margin-bottom: 24px;
+        }
+
+        .filter-select {
+            padding: 10px 14px;
+            border-radius: 12px;
+            border: 1px solid var(--border);
+            background: var(--bg-tertiary);
+            color: var(--text-primary);
+            min-width: 180px;
+        }
+
+        .filter-select:focus {
+            outline: none;
+            border-color: var(--accent-primary);
+            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+        }
+
+        .transactions-summary {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+
+        .summary-card {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 18px 22px;
+        }
+
+        .summary-subtitle {
+            font-size: 12px;
+            text-transform: uppercase;
+            color: var(--text-tertiary);
+            letter-spacing: 0.5px;
+            margin-bottom: 8px;
+        }
+
+        .summary-value {
+            font-size: 24px;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+
+        .summary-caption {
+            font-size: 13px;
+            color: var(--text-secondary);
+            margin-top: 4px;
+        }
+
+        .summary-caption strong {
+            color: var(--text-primary);
+        }
+
+        .table-pagination {
+            display: flex;
+            justify-content: flex-end;
+            align-items: center;
+            gap: 12px;
+            margin-top: -12px;
+            margin-bottom: 24px;
+        }
+
+        .transaction-meta {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .transaction-id {
+            font-weight: 600;
+        }
+
+        .transaction-date {
+            font-size: 12px;
+            color: var(--text-tertiary);
+        }
+
+        .transaction-type {
+            font-weight: 500;
+        }
+
+        .transaction-description,
+        .transaction-external-id {
+            margin-top: 6px;
+            font-size: 12px;
+            color: var(--text-tertiary);
+        }
+
+        .transaction-amount {
+            font-weight: 600;
+        }
+
+        .transaction-amount.positive {
+            color: var(--success);
+        }
+
+        .transaction-amount.negative {
+            color: var(--danger);
+        }
+
         .table-actions-cell {
             display: flex;
             gap: 8px;
@@ -1312,6 +1429,10 @@
                     <span class="nav-icon">👥</span>
                     <span>Пользователи</span>
                 </a>
+                <a href="#" class="nav-item" data-section-target="transactions">
+                    <span class="nav-icon">💳</span>
+                    <span>Транзакции</span>
+                </a>
                 <a href="#" class="nav-item" data-section-target="servers">
                     <span class="nav-icon">🖥️</span>
                     <span>Серверы</span>
@@ -1530,6 +1651,87 @@
                     </table>
                 </div>
                 <div class="pagination" id="users-pagination"></div>
+            </section>
+
+            <section class="content-section" data-section="transactions">
+                <div class="section-header">
+                    <div>
+                        <h1 class="page-title">История транзакций</h1>
+                        <p class="page-subtitle">Актуальные операции пополнений, оплат и возвратов по всем пользователям</p>
+                    </div>
+                    <div class="section-actions">
+                        <button class="action-btn" data-action="transactions-refresh">
+                            <span>🔄</span>
+                            <span>Обновить</span>
+                        </button>
+                        <button class="action-btn" data-action="transactions-reset">
+                            <span>🧹</span>
+                            <span>Сбросить фильтры</span>
+                        </button>
+                    </div>
+                </div>
+                <div class="filters-row">
+                    <input type="search" id="transactions-search-input" class="section-search" placeholder="Поиск по описанию, пользователю или ID">
+                    <select id="transactions-type-filter" class="filter-select">
+                        <option value="">Все типы</option>
+                        <option value="deposit">Пополнение баланса</option>
+                        <option value="subscription_payment">Оплата подписки</option>
+                        <option value="withdrawal">Списание</option>
+                        <option value="refund">Возврат</option>
+                        <option value="referral_reward">Реферальная награда</option>
+                    </select>
+                    <select id="transactions-status-filter" class="filter-select">
+                        <option value="">Все статусы</option>
+                        <option value="completed">Завершено</option>
+                        <option value="pending">В обработке</option>
+                    </select>
+                    <select id="transactions-payment-filter" class="filter-select">
+                        <option value="">Все методы оплаты</option>
+                        <option value="telegram_stars">Telegram Stars</option>
+                        <option value="tribute">Tribute</option>
+                        <option value="yookassa">YooKassa</option>
+                        <option value="cryptobot">CryptoBot</option>
+                        <option value="mulenpay">MulenPay</option>
+                        <option value="pal24">PAL24</option>
+                        <option value="manual">Вручную</option>
+                    </select>
+                </div>
+                <div class="transactions-summary">
+                    <div class="summary-card">
+                        <div class="summary-subtitle">Оборот</div>
+                        <div class="summary-value" id="transactions-summary-income">—</div>
+                        <div class="summary-caption">Расходы: <strong id="transactions-summary-expense">—</strong></div>
+                        <div class="summary-caption">Чистый результат: <strong id="transactions-summary-net">—</strong></div>
+                    </div>
+                    <div class="summary-card">
+                        <div class="summary-subtitle">Транзакции</div>
+                        <div class="summary-value" id="transactions-summary-total-count">—</div>
+                        <div class="summary-caption">Завершено: <strong id="transactions-summary-completed">—</strong></div>
+                        <div class="summary-caption">В обработке: <strong id="transactions-summary-pending">—</strong></div>
+                    </div>
+                </div>
+                <div class="table-container">
+                    <div class="table-header">
+                        <h3>Транзакции</h3>
+                        <span id="transactions-total-label" class="table-caption">—</span>
+                    </div>
+                    <table>
+                        <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Пользователь</th>
+                            <th>Тип</th>
+                            <th>Сумма</th>
+                            <th>Метод</th>
+                            <th>Статус</th>
+                        </tr>
+                        </thead>
+                        <tbody id="transactions-table-body">
+                        <tr><td colspan="6" style="padding: 32px; text-align: center; color: var(--text-tertiary);">Нет данных</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div class="table-pagination" id="transactions-pagination"></div>
             </section>
 
             <section class="content-section" data-section="remnawave-overview">
@@ -1758,6 +1960,7 @@
         activeSection: 'dashboard',
         loadedSections: new Set(),
         users: { search: '', offset: 0, limit: 20, total: 0 },
+        transactions: { search: '', type: '', status: '', payment: '', offset: 0, limit: 20, total: 0, summary: null },
         promocodes: { offset: 0, limit: 20, total: 0 },
         remnawave: { inbounds: [] },
         syncLog: [],
@@ -1795,6 +1998,19 @@
         usersTotalLabel: document.getElementById('users-total-label'),
         usersPagination: document.getElementById('users-pagination'),
         usersSearchInput: document.getElementById('users-search-input'),
+        transactionsTableBody: document.getElementById('transactions-table-body'),
+        transactionsPagination: document.getElementById('transactions-pagination'),
+        transactionsTotalLabel: document.getElementById('transactions-total-label'),
+        transactionsSearchInput: document.getElementById('transactions-search-input'),
+        transactionsTypeFilter: document.getElementById('transactions-type-filter'),
+        transactionsStatusFilter: document.getElementById('transactions-status-filter'),
+        transactionsPaymentFilter: document.getElementById('transactions-payment-filter'),
+        transactionsSummaryIncome: document.getElementById('transactions-summary-income'),
+        transactionsSummaryExpense: document.getElementById('transactions-summary-expense'),
+        transactionsSummaryNet: document.getElementById('transactions-summary-net'),
+        transactionsSummaryTotalCount: document.getElementById('transactions-summary-total-count'),
+        transactionsSummaryCompleted: document.getElementById('transactions-summary-completed'),
+        transactionsSummaryPending: document.getElementById('transactions-summary-pending'),
         rwOverviewCards: document.getElementById('rw-overview-cards'),
         rwOverviewDetails: document.getElementById('rw-overview-details'),
         rwOverviewUpdated: document.getElementById('rw-overview-updated'),
@@ -1816,6 +2032,7 @@
     const sectionLoaders = {
         dashboard: loadDashboard,
         users: loadUsersSection,
+        transactions: loadTransactionsSection,
         'remnawave-overview': loadRemnawaveOverview,
         'remnawave-nodes': loadRemnawaveNodes,
         'remnawave-squads': loadRemnawaveSquads,
@@ -1828,6 +2045,7 @@
     };
 
     let usersSearchTimeout = null;
+    let transactionsSearchTimeout = null;
 
     async function activateSection(sectionKey, { force = false } = {}) {
         if (!sectionKey) {
@@ -1857,6 +2075,38 @@
             return '—';
         }
         return `${value.toFixed(1)}%`;
+    }
+
+    const transactionTypeLabels = {
+        deposit: 'Пополнение баланса',
+        withdrawal: 'Списание',
+        subscription_payment: 'Оплата подписки',
+        refund: 'Возврат',
+        referral_reward: 'Реферальная награда',
+    };
+
+    const paymentMethodLabels = {
+        telegram_stars: 'Telegram Stars',
+        tribute: 'Tribute',
+        yookassa: 'YooKassa',
+        cryptobot: 'CryptoBot',
+        mulenpay: 'MulenPay',
+        pal24: 'PAL24',
+        manual: 'Вручную',
+    };
+
+    function formatTransactionType(value) {
+        if (!value) {
+            return '—';
+        }
+        return transactionTypeLabels[value] || value.replace(/_/g, ' ');
+    }
+
+    function formatPaymentMethod(value) {
+        if (!value) {
+            return '—';
+        }
+        return paymentMethodLabels[value] || value;
     }
 
     function formatBytes(bytes) {
@@ -2328,6 +2578,242 @@
             state.loadedSections.add('users');
         } catch (error) {
             els.usersTableBody.innerHTML = `<tr><td colspan="5" style="padding: 32px; text-align: center; color: var(--danger);">${error.message}</td></tr>`;
+        }
+    }
+
+    function renderTransactionsSummary(summary) {
+        if (!els.transactionsSummaryIncome) {
+            return;
+        }
+        if (!summary) {
+            els.transactionsSummaryIncome.textContent = '—';
+            els.transactionsSummaryExpense.textContent = '—';
+            els.transactionsSummaryNet.textContent = '—';
+            els.transactionsSummaryTotalCount.textContent = '—';
+            els.transactionsSummaryCompleted.textContent = '—';
+            els.transactionsSummaryPending.textContent = '—';
+            return;
+        }
+        const income = Number.isFinite(summary.income_rub) ? summary.income_rub : (Number(summary.income_kopeks) || 0) / 100;
+        const expense = Number.isFinite(summary.expense_rub) ? summary.expense_rub : (Number(summary.expense_kopeks) || 0) / 100;
+        const net = Number.isFinite(summary.net_rub) ? summary.net_rub : (Number(summary.net_kopeks) || 0) / 100;
+        const totalCount = Number(summary.total_count) || 0;
+        const completed = Number(summary.completed_count) || 0;
+        const pending = Number(summary.pending_count) || 0;
+
+        els.transactionsSummaryIncome.textContent = toLocaleCurrency(income);
+        els.transactionsSummaryExpense.textContent = expense > 0 ? `-${toLocaleCurrency(expense)}` : toLocaleCurrency(0);
+        if (net === 0) {
+            els.transactionsSummaryNet.textContent = toLocaleCurrency(0);
+        } else {
+            const netSign = net > 0 ? '+' : '-';
+            els.transactionsSummaryNet.textContent = `${netSign}${toLocaleCurrency(Math.abs(net))}`;
+        }
+        els.transactionsSummaryTotalCount.textContent = totalCount.toLocaleString('ru-RU');
+        els.transactionsSummaryCompleted.textContent = completed.toLocaleString('ru-RU');
+        els.transactionsSummaryPending.textContent = pending.toLocaleString('ru-RU');
+    }
+
+    function renderTransactionsTable(response) {
+        if (!els.transactionsTableBody) {
+            return;
+        }
+        const items = Array.isArray(response?.items) ? response.items : [];
+        const total = Number(response?.total) || items.length;
+        const offset = Number(response?.offset) || 0;
+        const limit = Number(response?.limit) || state.transactions.limit;
+        state.transactions.limit = limit;
+        state.transactions.offset = offset;
+        state.transactions.total = total;
+        state.transactions.summary = response?.summary || null;
+
+        if (els.transactionsTotalLabel) {
+            els.transactionsTotalLabel.textContent = `Всего: ${total.toLocaleString('ru-RU')}`;
+        }
+
+        if (!items.length) {
+            els.transactionsTableBody.innerHTML = '<tr><td colspan="6" style="padding: 32px; text-align: center; color: var(--text-tertiary);">Транзакции не найдены</td></tr>';
+            renderTransactionsSummary(response?.summary || null);
+            updateTransactionsPagination(total, offset, limit);
+            return;
+        }
+
+        const fragment = document.createDocumentFragment();
+        items.forEach((transaction) => {
+            const row = document.createElement('tr');
+
+            const createdAt = transaction.created_at ? new Date(transaction.created_at) : null;
+            const createdText = createdAt
+                ? createdAt.toLocaleString('ru-RU', {
+                      day: '2-digit',
+                      month: 'short',
+                      year: 'numeric',
+                      hour: '2-digit',
+                      minute: '2-digit',
+                  })
+                : '—';
+
+            const idCell = document.createElement('td');
+            idCell.innerHTML = `
+                <div class="transaction-meta">
+                    <div class="transaction-id">#${transaction.id}</div>
+                    <div class="transaction-date">${createdText}</div>
+                </div>
+            `;
+
+            const userCell = document.createElement('td');
+            const user = transaction.user || {};
+            const userName = user.full_name || 'Без имени';
+            const userAvatar = (userName || 'U').charAt(0).toUpperCase();
+            const userId = user.id ?? transaction.user_id;
+            userCell.innerHTML = `
+                <div class="user-cell">
+                    <div class="user-avatar-small">${userAvatar}</div>
+                    <div class="user-info">
+                        <div class="user-name">${userName}</div>
+                        <div class="user-id">ID: ${userId}</div>
+                    </div>
+                </div>
+            `;
+
+            const typeCell = document.createElement('td');
+            const typeLabel = document.createElement('div');
+            typeLabel.className = 'transaction-type';
+            typeLabel.textContent = formatTransactionType(transaction.type);
+            typeCell.appendChild(typeLabel);
+            if (transaction.description) {
+                const description = document.createElement('div');
+                description.className = 'transaction-description';
+                description.textContent = transaction.description;
+                typeCell.appendChild(description);
+            }
+
+            const amountCell = document.createElement('td');
+            const amountSpan = document.createElement('span');
+            amountSpan.classList.add('transaction-amount');
+            const amountRub = Number.isFinite(transaction.amount_rub)
+                ? transaction.amount_rub
+                : (Number(transaction.amount_kopeks) || 0) / 100;
+            if (amountRub > 0) {
+                amountSpan.classList.add('positive');
+                amountSpan.textContent = `+${toLocaleCurrency(Math.abs(amountRub))}`;
+            } else if (amountRub < 0) {
+                amountSpan.classList.add('negative');
+                amountSpan.textContent = `-${toLocaleCurrency(Math.abs(amountRub))}`;
+            } else {
+                amountSpan.textContent = toLocaleCurrency(0);
+            }
+            amountCell.appendChild(amountSpan);
+
+            const methodCell = document.createElement('td');
+            const methodLabel = document.createElement('div');
+            methodLabel.textContent = formatPaymentMethod(transaction.payment_method);
+            methodCell.appendChild(methodLabel);
+            if (transaction.external_id) {
+                const external = document.createElement('div');
+                external.className = 'transaction-external-id';
+                external.textContent = `ID: ${transaction.external_id}`;
+                methodCell.appendChild(external);
+            }
+
+            const statusCell = document.createElement('td');
+            const statusBadge = document.createElement('span');
+            statusBadge.className = `status-badge ${transaction.is_completed ? 'completed' : 'pending'}`;
+            statusBadge.textContent = transaction.is_completed ? 'Завершено' : 'В обработке';
+            statusCell.appendChild(statusBadge);
+            const completedAt = transaction.completed_at ? new Date(transaction.completed_at) : null;
+            if (completedAt) {
+                const completedLabel = document.createElement('div');
+                completedLabel.className = 'transaction-date';
+                const labelPrefix = transaction.is_completed ? 'Завершено' : 'Обновлено';
+                completedLabel.textContent = `${labelPrefix}: ${completedAt.toLocaleString('ru-RU', {
+                    day: '2-digit',
+                    month: 'short',
+                    year: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                })}`;
+                statusCell.appendChild(completedLabel);
+            }
+
+            row.append(idCell, userCell, typeCell, amountCell, methodCell, statusCell);
+            fragment.appendChild(row);
+        });
+
+        els.transactionsTableBody.innerHTML = '';
+        els.transactionsTableBody.appendChild(fragment);
+        renderTransactionsSummary(response?.summary || null);
+        updateTransactionsPagination(total, offset, limit);
+    }
+
+    function updateTransactionsPagination(total, offset, limit) {
+        const container = els.transactionsPagination;
+        if (!container) {
+            return;
+        }
+        if (total <= limit) {
+            container.innerHTML = '';
+            return;
+        }
+        const currentPage = Math.floor(offset / limit) + 1;
+        const totalPages = Math.max(1, Math.ceil(total / limit));
+        container.innerHTML = '';
+
+        const prev = document.createElement('button');
+        prev.className = 'action-btn';
+        prev.textContent = '←';
+        prev.disabled = currentPage <= 1;
+        prev.dataset.action = 'transactions-page';
+        prev.dataset.page = String(currentPage - 1);
+
+        const info = document.createElement('span');
+        info.className = 'table-caption';
+        info.textContent = `Страница ${currentPage}/${totalPages}`;
+
+        const next = document.createElement('button');
+        next.className = 'action-btn';
+        next.textContent = '→';
+        next.disabled = currentPage >= totalPages;
+        next.dataset.action = 'transactions-page';
+        next.dataset.page = String(currentPage + 1);
+
+        container.append(prev, info, next);
+    }
+
+    async function loadTransactionsSection(force = false) {
+        if (!els.transactionsTableBody) {
+            return;
+        }
+        if (!force && state.loadedSections.has('transactions')) {
+            renderTransactionsSummary(state.transactions.summary);
+            return;
+        }
+        const { limit, offset, search, type, status, payment } = state.transactions;
+        const params = new URLSearchParams({ limit: String(limit), offset: String(offset) });
+        if (search) {
+            params.append('search', search);
+        }
+        if (type) {
+            params.append('type', type);
+        }
+        if (status) {
+            params.append('status', status);
+        }
+        if (payment) {
+            params.append('payment', payment);
+        }
+        els.transactionsTableBody.innerHTML = '<tr><td colspan="6" style="padding: 32px; text-align: center; color: var(--text-tertiary);">Загрузка…</td></tr>';
+        if (els.transactionsTotalLabel) {
+            els.transactionsTotalLabel.textContent = '—';
+        }
+        try {
+            const data = await callApi(`/api/transactions?${params.toString()}`);
+            renderTransactionsTable(data);
+            state.loadedSections.add('transactions');
+        } catch (error) {
+            els.transactionsTableBody.innerHTML = `<tr><td colspan="6" style=\"padding: 32px; text-align: center; color: var(--danger);\">${error.message}</td></tr>`;
+            state.transactions.summary = null;
+            renderTransactionsSummary(null);
         }
     }
 
@@ -3046,6 +3532,61 @@
         );
     }
 
+    async function handleTransactionsAction(action, element) {
+        switch (action) {
+            case 'transactions-refresh':
+                await loadTransactionsSection(true);
+                showToast('Список транзакций обновлен', 'success');
+                break;
+            case 'transactions-reset':
+                state.transactions.search = '';
+                state.transactions.type = '';
+                state.transactions.status = '';
+                state.transactions.payment = '';
+                state.transactions.offset = 0;
+                state.transactions.total = 0;
+                state.transactions.summary = null;
+                if (transactionsSearchTimeout) {
+                    clearTimeout(transactionsSearchTimeout);
+                    transactionsSearchTimeout = null;
+                }
+                if (els.transactionsSearchInput) {
+                    els.transactionsSearchInput.value = '';
+                }
+                if (els.transactionsTypeFilter) {
+                    els.transactionsTypeFilter.value = '';
+                }
+                if (els.transactionsStatusFilter) {
+                    els.transactionsStatusFilter.value = '';
+                }
+                if (els.transactionsPaymentFilter) {
+                    els.transactionsPaymentFilter.value = '';
+                }
+                if (els.transactionsPagination) {
+                    els.transactionsPagination.innerHTML = '';
+                }
+                await loadTransactionsSection(true);
+                showToast('Фильтры сброшены', 'success');
+                break;
+            case 'transactions-page': {
+                if (!element) {
+                    break;
+                }
+                const page = Number(element.dataset.page);
+                if (!Number.isFinite(page)) {
+                    break;
+                }
+                const limit = state.transactions.limit || 20;
+                const safePage = Math.max(1, page);
+                state.transactions.offset = Math.max(0, (safePage - 1) * limit);
+                await loadTransactionsSection(true);
+                break;
+            }
+            default:
+                break;
+        }
+    }
+
     async function handleUsersAction(action, element) {
         switch (action) {
             case 'users-refresh':
@@ -3559,6 +4100,10 @@
                     break;
             }
 
+            if (action.startsWith('transactions')) {
+                await handleTransactionsAction(action, element);
+                return;
+            }
             if (action.startsWith('users') || action === 'view-user') {
                 await handleUsersAction(action, element);
                 return;
@@ -3632,6 +4177,13 @@
                 state.users.search = '';
                 state.users.offset = 0;
                 state.users.total = 0;
+                state.transactions.search = '';
+                state.transactions.type = '';
+                state.transactions.status = '';
+                state.transactions.payment = '';
+                state.transactions.offset = 0;
+                state.transactions.total = 0;
+                state.transactions.summary = null;
                 state.promocodes.offset = 0;
                 state.promocodes.total = 0;
                 state.remnawave.inbounds = [];
@@ -3639,6 +4191,29 @@
                 if (els.usersSearchInput) {
                     els.usersSearchInput.value = '';
                 }
+                if (transactionsSearchTimeout) {
+                    clearTimeout(transactionsSearchTimeout);
+                    transactionsSearchTimeout = null;
+                }
+                if (els.transactionsSearchInput) {
+                    els.transactionsSearchInput.value = '';
+                }
+                if (els.transactionsTypeFilter) {
+                    els.transactionsTypeFilter.value = '';
+                }
+                if (els.transactionsStatusFilter) {
+                    els.transactionsStatusFilter.value = '';
+                }
+                if (els.transactionsPaymentFilter) {
+                    els.transactionsPaymentFilter.value = '';
+                }
+                if (els.transactionsTableBody) {
+                    els.transactionsTableBody.innerHTML = '<tr><td colspan="6" style="padding: 32px; text-align: center; color: var(--text-tertiary);">Нет данных</td></tr>';
+                }
+                if (els.transactionsPagination) {
+                    els.transactionsPagination.innerHTML = '';
+                }
+                renderTransactionsSummary(null);
                 els.navItems.forEach((item) => {
                     item.classList.toggle('active', item.dataset.sectionTarget === 'dashboard');
                 });
@@ -3689,6 +4264,45 @@
                 }
             });
         }
+
+        if (els.transactionsSearchInput) {
+            els.transactionsSearchInput.addEventListener('input', () => {
+                state.transactions.search = els.transactionsSearchInput.value.trim();
+                state.transactions.offset = 0;
+                if (transactionsSearchTimeout) {
+                    clearTimeout(transactionsSearchTimeout);
+                }
+                transactionsSearchTimeout = setTimeout(() => {
+                    transactionsSearchTimeout = null;
+                    loadTransactionsSection(true);
+                }, 400);
+            });
+            els.transactionsSearchInput.addEventListener('keydown', (event) => {
+                if (event.key === 'Enter') {
+                    event.preventDefault();
+                    if (transactionsSearchTimeout) {
+                        clearTimeout(transactionsSearchTimeout);
+                        transactionsSearchTimeout = null;
+                    }
+                    loadTransactionsSection(true);
+                }
+            });
+        }
+
+        [
+            [els.transactionsTypeFilter, 'type'],
+            [els.transactionsStatusFilter, 'status'],
+            [els.transactionsPaymentFilter, 'payment'],
+        ].forEach(([element, key]) => {
+            if (!element) {
+                return;
+            }
+            element.addEventListener('change', () => {
+                state.transactions[key] = element.value;
+                state.transactions.offset = 0;
+                loadTransactionsSection(true);
+            });
+        });
 
         document.body.addEventListener('click', async (event) => {
             const target = event.target.closest('[data-action]');
