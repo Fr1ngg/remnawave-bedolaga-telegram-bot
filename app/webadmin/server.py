@@ -25,9 +25,7 @@ from app.webadmin.dashboard import (
     collect_revenue_series,
     fetch_recent_users,
     fetch_server_overview,
-    fetch_transactions,
     get_user_details,
-    list_subscriptions,
     list_users,
 )
 
@@ -196,8 +194,6 @@ class WebAdminServer:
         app.router.add_get("/api/users/{user_id}", self.handle_user_details)
 
         app.router.add_get("/api/servers", self.handle_servers)
-        app.router.add_get("/api/transactions", self.handle_transactions)
-        app.router.add_get("/api/subscriptions", self.handle_subscriptions)
 
         app.router.add_get("/api/settings/categories", self.handle_settings_categories)
         app.router.add_get("/api/settings/category/{category_key}", self.handle_settings_category)
@@ -347,70 +343,6 @@ class WebAdminServer:
         async with AsyncSessionLocal() as session:
             data = await fetch_server_overview(session)
         return self._success(data)
-
-    async def handle_transactions(self, request: web.Request) -> web.Response:
-        try:
-            limit = int(request.query.get("limit", "20"))
-        except ValueError:
-            limit = 20
-        try:
-            offset = int(request.query.get("offset", "0"))
-        except ValueError:
-            offset = 0
-
-        type_filter = request.query.get("type")
-        status_filter = request.query.get("status")
-        search = request.query.get("search")
-
-        async with AsyncSessionLocal() as session:
-            items, total = await fetch_transactions(
-                session,
-                limit=limit,
-                offset=offset,
-                type_filter=type_filter,
-                status_filter=status_filter,
-                search=search,
-            )
-
-        return self._success(
-            {
-                "items": items,
-                "total": total,
-                "limit": limit,
-                "offset": offset,
-            }
-        )
-
-    async def handle_subscriptions(self, request: web.Request) -> web.Response:
-        try:
-            limit = int(request.query.get("limit", "20"))
-        except ValueError:
-            limit = 20
-        try:
-            offset = int(request.query.get("offset", "0"))
-        except ValueError:
-            offset = 0
-
-        status_filter = request.query.get("status")
-        search = request.query.get("search")
-
-        async with AsyncSessionLocal() as session:
-            items, total = await list_subscriptions(
-                session,
-                limit=limit,
-                offset=offset,
-                status_filter=status_filter,
-                search=search,
-            )
-
-        return self._success(
-            {
-                "items": items,
-                "total": total,
-                "limit": limit,
-                "offset": offset,
-            }
-        )
 
     async def handle_settings_categories(self, request: web.Request) -> web.Response:
         categories = [
