@@ -12,7 +12,7 @@ async def check_table_exists(table_name: str) -> bool:
     try:
         async with engine.begin() as conn:
             db_type = await get_database_type()
-            
+
             if db_type == 'sqlite':
                 result = await conn.execute(text(f"""
                     SELECT name FROM sqlite_master 
@@ -22,8 +22,9 @@ async def check_table_exists(table_name: str) -> bool:
                 
             elif db_type == 'postgresql':
                 result = await conn.execute(text("""
-                    SELECT table_name FROM information_schema.tables 
-                    WHERE table_schema = 'public' AND table_name = :table_name
+                    SELECT table_name FROM information_schema.tables
+                    WHERE table_schema = ANY (current_schemas(false))
+                      AND table_name = :table_name
                 """), {"table_name": table_name})
                 return result.fetchone() is not None
                 
@@ -52,10 +53,11 @@ async def check_column_exists(table_name: str, column_name: str) -> bool:
                 
             elif db_type == 'postgresql':
                 result = await conn.execute(text("""
-                    SELECT column_name 
-                    FROM information_schema.columns 
-                    WHERE table_name = :table_name 
-                    AND column_name = :column_name
+                    SELECT column_name
+                    FROM information_schema.columns
+                    WHERE table_schema = ANY (current_schemas(false))
+                      AND table_name = :table_name
+                      AND column_name = :column_name
                 """), {"table_name": table_name, "column_name": column_name})
                 return result.fetchone() is not None
                 
@@ -998,65 +1000,95 @@ async def ensure_promo_groups_setup():
                 "users", "auto_promo_group_assigned"
             )
 
-            if not auto_promo_flag_exists:
-                if db_type == "sqlite":
+            if db_type == "sqlite":
+                if not auto_promo_flag_exists:
                     await conn.execute(
                         text(
                             "ALTER TABLE users ADD COLUMN auto_promo_group_assigned BOOLEAN DEFAULT 0"
                         )
                     )
-                elif db_type == "postgresql":
-                    await conn.execute(
-                        text(
-                            "ALTER TABLE users ADD COLUMN auto_promo_group_assigned BOOLEAN DEFAULT FALSE"
-                        )
+                    logger.info("Добавлена колонка users.auto_promo_group_assigned")
+            elif db_type == "postgresql":
+                await conn.execute(
+                    text(
+                        "ALTER TABLE IF EXISTS users ADD COLUMN IF NOT EXISTS auto_promo_group_assigned BOOLEAN NOT NULL DEFAULT FALSE"
                     )
-                elif db_type == "mysql":
-                    await conn.execute(
-                        text(
-                            "ALTER TABLE users ADD COLUMN auto_promo_group_assigned TINYINT(1) DEFAULT 0"
-                        )
+                )
+                await conn.execute(
+                    text(
+                        "UPDATE users SET auto_promo_group_assigned = FALSE WHERE auto_promo_group_assigned IS NULL"
                     )
-                else:
-                    logger.error(
-                        f"Неподдерживаемый тип БД для users.auto_promo_group_assigned: {db_type}"
+                )
+                if not auto_promo_flag_exists:
+                    logger.info("Добавлена колонка users.auto_promo_group_assigned")
+            elif db_type == "mysql":
+                await conn.execute(
+                    text(
+                        "ALTER TABLE users ADD COLUMN IF NOT EXISTS auto_promo_group_assigned TINYINT(1) NOT NULL DEFAULT 0"
                     )
-                    return False
-
-                logger.info("Добавлена колонка users.auto_promo_group_assigned")
+                )
+                await conn.execute(
+                    text(
+                        "UPDATE users SET auto_promo_group_assigned = 0 WHERE auto_promo_group_assigned IS NULL"
+                    )
+                )
+                if not auto_promo_flag_exists:
+                    logger.info("Добавлена колонка users.auto_promo_group_assigned")
+            else:
+                logger.error(
+                    f"Неподдерживаемый тип БД для users.auto_promo_group_assigned: {db_type}"
+                )
+                return False
 
             threshold_column_exists = await check_column_exists(
                 "users", "auto_promo_group_threshold_kopeks"
             )
 
-            if not threshold_column_exists:
-                if db_type == "sqlite":
+            if db_type == "sqlite":
+                if not threshold_column_exists:
                     await conn.execute(
                         text(
                             "ALTER TABLE users ADD COLUMN auto_promo_group_threshold_kopeks INTEGER NOT NULL DEFAULT 0"
                         )
                     )
-                elif db_type == "postgresql":
-                    await conn.execute(
-                        text(
-                            "ALTER TABLE users ADD COLUMN auto_promo_group_threshold_kopeks BIGINT NOT NULL DEFAULT 0"
-                        )
+                    logger.info(
+                        "Добавлена колонка users.auto_promo_group_threshold_kopeks"
                     )
-                elif db_type == "mysql":
-                    await conn.execute(
-                        text(
-                            "ALTER TABLE users ADD COLUMN auto_promo_group_threshold_kopeks BIGINT NOT NULL DEFAULT 0"
-                        )
+            elif db_type == "postgresql":
+                await conn.execute(
+                    text(
+                        "ALTER TABLE IF EXISTS users ADD COLUMN IF NOT EXISTS auto_promo_group_threshold_kopeks BIGINT NOT NULL DEFAULT 0"
                     )
-                else:
-                    logger.error(
-                        f"Неподдерживаемый тип БД для users.auto_promo_group_threshold_kopeks: {db_type}"
-                    )
-                    return False
-
-                logger.info(
-                    "Добавлена колонка users.auto_promo_group_threshold_kopeks"
                 )
+                await conn.execute(
+                    text(
+                        "UPDATE users SET auto_promo_group_threshold_kopeks = 0 WHERE auto_promo_group_threshold_kopeks IS NULL"
+                    )
+                )
+                if not threshold_column_exists:
+                    logger.info(
+                        "Добавлена колонка users.auto_promo_group_threshold_kopeks"
+                    )
+            elif db_type == "mysql":
+                await conn.execute(
+                    text(
+                        "ALTER TABLE users ADD COLUMN IF NOT EXISTS auto_promo_group_threshold_kopeks BIGINT NOT NULL DEFAULT 0"
+                    )
+                )
+                await conn.execute(
+                    text(
+                        "UPDATE users SET auto_promo_group_threshold_kopeks = 0 WHERE auto_promo_group_threshold_kopeks IS NULL"
+                    )
+                )
+                if not threshold_column_exists:
+                    logger.info(
+                        "Добавлена колонка users.auto_promo_group_threshold_kopeks"
+                    )
+            else:
+                logger.error(
+                    f"Неподдерживаемый тип БД для users.auto_promo_group_threshold_kopeks: {db_type}"
+                )
+                return False
 
             index_exists = await check_index_exists("users", "ix_users_promo_group_id")
 
