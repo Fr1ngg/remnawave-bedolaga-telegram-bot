@@ -348,10 +348,6 @@
             overflow-y: auto;
         }
 
-        .view-section.hidden {
-            display: none;
-        }
-
         .page-title {
             font-size: 28px;
             font-weight: 700;
@@ -1228,51 +1224,40 @@
         <nav class="nav">
             <div class="nav-section">
                 <div class="nav-section-title">Обзор</div>
-                <a href="#" class="nav-item active" data-view="dashboard">
+                <a href="#" class="nav-item active">
                     <span class="nav-icon">📊</span>
                     <span>Панель управления</span>
                 </a>
-                <a href="#" class="nav-item" data-view="system">
+                <a href="#" class="nav-item">
                     <span class="nav-icon">🧾</span>
-                    <span>Системный статус</span>
+                    <span>История операций</span>
                 </a>
             </div>
             <div class="nav-section">
-                <div class="nav-section-title">Пользователи</div>
-                <a href="#" class="nav-item" data-view="users">
+                <div class="nav-section-title">Управление</div>
+                <a href="#" class="nav-item">
                     <span class="nav-icon">👥</span>
                     <span>Пользователи</span>
                 </a>
-                <a href="#" class="nav-item" data-view="subscriptions">
+                <a href="#" class="nav-item">
                     <span class="nav-icon">💳</span>
                     <span>Подписки</span>
                 </a>
-            </div>
-            <div class="nav-section">
-                <div class="nav-section-title">Операции</div>
-                <a href="#" class="nav-item" data-view="support">
-                    <span class="nav-icon">🛟</span>
-                    <span>Поддержка</span>
-                </a>
-                <a href="#" class="nav-item" data-view="promotions">
-                    <span class="nav-icon">💡</span>
-                    <span>Промо и маркетинг</span>
-                </a>
-                <a href="#" class="nav-item" data-view="communications">
-                    <span class="nav-icon">📨</span>
-                    <span>Коммуникации</span>
-                </a>
-            </div>
-            <div class="nav-section">
-                <div class="nav-section-title">Конфигурация</div>
-                <a href="#" class="nav-item" data-view="servers">
+                <a href="#" class="nav-item">
                     <span class="nav-icon">🖥️</span>
                     <span>Серверы</span>
                     <span class="nav-badge" id="nav-servers-count">—</span>
                 </a>
-                <a href="#" class="nav-item" data-view="settings">
+            </div>
+            <div class="nav-section">
+                <div class="nav-section-title">Система</div>
+                <a href="#settings" class="nav-item">
                     <span class="nav-icon">⚙️</span>
                     <span>Конфигурация бота</span>
+                </a>
+                <a href="#" class="nav-item">
+                    <span class="nav-icon">💾</span>
+                    <span>Бекапы</span>
                 </a>
             </div>
         </nav>
@@ -1326,313 +1311,119 @@
             </div>
         </header>
         <div class="content">
-            <section id="view-dashboard" class="view-section">
-                <h1 class="page-title">Панель управления</h1>
-                <p class="page-subtitle">Ключевые показатели и последние события</p>
-                <div class="stats-grid">
-                    <div class="stat-card">
-                        <div class="stat-header">
-                            <div>
-                                <div class="stat-value" id="stat-total-users">—</div>
-                                <div class="stat-label">Всего пользователей</div>
-                            </div>
-                            <div class="stat-icon users">👥</div>
+            <h1 class="page-title">Панель управления</h1>
+            <p class="page-subtitle">Добро пожаловать в систему управления VPN ботом</p>
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-header">
+                        <div>
+                            <div class="stat-value" id="stat-total-users">—</div>
+                            <div class="stat-label">Всего пользователей</div>
                         </div>
-                        <div class="stat-change" id="stat-users-change">—</div>
+                        <div class="stat-icon users">👥</div>
                     </div>
-                    <div class="stat-card">
-                        <div class="stat-header">
-                            <div>
-                                <div class="stat-value" id="stat-revenue">—</div>
-                                <div class="stat-label">Доход за 30 дней</div>
-                            </div>
-                            <div class="stat-icon money">💰</div>
-                        </div>
-                        <div class="stat-change" id="stat-revenue-change">—</div>
-                    </div>
-                    <div class="stat-card">
-                        <div class="stat-header">
-                            <div>
-                                <div class="stat-value" id="stat-servers">—</div>
-                                <div class="stat-label">Серверов доступно</div>
-                            </div>
-                            <div class="stat-icon servers">🖥️</div>
-                        </div>
-                        <div class="stat-change" id="stat-servers-change">—</div>
-                    </div>
-                    <div class="stat-card">
-                        <div class="stat-header">
-                            <div>
-                                <div class="stat-value" id="stat-conversion">—</div>
-                                <div class="stat-label">Конверсия из триала</div>
-                            </div>
-                            <div class="stat-icon chart">📈</div>
-                        </div>
-                        <div class="stat-change" id="stat-conversion-change">—</div>
-                    </div>
+                    <span class="stat-change" id="stat-users-change">—</span>
                 </div>
-                <div class="chart-container">
-                    <div class="chart-placeholder" id="revenue-chart">Загрузка графика…</div>
+                <div class="stat-card">
+                    <div class="stat-header">
+                        <div>
+                            <div class="stat-value" id="stat-revenue">—</div>
+                            <div class="stat-label">Доход за 30 дней</div>
+                        </div>
+                        <div class="stat-icon money">💰</div>
+                    </div>
+                    <span class="stat-change" id="stat-revenue-change">—</span>
                 </div>
-                <div class="actions-grid">
-                    <button class="action-btn" data-action="refresh">
+                <div class="stat-card">
+                    <div class="stat-header">
+                        <div>
+                            <div class="stat-value" id="stat-servers">—</div>
+                            <div class="stat-label">Доступные серверы</div>
+                        </div>
+                        <div class="stat-icon servers">🖥️</div>
+                    </div>
+                    <span class="stat-change" id="stat-servers-change">—</span>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-header">
+                        <div>
+                            <div class="stat-value" id="stat-conversion">—</div>
+                            <div class="stat-label">Конверсия триал → платная</div>
+                        </div>
+                        <div class="stat-icon chart">📈</div>
+                    </div>
+                    <span class="stat-change" id="stat-conversion-change">—</span>
+                </div>
+            </div>
+            <div class="chart-container" id="revenue-chart">
+                <div class="chart-placeholder">
+                    <div style="font-size: 42px; margin-bottom: 12px;">📊</div>
+                    <div style="font-size: 18px; font-weight: 500; margin-bottom: 8px;">График продаж</div>
+                    <div style="font-size: 14px;">Динамика подписок за последние 30 дней</div>
+                </div>
+            </div>
+            <div class="quick-actions">
+                <button class="action-btn primary" data-action="refresh">
+                    <span>🔄</span>
+                    <span>Обновить данные</span>
+                </button>
+                <button class="action-btn" data-action="reload-config">
+                    <span>⚙️</span>
+                    <span>Перезагрузить конфигурацию</span>
+                </button>
+                <button class="action-btn" data-action="create-backup">
+                    <span>💾</span>
+                    <span>Создать бекап</span>
+                </button>
+                <button class="action-btn" data-action="toggle-maintenance">
+                    <span>🚧</span>
+                    <span id="maintenance-action-label">Включить техработы</span>
+                </button>
+            </div>
+            <section style="margin-bottom: 32px;">
+                <h2 class="servers-section-title">
+                    <span>🖥️</span>
+                    <span>Активные серверы</span>
+                    <span style="background: var(--success); color: white; font-size: 12px; padding: 4px 12px; border-radius: 20px;" id="servers-online-badge">— онлайн</span>
+                </h2>
+                <div id="servers-list"></div>
+            </section>
+            <section class="table-container">
+                <div class="table-header">
+                    <h3>Последние пользователи</h3>
+                    <button class="action-btn" data-action="refresh-users">
                         <span>🔄</span>
-                        <span>Обновить все данные</span>
-                    </button>
-                    <button class="action-btn" data-action="toggle-maintenance">
-                        <span>🚧</span>
-                        <span id="maintenance-action-label">Включить техработы</span>
+                        <span>Обновить</span>
                     </button>
                 </div>
-                <section class="table-container">
-                    <div class="table-header">
-                        <h3>Последние пользователи</h3>
-                        <button class="action-btn" data-action="refresh-users">
-                            <span>🔄</span>
-                            <span>Обновить</span>
-                        </button>
-                    </div>
-                    <table>
-                        <thead>
-                        <tr>
-                            <th>Пользователь</th>
-                            <th>Статус</th>
-                            <th>Подписка</th>
-                            <th>Баланс</th>
-                            <th></th>
-                        </tr>
-                        </thead>
-                        <tbody id="recent-users-body">
-                        <tr>
-                            <td colspan="5" style="padding: 32px; text-align: center; color: var(--text-tertiary);">
-                                Нет данных
-                            </td>
-                        </tr>
-                        </tbody>
-                    </table>
-                </section>
+                <table>
+                    <thead>
+                    <tr>
+                        <th>Пользователь</th>
+                        <th>Статус</th>
+                        <th>Подписка</th>
+                        <th>Баланс</th>
+                        <th></th>
+                    </tr>
+                    </thead>
+                    <tbody id="recent-users-body">
+                    <tr>
+                        <td colspan="5" style="padding: 32px; text-align: center; color: var(--text-tertiary);">
+                            Нет данных
+                        </td>
+                    </tr>
+                    </tbody>
+                </table>
             </section>
-
-            <section id="view-users" class="view-section hidden">
-                <h1 class="page-title">Пользователи</h1>
-                <p class="page-subtitle">Статистика пользователей и быстрый поиск</p>
-                <div id="users-overview" class="stats-grid"></div>
-                <div class="table-container">
-                    <div class="table-header">
-                        <h3>Список пользователей</h3>
-                        <div style="display:flex; gap:12px; align-items:center;">
-                            <input id="users-search" type="search" placeholder="Поиск по имени или ID" style="padding:8px 12px; border-radius:8px; border:1px solid var(--border); background:var(--bg-tertiary); color:var(--text-primary);">
-                            <select id="users-order" style="padding:8px 12px; border-radius:8px; border:1px solid var(--border); background:var(--bg-tertiary); color:var(--text-primary);">
-                                <option value="">По умолчанию</option>
-                                <option value="balance">По балансу</option>
-                                <option value="activity">По активности</option>
-                            </select>
-                        </div>
-                    </div>
-                    <table>
-                        <thead>
-                        <tr>
-                            <th>Пользователь</th>
-                            <th>Статус</th>
-                            <th>Подписка</th>
-                            <th>Баланс</th>
-                            <th>Действия</th>
-                        </tr>
-                        </thead>
-                        <tbody id="users-table-body"></tbody>
-                    </table>
-                    <div class="settings-empty" id="users-empty">Загрузка данных…</div>
-                    <div class="pagination" id="users-pagination" style="display:flex; justify-content:flex-end; gap:12px; padding:16px; align-items:center;"></div>
-                </div>
-            </section>
-
-            <section id="view-subscriptions" class="view-section hidden">
-                <h1 class="page-title">Подписки</h1>
-                <p class="page-subtitle">Контроль активных и истекающих подписок</p>
-                <div id="subscriptions-overview" class="stats-grid"></div>
-                <div class="table-container">
-                    <div class="table-header">
-                        <h3>Подписки</h3>
-                        <div style="display:flex; gap:12px; align-items:center;">
-                            <select id="subscriptions-status" style="padding:8px 12px; border-radius:8px; border:1px solid var(--border); background:var(--bg-tertiary); color:var(--text-primary);">
-                                <option value="">Все статусы</option>
-                                <option value="active">Активные</option>
-                                <option value="trial">Триал</option>
-                                <option value="expired">Истекшие</option>
-                            </select>
-                            <button class="action-btn" id="subscriptions-expiring-btn" type="button">
-                                <span>⏰</span>
-                                <span>Истекающие</span>
-                            </button>
-                        </div>
-                    </div>
-                    <table>
-                        <thead>
-                        <tr>
-                            <th>Пользователь</th>
-                            <th>Статус</th>
-                            <th>Окончание</th>
-                            <th>Трафик</th>
-                            <th>Устройства</th>
-                        </tr>
-                        </thead>
-                        <tbody id="subscriptions-table-body"></tbody>
-                    </table>
-                    <div class="settings-empty" id="subscriptions-empty">Загрузка подписок…</div>
-                    <div class="pagination" id="subscriptions-pagination" style="display:flex; justify-content:flex-end; gap:12px; padding:16px; align-items:center;"></div>
-                </div>
-                <div class="table-container" id="subscriptions-expiring" style="display:none;">
-                    <div class="table-header">
-                        <h3>Истекающие подписки</h3>
-                        <span id="subscriptions-expiring-period" style="color:var(--text-terтиary);"></span>
-                    </div>
-                    <table>
-                        <thead>
-                        <tr>
-                            <th>Пользователь</th>
-                            <th>Статус</th>
-                            <th>Окончание</th>
-                            <th>Трафик</th>
-                            <th>Устройства</th>
-                        </tr>
-                        </thead>
-                        <tbody id="subscriptions-expiring-body"></tbody>
-                    </table>
-                </div>
-            </section>
-
-            <section id="view-support" class="view-section hidden">
-                <h1 class="page-title">Поддержка</h1>
-                <p class="page-subtitle">Статусы тикетов и активность модераторов</p>
-                <div id="support-overview" class="stats-grid"></div>
-                <div class="table-container">
-                    <div class="table-header">
-                        <h3>Тикеты</h3>
-                        <select id="support-status" style="padding:8px 12px; border-radius:8px; border:1px solid var(--border); background:var(--bg-terтиary); color:var(--text-primary);">
-                            <option value="">Все</option>
-                            <option value="open">Открытые</option>
-                            <option value="answered">С ответом</option>
-                            <option value="pending">В ожидании</option>
-                            <option value="closed">Закрытые</option>
-                        </select>
-                    </div>
-                    <table>
-                        <thead>
-                        <tr>
-                            <th>ID</th>
-                            <th>Пользователь</th>
-                            <th>Статус</th>
-                            <th>Приоритет</th>
-                            <th>Обновлён</th>
-                        </tr>
-                        </thead>
-                        <tbody id="support-table-body"></tbody>
-                    </table>
-                    <div class="settings-empty" id="support-empty">Загрузка тикетов…</div>
-                </div>
-                <div class="table-container hidden" id="support-detail">
-                    <div class="table-header">
-                        <h3 id="support-detail-title">Тикет</h3>
-                        <button class="action-btn" id="support-detail-close" type="button">Закрыть</button>
-                    </div>
-                    <div id="support-detail-body" style="padding:24px; max-height:420px; overflow:auto;"></div>
-                </div>
-            </section>
-
-            <section id="view-promotions" class="view-section hidden">
-                <h1 class="page-title">Промо и маркетинг</h1>
-                <p class="page-subtitle">Управление промокодами, кампаниями и промо-группами</p>
-                <div id="promotions-overview" class="stats-grid"></div>
-                <div class="table-container">
-                    <div class="table-header"><h3>Промокоды</h3></div>
-                    <table>
-                        <thead>
-                        <tr>
-                            <th>Код</th>
-                            <th>Тип</th>
-                            <th>Бонус</th>
-                            <th>Использования</th>
-                            <th>Статус</th>
-                        </tr>
-                        </thead>
-                        <tbody id="promocodes-body"></tbody>
-                    </table>
-                    <div class="settings-empty" id="promocodes-empty">Нет данных</div>
-                </div>
-                <div class="table-container">
-                    <div class="table-header"><h3>Кампании</h3></div>
-                    <table>
-                        <thead>
-                        <tr>
-                            <th>Название</th>
-                            <th>Параметр</th>
-                            <th>Тип</th>
-                            <th>Регистрации</th>
-                            <th>Статус</th>
-                        </tr>
-                        </thead>
-                        <tbody id="campaigns-body"></tbody>
-                    </table>
-                    <div class="settings-empty" id="campaigns-empty">Нет активных кампаний</div>
-                </div>
-                <div class="table-container">
-                    <div class="table-header"><h3>Промо-группы</h3></div>
-                    <table>
-                        <thead>
-                        <tr>
-                            <th>Название</th>
-                            <th>Скидка на серверы</th>
-                            <th>Скидка на трафик</th>
-                            <th>Скидка на устройства</th>
-                            <th>Пользователей</th>
-                        </tr>
-                        </thead>
-                        <tbody id="promo-groups-body"></tbody>
-                    </table>
-                    <div class="settings-empty" id="promo-groups-empty">Нет данных о группах</div>
-                </div>
-            </section>
-
-            <section id="view-communications" class="view-section hidden">
-                <h1 class="page-title">Коммуникации</h1>
-                <p class="page-subtitle">Приветственные тексты и сообщения в меню</p>
-                <div id="communications-overview" class="stats-grid"></div>
-                <div class="table-container">
-                    <div class="table-header"><h3>Приветственные тексты</h3></div>
-                    <div id="welcome-texts-list" style="padding:24px; display:flex; flex-direction:column; gap:16px;"></div>
-                </div>
-                <div class="table-container">
-                    <div class="table-header"><h3>Сообщения в меню</h3></div>
-                    <div id="user-messages-list" style="padding:24px; display:flex; flex-direction:column; gap:16px;"></div>
-                </div>
-            </section>
-
-            <section id="view-servers" class="view-section hidden">
-                <h1 class="page-title">Серверы</h1>
-                <p class="page-subtitle">Состояние инфраструктуры и емкость</p>
-                <div class="settings-empty" id="servers-empty">Загрузка данных о серверах…</div>
-                <div id="servers-container"></div>
-            </section>
-
-            <section id="view-settings" class="view-section hidden">
-                <h1 class="page-title">Конфигурация бота</h1>
-                <p class="page-subtitle">Просматривайте и обновляйте параметры без перезапуска бота</p>
+            <section class="settings-section" id="settings">
+                <h2>⚙️ Конфигурация бота</h2>
+                <p>Просматривайте и обновляйте ключевые параметры без перезапуска бота. Значения сохраняются в базе данных.</p>
                 <div id="settings-container" class="settings-container">
                     <div class="settings-empty">Загрузка категорий настроек…</div>
                 </div>
             </section>
-
-            <section id="view-system" class="view-section hidden">
-                <h1 class="page-title">Системный статус</h1>
-                <p class="page-subtitle">Состояние бота, мониторинга и задач</p>
-                <div id="system-overview" class="stats-grid"></div>
-                <div class="table-container">
-                    <div class="table-header"><h3>Управление</h3></div>
-                    <div id="system-actions" style="padding:24px; display:flex; flex-direction:column; gap:12px;"></div>
-                </div>
-            </section>
         </div>
-        </main>
+    </main>
 </div>
 </div>
 <script>
@@ -1641,13 +1432,6 @@
         token: localStorage.getItem('webadminToken') || '',
         health: null,
         settingsCache: new Map(),
-        currentView: 'dashboard',
-        caches: {
-            users: { page: 1, search: '', order: '' },
-            subscriptions: { page: 1, status: '' },
-            support: { page: 1, status: '' },
-        },
-        servers: [],
     };
 
     const els = {
@@ -1661,8 +1445,6 @@
         botStatusIndicator: document.getElementById('bot-status-indicator'),
         maintenanceActionLabel: document.getElementById('maintenance-action-label'),
         maintenanceLabel: document.querySelector('[data-maintenance-label]'),
-        navItems: Array.from(document.querySelectorAll('.nav-item[data-view]')),
-        viewSections: Array.from(document.querySelectorAll('.view-section')),
         statUsers: document.getElementById('stat-total-users'),
         statUsersChange: document.getElementById('stat-users-change'),
         statRevenue: document.getElementById('stat-revenue'),
@@ -1672,54 +1454,12 @@
         statConversion: document.getElementById('stat-conversion'),
         statConversionChange: document.getElementById('stat-conversion-change'),
         revenueChart: document.getElementById('revenue-chart'),
+        serversList: document.getElementById('servers-list'),
+        serversBadge: document.getElementById('servers-online-badge'),
         navServersCount: document.getElementById('nav-servers-count'),
         recentUsersBody: document.getElementById('recent-users-body'),
-        searchInput: document.getElementById('search-input'),
         settingsContainer: document.getElementById('settings-container'),
-        // Users view
-        usersOverview: document.getElementById('users-overview'),
-        usersTableBody: document.getElementById('users-table-body'),
-        usersEmpty: document.getElementById('users-empty'),
-        usersPagination: document.getElementById('users-pagination'),
-        usersSearch: document.getElementById('users-search'),
-        usersOrder: document.getElementById('users-order'),
-        // Subscriptions view
-        subscriptionsOverview: document.getElementById('subscriptions-overview'),
-        subscriptionsTableBody: document.getElementById('subscriptions-table-body'),
-        subscriptionsEmpty: document.getElementById('subscriptions-empty'),
-        subscriptionsPagination: document.getElementById('subscriptions-pagination'),
-        subscriptionsStatus: document.getElementById('subscriptions-status'),
-        subscriptionsExpiringBtn: document.getElementById('subscriptions-expiring-btn'),
-        subscriptionsExpiring: document.getElementById('subscriptions-expiring'),
-        subscriptionsExpiringBody: document.getElementById('subscriptions-expiring-body'),
-        subscriptionsExpiringPeriod: document.getElementById('subscriptions-expiring-period'),
-        // Support view
-        supportOverview: document.getElementById('support-overview'),
-        supportTableBody: document.getElementById('support-table-body'),
-        supportEmpty: document.getElementById('support-empty'),
-        supportStatus: document.getElementById('support-status'),
-        supportDetail: document.getElementById('support-detail'),
-        supportDetailBody: document.getElementById('support-detail-body'),
-        supportDetailTitle: document.getElementById('support-detail-title'),
-        supportDetailClose: document.getElementById('support-detail-close'),
-        // Promotions view
-        promotionsOverview: document.getElementById('promotions-overview'),
-        promocodesBody: document.getElementById('promocodes-body'),
-        promocodesEmpty: document.getElementById('promocodes-empty'),
-        campaignsBody: document.getElementById('campaigns-body'),
-        campaignsEmpty: document.getElementById('campaigns-empty'),
-        promoGroupsBody: document.getElementById('promo-groups-body'),
-        promoGroupsEmpty: document.getElementById('promo-groups-empty'),
-        // Communications view
-        communicationsOverview: document.getElementById('communications-overview'),
-        welcomeTextsList: document.getElementById('welcome-texts-list'),
-        userMessagesList: document.getElementById('user-messages-list'),
-        // Servers view
-        serversContainer: document.getElementById('servers-container'),
-        serversEmpty: document.getElementById('servers-empty'),
-        // System view
-        systemOverview: document.getElementById('system-overview'),
-        systemActions: document.getElementById('system-actions'),
+        searchInput: document.getElementById('search-input'),
     };
 
     function toLocaleCurrency(value) {
@@ -1734,7 +1474,6 @@
     }
 
     function showToast(message, type = 'info') {
-        if (!els.toastContainer) return;
         const toast = document.createElement('div');
         toast.className = `toast ${type}`;
         toast.textContent = message;
@@ -1743,6 +1482,18 @@
             toast.classList.add('fade');
             setTimeout(() => toast.remove(), 200);
         }, 4000);
+    }
+
+    function showLogin(message = '') {
+        els.authOverlay.classList.remove('hidden');
+        els.loginError.textContent = message;
+        setTimeout(() => els.loginToken.focus(), 50);
+    }
+
+    function hideLogin() {
+        els.authOverlay.classList.add('hidden');
+        els.loginError.textContent = '';
+        els.loginToken.value = '';
     }
 
     async function callApi(path, { method = 'GET', body, skipAuth = false } = {}) {
@@ -1790,7 +1541,7 @@
             element.textContent = '—';
             return;
         }
-        const formatted = value > 0 ? `↑ ${value.toFixed(1)}%` : value < 0 ? `↓ ${Math.abs(value).toFixed(1)}%` : '0%';
+        const formatted = value > 0 ? `↑ ${value.toFixed(1)}%` : value < 0 ? `↓ ${(Math.abs(value)).toFixed(1)}%` : '0%';
         element.textContent = formatted;
         if (value > 0) {
             element.classList.add('positive');
@@ -1799,21 +1550,28 @@
         }
     }
 
-    function setActiveView(view) {
-        state.currentView = view;
-        els.navItems.forEach((item) => {
-            const isActive = item.dataset.view === view;
-            item.classList.toggle('active', isActive);
-        });
-        els.viewSections.forEach((section) => {
-            if (!section.id) return;
-            const target = `view-${view}`;
-            if (section.id === target) {
-                section.classList.remove('hidden');
-            } else {
-                section.classList.add('hidden');
-            }
-        });
+    function countryCodeToEmoji(code) {
+        if (!code) return '🌍';
+        const upper = code.trim().slice(0, 2).toUpperCase();
+        return upper.replace(/./g, (char) => String.fromCodePoint(char.charCodeAt(0) + 127397));
+    }
+
+    function renderHealth(data) {
+        state.health = data;
+        const maintenance = data?.bot?.maintenance;
+        els.botStatusIndicator.classList.remove('paused', 'stopped');
+        if (maintenance) {
+            els.botStatusIndicator.classList.add('paused');
+        }
+        if (els.maintenanceLabel) {
+            els.maintenanceLabel.textContent = maintenance ? 'Вкл' : 'Выкл';
+        }
+        if (els.maintenanceActionLabel) {
+            els.maintenanceActionLabel.textContent = maintenance ? 'Выключить техработы' : 'Включить техработы';
+        }
+        if (data?.services?.auto_backup_enabled) {
+            els.navServersCount.classList.add('active');
+        }
     }
 
     function renderSummary(summary) {
@@ -1829,9 +1587,7 @@
     }
 
     function renderRevenue(series) {
-        if (!els.revenueChart) return;
         if (!Array.isArray(series) || !series.length) {
-            els.revenueChart.textContent = 'Нет данных для отображения';
             return;
         }
         const chart = document.createElement('div');
@@ -1856,509 +1612,170 @@
         els.revenueChart.appendChild(chart);
     }
 
-    function renderRecentUsers(users) {
-        if (!els.recentUsersBody) return;
-        els.recentUsersBody.innerHTML = '';
-        if (!Array.isArray(users) || !users.length) {
-            const row = document.createElement('tr');
-            row.innerHTML = '<td colspan="5" style="padding: 32px; text-align: center; color: var(--text-tertiary);">Нет данных</td>';
-            els.recentUsersBody.appendChild(row);
-            return;
-        }
-        users.forEach((user) => {
-            const row = document.createElement('tr');
-            const statusBadge = user.status === 'active' ? 'success' : user.status === 'blocked' ? 'danger' : 'warning';
-            const statusText = user.status === 'active' ? 'Активен' : user.status === 'blocked' ? 'Заблокирован' : 'Удален';
-            const subscription = user.subscription || {};
-            let subscriptionLabel = '—';
-            if (subscription.status_display) {
-                subscriptionLabel = subscription.status_display;
-            } else if (subscription.status) {
-                subscriptionLabel = subscription.status;
-            }
-            row.innerHTML = `
-                <td>
-                    <div class="user-cell">
-                        <div class="user-avatar-small">${(user.full_name || user.username || 'U')[0] || 'U'}</div>
-                        <div class="user-info">
-                            <div class="user-name">${user.full_name || user.username || 'Пользователь'}</div>
-                            <div class="user-id">ID: ${user.telegram_id}</div>
-                        </div>
-                    </div>
-                </td>
-                <td><span class="status-badge status-${statusBadge}">${statusText}</span></td>
-                <td>${subscriptionLabel}</td>
-                <td>${toLocaleCurrency(user.balance_rub)}</td>
-                <td><button class="action-btn" data-action="view-user" data-user-id="${user.id}">Подробнее</button></td>
-            `;
-            els.recentUsersBody.appendChild(row);
-        });
-    }
-
-    function renderUsersOverview(overview) {
-        if (!els.usersOverview) return;
-        els.usersOverview.innerHTML = '';
-        if (!overview) return;
-        const cards = [
-            { label: 'Всего пользователей', value: overview.totals?.all ?? 0, emoji: '👥' },
-            { label: 'Активные', value: overview.totals?.active ?? 0, emoji: '✅' },
-            { label: 'Заблокированные', value: overview.totals?.blocked ?? 0, emoji: '🚫' },
-            { label: 'Триал подписки', value: overview.subscriptions?.trials ?? 0, emoji: '🎯' },
-        ];
-        cards.forEach((card) => {
-            const element = document.createElement('div');
-            element.className = 'stat-card';
-            element.innerHTML = `
-                <div class="stat-header">
-                    <div>
-                        <div class="stat-value">${card.value.toLocaleString('ru-RU')}</div>
-                        <div class="stat-label">${card.label}</div>
-                    </div>
-                    <div class="stat-icon">${card.emoji}</div>
-                </div>
-            `;
-            els.usersOverview.appendChild(element);
-        });
-    }
-
-    function renderPagination(container, pagination, onPageChange) {
-        if (!container || !pagination) return;
-        container.innerHTML = '';
-        const totalPages = Math.max(1, Math.ceil((pagination.total || 0) / pagination.limit));
-        if (totalPages <= 1) {
-            container.style.display = 'none';
-            return;
-        }
-        container.style.display = 'flex';
-        const prev = document.createElement('button');
-        prev.className = 'action-btn';
-        prev.type = 'button';
-        prev.disabled = pagination.page <= 1;
-        prev.textContent = '⬅️';
-        prev.addEventListener('click', () => onPageChange(Math.max(1, pagination.page - 1)));
-        const next = document.createElement('button');
-        next.className = 'action-btn';
-        next.type = 'button';
-        next.disabled = pagination.page >= totalPages;
-        next.textContent = '➡️';
-        next.addEventListener('click', () => onPageChange(Math.min(totalPages, pagination.page + 1)));
-        const label = document.createElement('span');
-        label.style.color = 'var(--text-tertiary)';
-        label.textContent = `Страница ${pagination.page} из ${totalPages}`;
-        container.append(prev, label, next);
-    }
-
-    function renderUsersTable(items, pagination) {
-        if (!els.usersTableBody) return;
-        els.usersTableBody.innerHTML = '';
-        const hasItems = Array.isArray(items) && items.length > 0;
-        els.usersEmpty.style.display = hasItems ? 'none' : 'block';
-        if (!hasItems) {
-            renderPagination(els.usersPagination, null, () => {});
-            return;
-        }
-        items.forEach((user) => {
-            const row = document.createElement('tr');
-            const statusBadge = user.status === 'active' ? 'success' : user.status === 'blocked' ? 'danger' : 'warning';
-            const statusText = user.status === 'active' ? 'Активен' : user.status === 'blocked' ? 'Заблокирован' : 'Удален';
-            const subscription = user.subscription || {};
-            let subscriptionLabel = '—';
-            if (subscription.status_display) {
-                subscriptionLabel = subscription.status_display;
-            } else if (subscription.status) {
-                subscriptionLabel = subscription.status;
-            }
-            row.innerHTML = `
-                <td>${user.full_name || user.username || '—'}<div class="user-id">${user.telegram_id}</div></td>
-                <td><span class="status-badge status-${statusBadge}">${statusText}</span></td>
-                <td>${subscriptionLabel}</td>
-                <td>${toLocaleCurrency(user.balance_rub)}</td>
-                <td><button class="action-btn" data-action="view-user" data-user-id="${user.id}">Подробнее</button></td>
-            `;
-            els.usersTableBody.appendChild(row);
-        });
-        renderPagination(els.usersPagination, pagination, (page) => {
-            state.caches.users.page = page;
-            loadUsers({ force: true });
-        });
-    }
-
-    async function viewUser(userId) {
-        try {
-            const details = await callApi(`/api/users/${userId}`);
-            const user = details.user || {};
-            const transactions = details.transactions || [];
-            const lastTransaction = transactions[0];
-            const info = [
-                `Имя: ${user.full_name || user.username || user.telegram_id}`,
-                `Баланс: ${toLocaleCurrency(user.balance_rub)}`,
-                lastTransaction ? `Последняя операция: ${toLocaleCurrency(lastTransaction.amount_rub)} (${new Date(lastTransaction.created_at).toLocaleString('ru-RU')})` : 'Последняя операция: —',
-            ].join('\n');
-            alert(info);
-        } catch (error) {
-            showToast(error.message, 'error');
-        }
-    }
-
-    function renderSubscriptionsOverview(overview) {
-        if (!els.subscriptionsOverview) return;
-        els.subscriptionsOverview.innerHTML = '';
-        if (!overview) return;
-        const cards = [
-            { label: 'Всего подписок', value: overview.total ?? 0, emoji: '📦' },
-            { label: 'Активные', value: overview.active ?? 0, emoji: '🟢' },
-            { label: 'Триал', value: overview.trials ?? 0, emoji: '🎯' },
-            { label: 'Истекают 7 дней', value: overview.expiring_soon ?? 0, emoji: '⏰' },
-        ];
-        cards.forEach((card) => {
-            const element = document.createElement('div');
-            element.className = 'stat-card';
-            element.innerHTML = `
-                <div class="stat-header">
-                    <div>
-                        <div class="stat-value">${card.value.toLocaleString('ru-RU')}</div>
-                        <div class="stat-label">${card.label}</div>
-                    </div>
-                    <div class="stat-icon">${card.emoji}</div>
-                </div>
-            `;
-            els.subscriptionsOverview.appendChild(element);
-        });
-    }
-
-    function renderSubscriptionsTable(items, pagination) {
-        if (!els.subscriptionsTableBody) return;
-        els.subscriptionsTableBody.innerHTML = '';
-        const hasItems = Array.isArray(items) && items.length > 0;
-        els.subscriptionsEmpty.style.display = hasItems ? 'none' : 'block';
-        if (!hasItems) {
-            renderPagination(els.subscriptionsPagination, null, () => {});
-            return;
-        }
-        items.forEach((subscription) => {
-            const row = document.createElement('tr');
-            const user = subscription.user || {};
-            const endDate = subscription.end_date ? new Date(subscription.end_date).toLocaleString('ru-RU') : '—';
-            row.innerHTML = `
-                <td>${user.full_name || user.username || '—'}<div class="user-id">${user.telegram_id ?? ''}</div></td>
-                <td>${subscription.status_display || subscription.status}</td>
-                <td>${endDate}</td>
-                <td>${subscription.traffic_used_gb ?? 0}/${subscription.traffic_limit_gb ?? 0} ГБ</td>
-                <td>${subscription.device_limit ?? 0}</td>
-            `;
-            els.subscriptionsTableBody.appendChild(row);
-        });
-        renderPagination(els.subscriptionsPagination, pagination, (page) => {
-            state.caches.subscriptions.page = page;
-            loadSubscriptions({ force: true });
-        });
-    }
-
-    function renderExpiringSubscriptions(expiring) {
-        if (!els.subscriptionsExpiring) return;
-        const items = expiring?.items || [];
-        els.subscriptionsExpiringBody.innerHTML = '';
-        if (!items.length) {
-            els.subscriptionsExpiringBody.innerHTML = '<tr><td colspan="5" style="padding: 24px; text-align: center; color: var(--text-tertiary);">Нет истекающих подписок</td></tr>';
-        } else {
-            items.forEach((subscription) => {
-                const user = subscription.user || {};
-                const endDate = subscription.end_date ? new Date(subscription.end_date).toLocaleString('ru-RU') : '—';
-                const row = document.createElement('tr');
-                row.innerHTML = `
-                    <td>${user.full_name || user.username || '—'}<div class="user-id">${user.telegram_id ?? ''}</div></td>
-                    <td>${subscription.status_display || subscription.status}</td>
-                    <td>${endDate}</td>
-                    <td>${subscription.traffic_used_gb ?? 0}/${subscription.traffic_limit_gb ?? 0} ГБ</td>
-                    <td>${subscription.device_limit ?? 0}</td>
-                `;
-                els.subscriptionsExpiringBody.appendChild(row);
-            });
-        }
-        if (expiring?.period) {
-            const from = new Date(expiring.period.from).toLocaleDateString('ru-RU');
-            const to = new Date(expiring.period.to).toLocaleDateString('ru-RU');
-            els.subscriptionsExpiringPeriod.textContent = `Период: ${from} — ${to}`;
-        }
-        els.subscriptionsExpiring.style.display = 'block';
-    }
-
-    function renderSupportOverview(overview) {
-        if (!els.supportOverview) return;
-        els.supportOverview.innerHTML = '';
-        if (!overview) return;
-        const cards = [
-            { label: 'Открытые', value: overview.open ?? 0, emoji: '🔴' },
-            { label: 'С ответом', value: overview.answered ?? 0, emoji: '🟡' },
-            { label: 'Ожидают', value: overview.pending ?? 0, emoji: '⏳' },
-            { label: 'Закрытые', value: overview.closed ?? 0, emoji: '🟢' },
-        ];
-        cards.forEach((card) => {
-            const element = document.createElement('div');
-            element.className = 'stat-card';
-            element.innerHTML = `
-                <div class="stat-header">
-                    <div>
-                        <div class="stat-value">${card.value.toLocaleString('ru-RU')}</div>
-                        <div class="stat-label">${card.label}</div>
-                    </div>
-                    <div class="stat-icon">${card.emoji}</div>
-                </div>
-            `;
-            els.supportOverview.appendChild(element);
-        });
-    }
-
-    function renderSupportTable(items) {
-        if (!els.supportTableBody) return;
-        els.supportTableBody.innerHTML = '';
-        const hasItems = Array.isArray(items) && items.length > 0;
-        els.supportEmpty.style.display = hasItems ? 'none' : 'block';
-        if (!hasItems) return;
-        items.forEach((ticket) => {
-            const row = document.createElement('tr');
-            const user = ticket.user || {};
-            const updated = ticket.updated_at ? new Date(ticket.updated_at).toLocaleString('ru-RU') : '—';
-            row.dataset.ticketId = ticket.id;
-            row.innerHTML = `
-                <td>${ticket.id}</td>
-                <td>${user.full_name || user.username || user.telegram_id || '—'}</td>
-                <td>${ticket.status_emoji || ''} ${ticket.status}</td>
-                <td>${ticket.priority}</td>
-                <td>${updated}</td>
-            `;
-            els.supportTableBody.appendChild(row);
-        });
-    }
-
-    function renderSupportDetail(ticket) {
-        if (!els.supportDetail) return;
-        if (!ticket) {
-            els.supportDetail.classList.add('hidden');
-            return;
-        }
-        els.supportDetailTitle.textContent = `Тикет #${ticket.id} • ${ticket.title}`;
-        els.supportDetailBody.innerHTML = '';
-        (ticket.messages || []).forEach((message) => {
-            const block = document.createElement('div');
-            block.style.padding = '12px 0';
-            block.innerHTML = `
-                <div style="font-weight:600; color: var(--text-primary);">${message.is_admin ? 'Администратор' : 'Пользователь'}</div>
-                <div style="color: var(--text-secondary); white-space: pre-wrap;">${message.text}</div>
-                <div style="font-size:12px; color: var(--text-tertiary);">${message.created_at ? new Date(message.created_at).toLocaleString('ru-RU') : ''}</div>
-            `;
-            els.supportDetailBody.appendChild(block);
-        });
-        els.supportDetail.classList.remove('hidden');
-    }
-
-    function renderPromotionsOverview(overview) {
-        if (!els.promotionsOverview) return;
-        els.promotionsOverview.innerHTML = '';
-        if (!overview) return;
-        const cards = [
-            { label: 'Активных промокодов', value: overview.promocodes?.active ?? 0, emoji: '🎫' },
-            { label: 'Всего кампаний', value: overview.campaigns?.total ?? 0, emoji: '📣' },
-            { label: 'Активных кампаний', value: overview.campaigns?.active ?? 0, emoji: '🔥' },
-            { label: 'Промо-группы', value: overview.groups?.total ?? 0, emoji: '👥' },
-        ];
-        cards.forEach((card) => {
-            const element = document.createElement('div');
-            element.className = 'stat-card';
-            element.innerHTML = `
-                <div class="stat-header">
-                    <div>
-                        <div class="stat-value">${card.value.toLocaleString('ru-RU')}</div>
-                        <div class="stat-label">${card.label}</div>
-                    </div>
-                    <div class="stat-icon">${card.emoji}</div>
-                </div>
-            `;
-            els.promotionsOverview.appendChild(element);
-        });
-    }
-
-    function renderPromocodes(codes) {
-        if (!els.promocodesBody) return;
-        els.promocodesBody.innerHTML = '';
-        const hasItems = Array.isArray(codes) && codes.length > 0;
-        els.promocodesEmpty.style.display = hasItems ? 'none' : 'block';
-        if (!hasItems) return;
-        codes.forEach((code) => {
-            const row = document.createElement('tr');
-            const bonus = code.balance_bonus_kopeks ? `${toLocaleCurrency(code.balance_bonus_kopeks / 100)} на баланс` : code.subscription_days ? `${code.subscription_days} дней` : '—';
-            const usage = `${code.current_uses ?? 0} / ${code.max_uses ?? 0}`;
-            const status = code.is_active ? 'Активен' : 'Отключен';
-            row.innerHTML = `
-                <td>${code.code}</td>
-                <td>${code.type}</td>
-                <td>${bonus}</td>
-                <td>${usage}</td>
-                <td>${status}</td>
-            `;
-            els.promocodesBody.appendChild(row);
-        });
-    }
-
-    function renderCampaigns(campaigns) {
-        if (!els.campaignsBody) return;
-        els.campaignsBody.innerHTML = '';
-        const hasItems = Array.isArray(campaigns) && campaigns.length > 0;
-        els.campaignsEmpty.style.display = hasItems ? 'none' : 'block';
-        if (!hasItems) return;
-        campaigns.forEach((campaign) => {
-            const row = document.createElement('tr');
-            row.innerHTML = `
-                <td>${campaign.name}</td>
-                <td>${campaign.start_parameter}</td>
-                <td>${campaign.bonus_type}</td>
-                <td>${campaign.registrations_count ?? 0}</td>
-                <td>${campaign.is_active ? 'Активна' : 'Отключена'}</td>
-            `;
-            els.campaignsBody.appendChild(row);
-        });
-    }
-
-    function renderPromoGroups(groups) {
-        if (!els.promoGroupsBody) return;
-        els.promoGroupsBody.innerHTML = '';
-        const hasItems = Array.isArray(groups) && groups.length > 0;
-        els.promoGroupsEmpty.style.display = hasItems ? 'none' : 'block';
-        if (!hasItems) return;
-        groups.forEach((group) => {
-            const row = document.createElement('tr');
-            row.innerHTML = `
-                <td>${group.name}${group.is_default ? ' (по умолчанию)' : ''}</td>
-                <td>${group.server_discount_percent ?? 0}%</td>
-                <td>${group.traffic_discount_percent ?? 0}%</td>
-                <td>${group.device_discount_percent ?? 0}%</td>
-                <td>${group.users_count ?? 0}</td>
-            `;
-            els.promoGroupsBody.appendChild(row);
-        });
-    }
-
-    function renderCommunicationsOverview(overview) {
-        if (!els.communicationsOverview) return;
-        els.communicationsOverview.innerHTML = '';
-        if (!overview) return;
-        const cards = [
-            { label: 'Активных приветствий', value: overview.welcome?.active ?? 0, emoji: '👋' },
-            { label: 'Сообщений в меню', value: overview.user_messages?.active ?? 0, emoji: '📨' },
-        ];
-        cards.forEach((card) => {
-            const element = document.createElement('div');
-            element.className = 'stat-card';
-            element.innerHTML = `
-                <div class="stat-header">
-                    <div>
-                        <div class="stat-value">${card.value.toLocaleString('ru-RU')}</div>
-                        <div class="stat-label">${card.label}</div>
-                    </div>
-                    <div class="stat-icon">${card.emoji}</div>
-                </div>
-            `;
-            els.communicationsOverview.appendChild(element);
-        });
-    }
-
-    function renderWelcomeTexts(items) {
-        if (!els.welcomeTextsList) return;
-        els.welcomeTextsList.innerHTML = '';
-        if (!Array.isArray(items) || !items.length) {
-            els.welcomeTextsList.innerHTML = '<div class="settings-empty">Нет приветственных текстов</div>';
-            return;
-        }
-        items.forEach((item) => {
-            const block = document.createElement('div');
-            block.className = 'setting-item';
-            block.innerHTML = `
-                <div>
-                    <div class="setting-name">${item.is_enabled ? 'Активно' : 'Выключено'}</div>
-                    <div class="setting-key">ID ${item.id}</div>
-                </div>
-                <div class="setting-value">${item.text_content}</div>
-                <div class="setting-actions">${item.is_active ? '🟢 Активно' : '⚪️ Не активно'}</div>
-            `;
-            els.welcomeTextsList.appendChild(block);
-        });
-    }
-
-    function renderUserMessages(items) {
-        if (!els.userMessagesList) return;
-        els.userMessagesList.innerHTML = '';
-        if (!Array.isArray(items) || !items.length) {
-            els.userMessagesList.innerHTML = '<div class="settings-empty">Нет сообщений</div>';
-            return;
-        }
-        items.forEach((item) => {
-            const block = document.createElement('div');
-            block.className = 'setting-item';
-            block.innerHTML = `
-                <div>
-                    <div class="setting-name">Сообщение #${item.id}</div>
-                    <div class="setting-key">Порядок: ${item.sort_order}</div>
-                </div>
-                <div class="setting-value">${item.message_text}</div>
-                <div class="setting-actions">${item.is_active ? '🟢 Активно' : '⚪️ Выключено'}</div>
-            `;
-            els.userMessagesList.appendChild(block);
-        });
-    }
-
-    function countryCodeToEmoji(code) {
-        if (!code) return '🌍';
-        const upper = code.trim().slice(0, 2).toUpperCase();
-        return upper.replace(/./g, (char) => String.fromCodePoint(char.charCodeAt(0) + 127397));
-    }
-
     function renderServers(servers) {
-        state.servers = Array.isArray(servers) ? servers : [];
-        if (els.navServersCount) {
-            els.navServersCount.textContent = state.servers.length.toString();
-        }
-        if (!els.serversContainer || !els.serversEmpty) return;
-        els.serversContainer.innerHTML = '';
-        if (!state.servers.length) {
-            els.serversEmpty.style.display = 'block';
+        els.serversList.innerHTML = '';
+        if (!Array.isArray(servers) || !servers.length) {
+            els.serversList.innerHTML = '<div class="settings-empty">Нет доступных серверов</div>';
+            els.serversBadge.textContent = '0 онлайн';
+            els.navServersCount.textContent = '0';
             return;
         }
-        els.serversEmpty.style.display = 'none';
-        state.servers.forEach((server) => {
+        els.serversBadge.textContent = `${servers.filter((s) => s.is_available).length} онлайн`;
+        els.navServersCount.textContent = servers.length.toString();
+        servers.forEach((server) => {
             const card = document.createElement('div');
             card.className = 'server-card';
-            const capacity = server.capacity_percent ?? 0;
-            const statusClass = server.is_available ? '' : 'offline';
-            card.innerHTML = `
-                <div class="server-card-header">
-                    <div class="server-info">
-                        <div class="server-flag">${countryCodeToEmoji(server.country_code)}</div>
-                        <div>
-                            <div class="server-name">${server.name}</div>
-                            <div class="server-status-badge ${statusClass}">${server.status_label || (server.is_available ? 'Доступен' : 'Недоступен')}</div>
-                        </div>
-                    </div>
-                    <div class="server-stats">
-                        <div class="server-capacity">
-                            <div class="server-capacity-bar" style="width: ${capacity}%;"></div>
-                            <div class="server-capacity-legend">${server.current_users ?? 0} / ${server.max_users ?? '∞'}</div>
-                        </div>
-                        <div class="server-price">${toLocaleCurrency(server.price_rub)}</div>
+            const header = document.createElement('div');
+            header.className = 'server-card-header';
+            header.innerHTML = `
+                <div class="server-info">
+                    <span class="server-flag">${countryCodeToEmoji(server.country_code)}</span>
+                    <div>
+                        <div class="server-name">${server.name}</div>
+                        <div class="server-status-badge ${server.is_available ? '' : 'offline'}">${server.status_label}</div>
                     </div>
                 </div>
+                <div class="server-stats">
+                    <div class="server-stat">
+                        <div class="server-stat-value">${server.current_users}</div>
+                        <div class="server-stat-label">Пользователей</div>
+                    </div>
+                    <div class="server-stat">
+                        <div class="server-stat-value">${server.max_users ?? '∞'}</div>
+                        <div class="server-stat-label">Лимит</div>
+                    </div>
+                    <div class="server-stat">
+                        <div class="server-stat-value">${server.capacity_percent}%</div>
+                        <div class="server-stat-label">Заполнен</div>
+                    </div>
+                    <div class="expand-icon">▼</div>
+                </div>
             `;
-            els.serversContainer.appendChild(card);
+            const expanded = document.createElement('div');
+            expanded.className = 'server-expanded-content';
+            expanded.innerHTML = `
+                <div class="server-expanded-inner">
+                    <div class="server-details-grid">
+                        <div class="server-detail">
+                            <div class="server-detail-title">Цена</div>
+                            <div class="server-detail-value">${toLocaleCurrency(server.price_rub)}</div>
+                        </div>
+                        <div class="server-detail">
+                            <div class="server-detail-title">UUID</div>
+                            <div class="server-detail-value" style="font-size: 12px; color: var(--text-tertiary);">${server.squad_uuid}</div>
+                        </div>
+                        <div class="server-detail">
+                            <div class="server-detail-title">Статус</div>
+                            <div class="server-detail-value">${server.status_label}</div>
+                        </div>
+                    </div>
+                    ${server.description ? `<div class="server-description">${server.description}</div>` : ''}
+                </div>
+            `;
+            header.addEventListener('click', () => {
+                card.classList.toggle('expanded');
+            });
+            card.appendChild(header);
+            card.appendChild(expanded);
+            els.serversList.appendChild(card);
         });
+    }
+
+    function renderUsers(users) {
+        if (!Array.isArray(users) || !users.length) {
+            els.recentUsersBody.innerHTML = '<tr><td colspan="5" style="padding: 32px; text-align: center; color: var(--text-tertiary);">Нет данных</td></tr>';
+            return;
+        }
+        const fragment = document.createDocumentFragment();
+        users.forEach((user) => {
+            const row = document.createElement('tr');
+            const subscription = user.subscription;
+            let badgeClass = 'status-badge';
+            let badgeText = '—';
+            if (subscription) {
+                if (subscription.is_trial) {
+                    badgeClass += ' trial';
+                    badgeText = 'Триал';
+                } else if (subscription.status === 'expired') {
+                    badgeClass += ' expired';
+                    badgeText = 'Истекла';
+                } else {
+                    badgeText = 'Активна';
+                }
+            }
+            const balance = toLocaleCurrency(user.balance_rub ?? 0);
+
+            const userCell = document.createElement('td');
+            const userContainer = document.createElement('div');
+            userContainer.className = 'user-cell';
+
+            const avatar = document.createElement('div');
+            avatar.className = 'user-avatar-small';
+            const displayName = user.full_name || 'Без имени';
+            avatar.textContent = (displayName || 'U').charAt(0).toUpperCase();
+
+            const info = document.createElement('div');
+            info.className = 'user-info';
+
+            const name = document.createElement('div');
+            name.className = 'user-name';
+            name.textContent = displayName;
+
+            const id = document.createElement('div');
+            id.className = 'user-id';
+            id.textContent = `ID ${user.id ?? '—'}`;
+
+            info.appendChild(name);
+            info.appendChild(id);
+            userContainer.appendChild(avatar);
+            userContainer.appendChild(info);
+            userCell.appendChild(userContainer);
+
+            const statusCell = document.createElement('td');
+            const statusBadge = document.createElement('span');
+            statusBadge.className = 'status-badge';
+            statusBadge.textContent = user.status ?? '—';
+            statusCell.appendChild(statusBadge);
+
+            const subscriptionCell = document.createElement('td');
+            const subscriptionBadge = document.createElement('span');
+            subscriptionBadge.className = badgeClass;
+            subscriptionBadge.textContent = badgeText;
+            subscriptionCell.appendChild(subscriptionBadge);
+
+            const balanceCell = document.createElement('td');
+            balanceCell.textContent = balance;
+
+            const actionsCell = document.createElement('td');
+            actionsCell.className = 'table-actions-cell';
+            const viewButton = document.createElement('button');
+            viewButton.className = 'icon-btn';
+            viewButton.dataset.action = 'view-user';
+            if (user.id != null) {
+                viewButton.dataset.userId = String(user.id);
+            }
+            viewButton.title = 'Подробнее';
+            viewButton.textContent = 'ℹ️';
+            actionsCell.appendChild(viewButton);
+
+            row.appendChild(userCell);
+            row.appendChild(statusCell);
+            row.appendChild(subscriptionCell);
+            row.appendChild(balanceCell);
+            row.appendChild(actionsCell);
+
+            fragment.appendChild(row);
+        });
+        els.recentUsersBody.textContent = '';
+        els.recentUsersBody.appendChild(fragment);
     }
 
     function renderSettingsCategories(categories) {
-        if (!els.settingsContainer) return;
         els.settingsContainer.innerHTML = '';
         if (!Array.isArray(categories) || !categories.length) {
-            els.settingsContainer.innerHTML = '<div class="settings-empty">Настройки недоступны</div>';
+            els.settingsContainer.innerHTML = '<div class="settings-empty">Нет доступных настроек</div>';
             return;
         }
-        categories.sort((a, b) => (a.label || '').localeCompare(b.label || ''));
         categories.forEach((category) => {
             const details = document.createElement('details');
             details.className = 'setting-category';
@@ -2425,7 +1842,9 @@
         const item = items.find((entry) => entry.key === key);
         if (!item) return;
         const choices = item.choices || [];
-        const hint = choices.length ? `\nВозможные значения:\n${choices.map((choice) => `• ${choice.label} (${choice.value})`).join('\n')}` : '';
+        const hint = choices.length
+            ? `\nВозможные значения:\n${choices.map((choice) => `• ${choice.label} (${choice.value})`).join('\n')}`
+            : '';
         const currentValue = item.value ?? '';
         const input = prompt(`Введите новое значение для «${item.name}»${hint}`, currentValue);
         if (input === null) {
@@ -2436,7 +1855,7 @@
             if (input.trim().toLowerCase() === 'null' || input.trim() === '') {
                 payload.value = null;
             }
-            await callApi(`/api/settings/${key}`, { method: 'PUT', body: payload });
+            const updated = await callApi(`/api/settings/${key}`, { method: 'PUT', body: payload });
             showToast('Настройка обновлена', 'success');
             state.settingsCache.delete(category);
             const details = els.settingsContainer.querySelector(`details[data-category="${category}"]`);
@@ -2467,253 +1886,54 @@
         }
     }
 
-    function renderHealth(data) {
-        state.health = data;
-        const maintenance = data?.bot?.maintenance;
-        if (els.botStatusIndicator) {
-            els.botStatusIndicator.classList.remove('paused', 'stopped');
-            if (maintenance) {
-                els.botStatusIndicator.classList.add('paused');
-            }
-        }
-        if (els.maintenanceLabel) {
-            els.maintenanceLabel.textContent = maintenance ? 'Вкл' : 'Выкл';
-        }
-        if (els.maintenanceActionLabel) {
-            els.maintenanceActionLabel.textContent = maintenance ? 'Выключить техработы' : 'Включить техработы';
-        }
-    }
-
-    function renderSystemOverview(health) {
-        if (!els.systemOverview) return;
-        els.systemOverview.innerHTML = '';
-        if (!health) return;
-        const cards = [
-            { label: 'Бот', value: health.bot?.running ? 'Работает' : 'Остановлен', emoji: health.bot?.running ? '✅' : '⛔' },
-            { label: 'Техработы', value: health.bot?.maintenance ? 'Включены' : 'Выключены', emoji: health.bot?.maintenance ? '🚧' : '🟢' },
-            { label: 'Мониторинг', value: health.services?.monitoring_running ? 'Активен' : 'Выключен', emoji: health.services?.monitoring_running ? '📈' : '🛑' },
-            { label: 'Автобэкап', value: health.services?.auto_backup_enabled ? 'Включен' : 'Выключен', emoji: '💾' },
-        ];
-        cards.forEach((card) => {
-            const element = document.createElement('div');
-            element.className = 'stat-card';
-            element.innerHTML = `
-                <div class="stat-header">
-                    <div>
-                        <div class="stat-value">${card.value}</div>
-                        <div class="stat-label">${card.label}</div>
-                    </div>
-                    <div class="stat-icon">${card.emoji}</div>
-                </div>
-            `;
-            els.systemOverview.appendChild(element);
-        });
-        if (els.systemActions) {
-            els.systemActions.innerHTML = '';
-            const actions = [
-                { label: 'Перезагрузить конфигурацию', action: 'reload-config', emoji: '🔄' },
-                { label: 'Создать бекап', action: 'create-backup', emoji: '💾' },
-                { label: 'Отправить дневной отчет', action: 'send-report', emoji: '📬' },
-                { label: health.bot?.maintenance ? 'Выключить техработы' : 'Включить техработы', action: 'toggle-maintenance', emoji: '🚧' },
-            ];
-            actions.forEach((item) => {
-                const btn = document.createElement('button');
-                btn.className = 'action-btn';
-                btn.type = 'button';
-                btn.dataset.action = item.action;
-                btn.innerHTML = `<span>${item.emoji}</span><span>${item.label}</span>`;
-                els.systemActions.appendChild(btn);
-            });
-        }
-    }
-
-    function showLogin(message = '') {
-        els.authOverlay.classList.remove('hidden');
-        els.loginError.textContent = message;
-        setTimeout(() => els.loginToken.focus(), 50);
-    }
-
-    function hideLogin() {
-        els.authOverlay.classList.add('hidden');
-        els.loginError.textContent = '';
-        els.loginToken.value = '';
-    }
-
-    async function loadDashboard({ force = false } = {}) {
-        const [summary, revenue, users, health] = await Promise.all([
-            callApi('/api/dashboard/summary'),
-            callApi('/api/dashboard/revenue?days=14'),
-            callApi('/api/users/recent?limit=8'),
-            callApi('/api/health'),
-        ]);
-        renderSummary(summary);
-        renderRevenue(revenue);
-        renderRecentUsers(users);
-        renderHealth(health);
-        await loadServers({ force, silent: true });
-    }
-
-    async function loadUsers({ force = false } = {}) {
-        const cache = state.caches.users;
-        if (!force && state.lastUsersPage === cache.page && state.lastUsersSearch === cache.search && state.lastUsersOrder === cache.order) {
-            return;
-        }
-        const overview = await callApi('/api/users/overview');
-        const params = new URLSearchParams({
-            page: cache.page.toString(),
-            limit: '20',
-        });
-        if (cache.search) params.set('search', cache.search);
-        if (cache.order) params.set('order', cache.order);
-        const list = await callApi(`/api/users?${params.toString()}`);
-        renderUsersOverview(overview);
-        renderUsersTable(list.items || [], list.pagination || {});
-        state.lastUsersPage = cache.page;
-        state.lastUsersSearch = cache.search;
-        state.lastUsersOrder = cache.order;
-    }
-
-    async function loadSubscriptions({ force = false } = {}) {
-        const cache = state.caches.subscriptions;
-        if (!force && state.lastSubscriptionsPage === cache.page && state.lastSubscriptionsStatus === cache.status) {
-            return;
-        }
-        const overview = await callApi('/api/subscriptions/overview');
-        const params = new URLSearchParams({ page: cache.page.toString(), limit: '20' });
-        if (cache.status) params.set('status', cache.status);
-        const list = await callApi(`/api/subscriptions?${params.toString()}`);
-        renderSubscriptionsOverview(overview);
-        renderSubscriptionsTable(list.items || [], list.pagination || {});
-        if (els.subscriptionsExpiring) {
-            els.subscriptionsExpiring.style.display = 'none';
-        }
-        state.lastSubscriptionsPage = cache.page;
-        state.lastSubscriptionsStatus = cache.status;
-    }
-
-    async function loadExpiringSubscriptions() {
-        const expiring = await callApi('/api/subscriptions/expiring?days=7');
-        renderExpiringSubscriptions(expiring);
-    }
-
-    async function loadSupport({ force = false } = {}) {
-        const cache = state.caches.support;
-        if (!force && state.lastSupportPage === cache.page && state.lastSupportStatus === cache.status) {
-            return;
-        }
-        const overview = await callApi('/api/support/overview');
-        const params = new URLSearchParams({ page: cache.page.toString(), limit: '20' });
-        if (cache.status) params.set('status', cache.status);
-        const list = await callApi(`/api/support/tickets?${params.toString()}`);
-        renderSupportOverview(overview);
-        renderSupportTable(list.items || []);
-        renderSupportDetail(null);
-        state.lastSupportPage = cache.page;
-        state.lastSupportStatus = cache.status;
-    }
-
-    async function loadSupportDetail(ticketId) {
-        const ticket = await callApi(`/api/support/tickets/${ticketId}`);
-        renderSupportDetail(ticket);
-    }
-
-    async function loadPromotions() {
-        const [overview, codes, campaigns, groups] = await Promise.all([
-            callApi('/api/promotions/overview'),
-            callApi('/api/promotions/promocodes'),
-            callApi('/api/promotions/campaigns'),
-            callApi('/api/promotions/groups'),
-        ]);
-        renderPromotionsOverview(overview);
-        renderPromocodes(codes.items || []);
-        renderCampaigns(campaigns.items || []);
-        renderPromoGroups(groups.items || []);
-    }
-
-    async function loadCommunications() {
-        const [overview, welcome, messages] = await Promise.all([
-            callApi('/api/communications/overview'),
-            callApi('/api/communications/welcome-texts'),
-            callApi('/api/communications/user-messages'),
-        ]);
-        renderCommunicationsOverview(overview);
-        renderWelcomeTexts(welcome.items || []);
-        renderUserMessages(messages.items || []);
-    }
-
-    async function loadServers({ force = false, silent = false } = {}) {
-        if (!force && state.servers.length) return;
-        const data = await callApi('/api/servers');
-        renderServers(data || []);
-        if (!silent && state.currentView === 'servers') {
-            // nothing extra
-        }
-    }
-
-    async function ensureSettingsLoaded() {
-        if (state.settingsLoaded) return;
-        const categories = await callApi('/api/settings/categories');
-        renderSettingsCategories(categories);
-        state.settingsLoaded = true;
-    }
-
-    async function loadSystem() {
-        if (!state.health) {
-            const health = await callApi('/api/health');
-            renderHealth(health);
-        }
-        renderSystemOverview(state.health);
-    }
-
-    async function switchView(view, { force = false } = {}) {
-        if (!view) return;
-        setActiveView(view);
+    async function viewUser(userId) {
         try {
-            switch (view) {
-                case 'dashboard':
-                    await loadDashboard({ force });
-                    break;
-                case 'users':
-                    await loadUsers({ force });
-                    break;
-                case 'subscriptions':
-                    await loadSubscriptions({ force });
-                    break;
-                case 'support':
-                    await loadSupport({ force });
-                    break;
-                case 'promotions':
-                    await loadPromotions();
-                    break;
-                case 'communications':
-                    await loadCommunications();
-                    break;
-                case 'servers':
-                    await loadServers({ force: true });
-                    break;
-                case 'settings':
-                    await ensureSettingsLoaded();
-                    break;
-                case 'system':
-                    await loadSystem();
-                    break;
-                default:
-                    break;
-            }
+            const details = await callApi(`/api/users/${userId}`);
+            const user = details.user;
+            const transactions = details.transactions || [];
+            const lastTransaction = transactions[0];
+            const info = [
+                `Имя: ${user.full_name}`,
+                `Баланс: ${toLocaleCurrency(user.balance_rub)}`,
+                lastTransaction ? `Последняя операция: ${toLocaleCurrency(lastTransaction.amount_rub)} (${new Date(lastTransaction.created_at).toLocaleString('ru-RU')})` : 'Последняя операция: —',
+            ].join('\n');
+            alert(info);
         } catch (error) {
             showToast(error.message, 'error');
         }
+    }
+
+    async function refreshHealth() {
+        const data = await callApi('/api/health');
+        renderHealth(data);
+    }
+
+    async function loadAllData() {
+        const [health, summary, revenue, users, servers, categories] = await Promise.all([
+            callApi('/api/health'),
+            callApi('/api/dashboard/summary'),
+            callApi('/api/dashboard/revenue?days=14'),
+            callApi('/api/users/recent?limit=8'),
+            callApi('/api/servers'),
+            callApi('/api/settings/categories'),
+        ]);
+        renderHealth(health);
+        renderSummary(summary);
+        renderRevenue(revenue);
+        renderUsers(users);
+        renderServers(servers);
+        renderSettingsCategories(categories);
     }
 
     async function handleAction(action) {
         try {
             switch (action) {
                 case 'refresh':
-                    await switchView(state.currentView, { force: true });
+                    await loadAllData();
                     showToast('Данные обновлены', 'success');
                     break;
                 case 'refresh-users':
-                    await loadUsers({ force: true });
+                    renderUsers(await callApi('/api/users/recent?limit=8'));
                     showToast('Список пользователей обновлен', 'success');
                     break;
                 case 'reload-config':
@@ -2735,9 +1955,7 @@
                         await callApi('/api/bot/control', { method: 'POST', body: { action: 'enable_maintenance' } });
                     }
                     showToast('Статус техработ обновлен', 'success');
-                    state.health = await callApi('/api/health');
-                    renderHealth(state.health);
-                    renderSystemOverview(state.health);
+                    await refreshHealth();
                     break;
                 default:
                     break;
@@ -2760,7 +1978,7 @@
                 state.token = token;
                 localStorage.setItem('webadminToken', token);
                 hideLogin();
-                await switchView('dashboard', { force: true });
+                await loadAllData();
             } catch (error) {
                 els.loginError.textContent = error.message;
             }
@@ -2791,111 +2009,33 @@
             await handleAction(action);
         });
 
-        els.navItems.forEach((item) => {
-            item.addEventListener('click', (event) => {
-                event.preventDefault();
-                const view = item.dataset.view;
-                if (view) {
-                    switchView(view);
+        document.querySelectorAll('[data-action]').forEach((button) => {
+            button.addEventListener('click', async () => {
+                const action = button.dataset.action;
+                if (['reload-config', 'create-backup', 'toggle-maintenance', 'refresh', 'refresh-users'].includes(action)) {
+                    await handleAction(action);
                 }
             });
         });
 
-        if (els.usersSearch) {
-            els.usersSearch.addEventListener('input', (event) => {
-                state.caches.users.search = event.target.value.trim();
-                state.caches.users.page = 1;
-                loadUsers({ force: true });
-            });
-        }
+        els.recentUsersBody.addEventListener('click', async (event) => {
+            const button = event.target.closest('[data-action="view-user"]');
+            if (!button) return;
+            const userId = Number(button.dataset.userId);
+            if (!Number.isFinite(userId)) return;
+            await viewUser(userId);
+        });
 
-        if (els.usersOrder) {
-            els.usersOrder.addEventListener('change', (event) => {
-                state.caches.users.order = event.target.value;
-                state.caches.users.page = 1;
-                loadUsers({ force: true });
-            });
-        }
-
-        if (els.subscriptionsStatus) {
-            els.subscriptionsStatus.addEventListener('change', (event) => {
-                state.caches.subscriptions.status = event.target.value;
-                state.caches.subscriptions.page = 1;
-                loadSubscriptions({ force: true });
-            });
-        }
-
-        if (els.subscriptionsExpiringBtn) {
-            els.subscriptionsExpiringBtn.addEventListener('click', async () => {
-                await loadExpiringSubscriptions();
-            });
-        }
-
-        if (els.supportStatus) {
-            els.supportStatus.addEventListener('change', (event) => {
-                state.caches.support.status = event.target.value;
-                state.caches.support.page = 1;
-                loadSupport({ force: true });
-            });
-        }
-
-        if (els.supportTableBody) {
-            els.supportTableBody.addEventListener('click', async (event) => {
-                const row = event.target.closest('tr[data-ticket-id]');
-                if (!row) return;
-                const ticketId = Number(row.dataset.ticketId);
-                if (Number.isNaN(ticketId)) return;
-                const detail = await callApi(`/api/support/tickets/${ticketId}`);
-                renderSupportDetail(detail);
-            });
-        }
-
-        if (els.supportDetailClose) {
-            els.supportDetailClose.addEventListener('click', () => renderSupportDetail(null));
-        }
-
-        if (els.systemActions) {
-            els.systemActions.addEventListener('click', async (event) => {
-                const btn = event.target.closest('[data-action]');
-                if (!btn) return;
-                await handleAction(btn.dataset.action);
-            });
-        }
-
-        if (els.searchInput) {
-            els.searchInput.addEventListener('keydown', (event) => {
-                if (event.key === 'Enter') {
-                    const query = event.target.value.trim();
-                    state.caches.users.search = query;
-                    state.caches.users.page = 1;
-                    switchView('users', { force: true });
-                }
-            });
-        }
-
-        if (els.settingsContainer) {
-            els.settingsContainer.addEventListener('click', async (event) => {
-                const target = event.target.closest('[data-action]');
-                if (!target) return;
-                const { action, key, category } = target.dataset;
-                if (!key || !category) return;
-                if (action === 'edit-setting') {
-                    await editSetting(key, category);
-                } else if (action === 'reset-setting') {
-                    await resetSetting(key, category);
-                }
-            });
-        }
-
-        [els.recentUsersBody, els.usersTableBody].forEach((table) => {
-            if (!table) return;
-            table.addEventListener('click', (event) => {
-                const button = event.target.closest('[data-action="view-user"]');
-                if (!button) return;
-                const userId = Number(button.dataset.userId);
-                if (Number.isNaN(userId)) return;
-                viewUser(userId);
-            });
+        els.settingsContainer.addEventListener('click', async (event) => {
+            const target = event.target.closest('[data-action]');
+            if (!target) return;
+            const { action, key, category } = target.dataset;
+            if (!key || !category) return;
+            if (action === 'edit-setting') {
+                await editSetting(key, category);
+            } else if (action === 'reset-setting') {
+                await resetSetting(key, category);
+            }
         });
     }
 
@@ -2903,7 +2043,7 @@
         bindEvents();
         if (state.token) {
             try {
-                await switchView('dashboard', { force: true });
+                await loadAllData();
             } catch (error) {
                 showToast(error.message, 'error');
                 showLogin('Сессия истекла, выполните вход заново');
