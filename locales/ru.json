@@ -498,6 +498,7 @@
   "PAYMENT_METHODS_TITLE": "💳 <b>Способы пополнения баланса</b>",
   "PAYMENT_METHODS_PROMPT": "Выберите удобный для вас способ оплаты:",
   "PAYMENT_METHODS_FOOTER": "Выберите способ пополнения:",
+  "PAYMENT_RETURN_HOME_BUTTON": "🏠 На главную",
   "PAYMENT_METHOD_STARS_NAME": "⭐ <b>Telegram Stars</b>",
   "PAYMENT_METHOD_STARS_DESCRIPTION": "быстро и удобно",
   "PAYMENT_METHOD_YOOKASSA_NAME": "💳 <b>Банковская карта</b>",

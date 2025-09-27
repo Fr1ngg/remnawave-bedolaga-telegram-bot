@@ -4205,22 +4205,21 @@ async def _should_show_countries_management(user: Optional[User] = None) -> bool
                 if server.is_available and not server.is_full
             ]
 
-            if len(allowed_servers) > 1:
-                logger.debug(
-                    "Промогруппа %s имеет %s доступных серверов, показываем управление странами",
-                    promo_group.id,
-                    len(allowed_servers),
-                )
-                return True
+            if allowed_servers:
+                if len(allowed_servers) > 1:
+                    logger.debug(
+                        "Промогруппа %s имеет %s доступных серверов, показываем управление странами",
+                        promo_group.id,
+                        len(allowed_servers),
+                    )
+                    return True
 
-            if len(promo_group.server_squads) > 1:
                 logger.debug(
-                    "Промогруппа %s имеет %s серверов, но доступен только %s — показываем управление странами",
+                    "Промогруппа %s имеет всего %s доступный сервер, пропускаем шаг выбора стран",
                     promo_group.id,
-                    len(promo_group.server_squads),
                     len(allowed_servers),
                 )
-                return True
+                return False
 
         countries = await _get_available_countries(promo_group_id)
         available_countries = [c for c in countries if c.get('is_available', True)]

@@ -214,7 +214,7 @@ class AdminNotificationService:
     ) -> bool:
         if not self._is_enabled():
             return False
-        
+
         try:
             deposit_count_result = await db.execute(
                 select(func.count())
@@ -230,7 +230,12 @@ class AdminNotificationService:
             payment_method = self._get_payment_method_display(transaction.payment_method)
             balance_change = user.balance_kopeks - old_balance
             referrer_info = await self._get_referrer_info(db, user.referred_by_id)
-            
+            subscription_result = await db.execute(
+                select(Subscription).where(Subscription.user_id == user.id)
+            )
+            subscription = subscription_result.scalar_one_or_none()
+            subscription_status = self._get_subscription_status(subscription)
+
             message = f"""💰 <b>ПОПОЛНЕНИЕ БАЛАНСА</b>
 
 👤 <b>Пользователь:</b> {user.full_name}
@@ -249,7 +254,7 @@ class AdminNotificationService:
 ➕ Изменение: +{settings.format_price(balance_change)}
 
 🔗 <b>Реферер:</b> {referrer_info}
-📱 <b>Подписка:</b> {self._get_subscription_status(user)}
+📱 <b>Подписка:</b> {subscription_status}
 
 ⏰ <i>{datetime.now().strftime('%d.%m.%Y %H:%M:%S')}</i>"""
             
@@ -368,15 +373,14 @@ class AdminNotificationService:
             return "∞ Безлимит"
         return f"{traffic_gb} ГБ"
     
-    def _get_subscription_status(self, user: User) -> str:
-        if not user.subscription:
+    def _get_subscription_status(self, subscription: Optional[Subscription]) -> str:
+        if not subscription:
             return "❌ Нет подписки"
-        
-        sub = user.subscription
-        if sub.is_trial:
-            return f"🎯 Триал (до {sub.end_date.strftime('%d.%m')})"
-        elif sub.is_active:
-            return f"✅ Активна (до {sub.end_date.strftime('%d.%m')})"
+
+        if subscription.is_trial:
+            return f"🎯 Триал (до {subscription.end_date.strftime('%d.%m')})"
+        elif subscription.is_active:
+            return f"✅ Активна (до {subscription.end_date.strftime('%d.%m')})"
         else:
             return "❌ Неактивна"
     

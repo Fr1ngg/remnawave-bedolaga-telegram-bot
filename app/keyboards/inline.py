@@ -392,28 +392,31 @@ def get_insufficient_balance_keyboard(
     texts = get_texts(language)
     keyboard = get_payment_methods_keyboard(amount_kopeks or 0, language)
 
-    if resume_callback:
-        keyboard.inline_keyboard.insert(
-            0,
-            [
-                InlineKeyboardButton(
-                    text=texts.RETURN_TO_SUBSCRIPTION_CHECKOUT,
-                    callback_data=resume_callback,
-                )
-            ],
-        )
+    back_row_index: int | None = None
 
     if keyboard.inline_keyboard:
         last_row = keyboard.inline_keyboard[-1]
         if (
             len(last_row) == 1
             and isinstance(last_row[0], InlineKeyboardButton)
-            and last_row[0].callback_data == "menu_balance"
+            and last_row[0].callback_data in {"menu_balance", "back_to_menu"}
         ):
             keyboard.inline_keyboard[-1][0] = InlineKeyboardButton(
-                text=last_row[0].text,
+                text=texts.t("PAYMENT_RETURN_HOME_BUTTON", "🏠 На главную"),
                 callback_data="back_to_menu",
             )
+            back_row_index = len(keyboard.inline_keyboard) - 1
+
+    if resume_callback:
+        return_row = [
+            InlineKeyboardButton(
+                text=texts.RETURN_TO_SUBSCRIPTION_CHECKOUT,
+                callback_data=resume_callback,
+            )
+        ]
+
+        insert_index = back_row_index if back_row_index is not None else len(keyboard.inline_keyboard)
+        keyboard.inline_keyboard.insert(insert_index, return_row)
 
     return keyboard
 

@@ -498,6 +498,7 @@
   "PAYMENT_METHODS_TITLE": "💳 <b>Balance top-up methods</b>",
   "PAYMENT_METHODS_PROMPT": "Choose the payment method that suits you:",
   "PAYMENT_METHODS_FOOTER": "Choose a top-up method:",
+  "PAYMENT_RETURN_HOME_BUTTON": "🏠 Main menu",
   "PAYMENT_METHOD_STARS_NAME": "⭐ <b>Telegram Stars</b>",
   "PAYMENT_METHOD_STARS_DESCRIPTION": "fast and convenient",
   "PAYMENT_METHOD_YOOKASSA_NAME": "💳 <b>Bank card</b>",
