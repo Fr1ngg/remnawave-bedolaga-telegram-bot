@@ -70,7 +70,7 @@ async def setup_bot() -> tuple[Bot, Dispatcher]:
 
     bot = Bot(
         token=settings.BOT_TOKEN, 
-        default=DefaultBotProperties(parse_mode=ParseMode.HTML)
+        default=DefaultBotProperties(parse_mode=None)
     )
     
     maintenance_service.set_bot(bot)

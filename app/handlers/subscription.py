@@ -9,6 +9,7 @@ import os
 from typing import Dict, List, Any, Tuple, Optional
 
 from app.config import settings, PERIOD_PRICES, get_traffic_prices
+from app.utils.formatters import escape_html
 from app.states import SubscriptionStates
 from app.database.crud.subscription import (
     get_subscription_by_user_id, create_trial_subscription, 
@@ -586,7 +587,7 @@ async def show_subscription_info(
 🌍 Серверы: {servers}
 📱 Устройства: {devices_used} / {device_limit}""",
     ).format(
-        full_name=db_user.full_name,
+        full_name=escape_html(db_user.full_name),
         balance=settings.format_price(db_user.balance_kopeks),
         status_emoji=status_emoji,
         status_display=status_display,

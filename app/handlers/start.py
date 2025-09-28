@@ -28,6 +28,7 @@ from app.services.campaign_service import AdvertisingCampaignService
 from app.services.subscription_service import SubscriptionService
 from app.utils.user_utils import generate_unique_referral_code
 from app.database.crud.user_message import get_random_active_message
+from app.utils.validators import sanitize_html, strip_html_tags
 
 
 logger = logging.getLogger(__name__)
@@ -230,19 +231,23 @@ async def cmd_start(message: types.Message, state: FSMContext, db: AsyncSession,
         
         menu_text = await get_main_menu_text(user, texts, db)
         
-        await message.answer(
-            menu_text,
-            reply_markup=get_main_menu_keyboard(
-                language=user.language,
-                is_admin=settings.is_admin(user.telegram_id),
-                has_had_paid_subscription=user.has_had_paid_subscription,
-                has_active_subscription=has_active_subscription,
-                subscription_is_active=subscription_is_active,
-                balance_kopeks=user.balance_kopeks,
-                subscription=user.subscription
-            ),
-            parse_mode="HTML"
-        )
+        try:
+            await message.answer(
+                menu_text,
+                reply_markup=get_main_menu_keyboard(
+                    language=user.language,
+                    is_admin=settings.is_admin(user.telegram_id),
+                    has_had_paid_subscription=user.has_had_paid_subscription,
+                    has_active_subscription=has_active_subscription,
+                    subscription_is_active=subscription_is_active,
+                    balance_kopeks=user.balance_kopeks,
+                    subscription=user.subscription
+                ),
+                parse_mode=None
+            )
+        except Exception as e:
+            logger.error(f"Ошибка при показе главного меню: {e}")
+            await message.answer(menu_text, parse_mode=None)
         await state.clear()
         return
     
@@ -575,7 +580,7 @@ async def complete_registration_from_callback(
                     balance_kopeks=existing_user.balance_kopeks,
                     subscription=existing_user.subscription
                 ),
-                parse_mode="HTML"
+                parse_mode=None
             )
         except Exception as e:
             logger.error(f"Ошибка при показе главного меню существующему пользователю: {e}")
@@ -583,7 +588,7 @@ async def complete_registration_from_callback(
                 texts.t(
                     "WELCOME_FALLBACK",
                     "Добро пожаловать, {user_name}!",
-                ).format(user_name=existing_user.full_name)
+                ).format(user_name=_normalize_plain_text(existing_user.full_name))
             )
         
         await state.clear()
@@ -740,7 +745,7 @@ async def complete_registration_from_callback(
                     balance_kopeks=user.balance_kopeks,
                     subscription=user.subscription
                 ),
-                parse_mode="HTML"
+                parse_mode=None
             )
             logger.info(f"✅ Главное меню показано пользователю {user.telegram_id}")
         except Exception as e:
@@ -749,7 +754,7 @@ async def complete_registration_from_callback(
                 texts.t(
                     "WELCOME_FALLBACK",
                     "Добро пожаловать, {user_name}!",
-                ).format(user_name=user.full_name)
+                ).format(user_name=_normalize_plain_text(user.full_name))
             )
 
     logger.info(f"✅ Регистрация завершена для пользователя: {user.telegram_id}")
@@ -799,7 +804,7 @@ async def complete_registration(
                     balance_kopeks=existing_user.balance_kopeks,
                     subscription=existing_user.subscription
                 ),
-                parse_mode="HTML"
+                parse_mode=None
             )
         except Exception as e:
             logger.error(f"Ошибка при показе главного меню существующему пользователю: {e}")
@@ -807,7 +812,7 @@ async def complete_registration(
                 texts.t(
                     "WELCOME_FALLBACK",
                     "Добро пожаловать, {user_name}!",
-                ).format(user_name=existing_user.full_name)
+                ).format(user_name=_normalize_plain_text(existing_user.full_name))
             )
         
         await state.clear()
@@ -964,7 +969,7 @@ async def complete_registration(
                     balance_kopeks=user.balance_kopeks,
                     subscription=user.subscription
                 ),
-                parse_mode="HTML"
+                parse_mode=None
             )
             logger.info(f"✅ Главное меню показано пользователю {user.telegram_id}")
         except Exception as e:
@@ -973,7 +978,7 @@ async def complete_registration(
                 texts.t(
                     "WELCOME_FALLBACK",
                     "Добро пожаловать, {user_name}!",
-                ).format(user_name=user.full_name)
+                ).format(user_name=_normalize_plain_text(user.full_name))
             )
 
     logger.info(f"✅ Регистрация завершена для пользователя: {user.telegram_id}")
@@ -1057,6 +1062,14 @@ def _insert_random_message(base_text: str, random_message: str, action_prompt: s
     return f"{base_text}\n\n{random_message}"
 
 
+def _normalize_plain_text(text) -> str:
+    if not text:
+        return ""
+    if not isinstance(text, str):
+        text = str(text)
+    return sanitize_html(text)
+
+
 def get_referral_code_keyboard(language: str):
     from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
     
@@ -1070,8 +1083,10 @@ def get_referral_code_keyboard(language: str):
 
 async def get_main_menu_text(user, texts, db: AsyncSession):
 
-    base_text = texts.MAIN_MENU.format(
-        user_name=user.full_name,
+    menu_template = texts.t("MAIN_MENU_PLAIN", "👤 {user_name}\n\n📱 Подписка: {subscription_status}\n\nВыберите действие:\n")
+    menu_template = strip_html_tags(menu_template)
+    base_text = menu_template.format(
+        user_name=sanitize_html(user.full_name),
         subscription_status=_get_subscription_status(user, texts)
     )
 
@@ -1080,7 +1095,8 @@ async def get_main_menu_text(user, texts, db: AsyncSession):
     try:
         random_message = await get_random_active_message(db)
         if random_message:
-            return _insert_random_message(base_text, random_message, action_prompt)
+            safe_random = _normalize_plain_text(random_message)
+            return _insert_random_message(base_text, safe_random, action_prompt)
 
     except Exception as e:
         logger.error(f"Ошибка получения случайного сообщения: {e}")
@@ -1089,8 +1105,10 @@ async def get_main_menu_text(user, texts, db: AsyncSession):
 
 async def get_main_menu_text_simple(user_name, texts, db: AsyncSession):
 
-    base_text = texts.MAIN_MENU.format(
-        user_name=user_name,
+    menu_template = texts.t("MAIN_MENU_PLAIN", "👤 {user_name}\n\n📱 Подписка: {subscription_status}\n\nВыберите действие:\n")
+    menu_template = strip_html_tags(menu_template)
+    base_text = menu_template.format(
+        user_name=sanitize_html(user_name),
         subscription_status=_get_subscription_status_simple(texts)
     )
 
@@ -1099,7 +1117,8 @@ async def get_main_menu_text_simple(user_name, texts, db: AsyncSession):
     try:
         random_message = await get_random_active_message(db)
         if random_message:
-            return _insert_random_message(base_text, random_message, action_prompt)
+            safe_random = _normalize_plain_text(random_message)
+            return _insert_random_message(base_text, safe_random, action_prompt)
 
     except Exception as e:
         logger.error(f"Ошибка получения случайного сообщения: {e}")
@@ -1199,20 +1218,22 @@ async def required_sub_channel_check(
                 subscription=user.subscription,
             )
 
-            if settings.ENABLE_LOGO_MODE:
+            if settings.ENABLE_LOGO_MODE and LOGO_PATH.exists():
+                from aiogram.types import FSInputFile
+
                 await bot.send_photo(
                     chat_id=query.from_user.id,
                     photo=FSInputFile(LOGO_PATH),
                     caption=menu_text,
                     reply_markup=keyboard,
-                    parse_mode="HTML",
+                    parse_mode=None,
                 )
             else:
                 await bot.send_message(
                     chat_id=query.from_user.id,
                     text=menu_text,
                     reply_markup=keyboard,
-                    parse_mode="HTML",
+                    parse_mode=None,
                 )
         else:
             from app.keyboards.inline import get_rules_keyboard
@@ -1238,7 +1259,7 @@ async def required_sub_channel_check(
 
                     await bot.send_message(
                         chat_id=query.from_user.id,
-                        text=texts.t("WELCOME_FALLBACK", "Добро пожаловать, {user_name}!").format(user_name=user.full_name),
+                        text=texts.t("WELCOME_FALLBACK", "Добро пожаловать, {user_name}!").format(user_name=_normalize_plain_text(user.full_name)),
                     )
                 else:
                     await bot.send_message(

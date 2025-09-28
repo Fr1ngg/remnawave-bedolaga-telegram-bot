@@ -51,6 +51,7 @@
   "LANGUAGE_SELECTED": "🌐 Interface language set: <b>English</b>",
   "LOADING": "⏳ Loading...",
   "MAIN_MENU": "👤 <b>{user_name}</b>\n\n📱 <b>Subscription:</b> {subscription_status}\n\nChoose an option:\n",
+  "MAIN_MENU_PLAIN": "👤 {user_name}\n\n📱 Subscription: {subscription_status}\n\nChoose an option:\n",
   "MAIN_MENU_ACTION_PROMPT": "Choose an option:",
   "MAIN_MENU_BUTTON": "🏠 Main menu",
   "MANAGE_DEVICES_BUTTON": "🔧 Manage devices",

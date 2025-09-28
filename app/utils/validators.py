@@ -3,20 +3,15 @@ from typing import Optional, Union, Tuple
 from datetime import datetime
 import html
 
-ALLOWED_HTML_TAGS = {
-    'b', 'strong',           
-    'i', 'em',              
-    'u', 'ins',             
-    's', 'strike', 'del',  
-    'code',                 
-    'pre',                
-    'a',                  
-    'blockquote'
-}
 
-SELF_CLOSING_TAGS = {
-    'br', 'hr', 'img'
-}
+_TAG_RE = re.compile(r"<[^>]+>")
+
+def strip_html_tags(text: str) -> str:
+    if not text:
+        return text
+    if not isinstance(text, str):
+        text = str(text)
+    return _TAG_RE.sub("", text)
 
 
 def validate_email(email: str) -> bool:
@@ -123,24 +118,9 @@ def validate_subscription_period(days: Union[str, int]) -> Optional[int]:
 def sanitize_html(text: str) -> str:
     if not text:
         return text
-    
-    text = html.escape(text)
-    
-    for tag in ALLOWED_HTML_TAGS:
-        text = re.sub(
-            f'&lt;{tag}(&gt;|\\s[^&]*&gt;)', 
-            lambda m: m.group(0).replace('&lt;', '<').replace('&gt;', '>'),
-            text, 
-            flags=re.IGNORECASE
-        )
-        text = re.sub(
-            f'&lt;/{tag}&gt;', 
-            f'</{tag}>', 
-            text, 
-            flags=re.IGNORECASE
-        )
-    
-    return text
+    if not isinstance(text, str):
+        text = str(text)
+    return html.escape(text, quote=False)
 
 
 def validate_device_count(count: Union[str, int]) -> Optional[int]:

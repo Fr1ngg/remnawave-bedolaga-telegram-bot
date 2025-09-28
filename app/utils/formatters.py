@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta
 from typing import Union, Optional
+import html
 
 
 def format_datetime(dt: Union[datetime, str], format_str: str = "%d.%m.%Y %H:%M") -> str:
@@ -193,6 +194,18 @@ def format_subscription_status(
         status = "⏰ Истекла" if language == "ru" else "⏰ Expired"
     
     return status
+
+
+def escape_html(text: Optional[str]) -> str:
+    """Escape HTML special chars to display user-provided text safely in HTML parse mode.
+
+    Returns empty string for None inputs to simplify f-string usage.
+    """
+    if text is None:
+        return ""
+    if not isinstance(text, str):
+        text = str(text)
+    return html.escape(text, quote=False)
 
 
 def format_traffic_usage(used_gb: float, limit_gb: int, language: str = "ru") -> str:

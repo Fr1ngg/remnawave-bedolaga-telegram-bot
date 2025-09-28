@@ -17,6 +17,7 @@ from app.services.subscription_checkout_service import (
 )
 from app.utils.photo_message import edit_or_answer_photo
 from app.services.support_settings_service import SupportSettingsService
+from app.utils.validators import sanitize_html, strip_html_tags
 
 logger = logging.getLogger(__name__)
 
@@ -43,22 +44,40 @@ async def show_main_menu(
     draft_exists = await has_subscription_checkout_draft(db_user.id)
     show_resume_checkout = should_offer_checkout_resume(db_user, draft_exists)
 
-    await edit_or_answer_photo(
-        callback=callback,
-        caption=menu_text,
-        keyboard=get_main_menu_keyboard(
-            language=db_user.language,
-            is_admin=settings.is_admin(db_user.telegram_id),
-                is_moderator=(not settings.is_admin(db_user.telegram_id) and SupportSettingsService.is_moderator(db_user.telegram_id)),
-            has_had_paid_subscription=db_user.has_had_paid_subscription,
-            has_active_subscription=has_active_subscription,
-            subscription_is_active=subscription_is_active,
-            balance_kopeks=db_user.balance_kopeks,
-            subscription=db_user.subscription,
-            show_resume_checkout=show_resume_checkout,
-        ),
-        parse_mode="HTML",
-    )
+    try:
+        await edit_or_answer_photo(
+            callback=callback,
+            caption=menu_text,
+            keyboard=get_main_menu_keyboard(
+                language=db_user.language,
+                is_admin=settings.is_admin(db_user.telegram_id),
+                    is_moderator=(not settings.is_admin(db_user.telegram_id) and SupportSettingsService.is_moderator(db_user.telegram_id)),
+                has_had_paid_subscription=db_user.has_had_paid_subscription,
+                has_active_subscription=has_active_subscription,
+                subscription_is_active=subscription_is_active,
+                balance_kopeks=db_user.balance_kopeks,
+                subscription=db_user.subscription,
+                show_resume_checkout=show_resume_checkout,
+            ),
+            parse_mode=None,
+        )
+    except Exception as e:
+        logger.error(f"Ошибка показа меню с фото: {e}")
+        await callback.message.answer(
+            menu_text,
+            reply_markup=get_main_menu_keyboard(
+                language=db_user.language,
+                is_admin=settings.is_admin(db_user.telegram_id),
+                    is_moderator=(not settings.is_admin(db_user.telegram_id) and SupportSettingsService.is_moderator(db_user.telegram_id)),
+                has_had_paid_subscription=db_user.has_had_paid_subscription,
+                has_active_subscription=has_active_subscription,
+                subscription_is_active=subscription_is_active,
+                balance_kopeks=db_user.balance_kopeks,
+                subscription=db_user.subscription,
+                show_resume_checkout=show_resume_checkout,
+            ),
+            parse_mode=None
+        )
     await callback.answer()
 
 
@@ -130,7 +149,7 @@ async def handle_back_to_menu(
             subscription=db_user.subscription,
             show_resume_checkout=show_resume_checkout,
         ),
-        parse_mode="HTML",
+        parse_mode=None,
     )
     await callback.answer()
 
@@ -211,8 +230,10 @@ def _insert_random_message(base_text: str, random_message: str, action_prompt: s
 
 async def get_main_menu_text(user, texts, db: AsyncSession):
 
-    base_text = texts.MAIN_MENU.format(
-        user_name=user.full_name,
+    menu_template = texts.t("MAIN_MENU_PLAIN", "👤 {user_name}\n\n📱 Подписка: {subscription_status}\n\nВыберите действие:\n")
+    menu_template = strip_html_tags(menu_template)
+    base_text = menu_template.format(
+        user_name=sanitize_html(user.full_name),
         subscription_status=_get_subscription_status(user, texts)
     )
     
@@ -221,7 +242,8 @@ async def get_main_menu_text(user, texts, db: AsyncSession):
     try:
         random_message = await get_random_active_message(db)
         if random_message:
-            return _insert_random_message(base_text, random_message, action_prompt)
+            safe_random = sanitize_html(random_message)
+            return _insert_random_message(base_text, safe_random, action_prompt)
                 
     except Exception as e:
         logger.error(f"Ошибка получения случайного сообщения: {e}")

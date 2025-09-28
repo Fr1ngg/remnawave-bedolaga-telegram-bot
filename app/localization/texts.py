@@ -117,11 +117,15 @@ class Texts:
 
     def t(self, key: str, default: Any = None) -> Any:
         try:
-            return self._get_value(key)
+            value = self._get_value(key)
         except KeyError:
             if default is not None:
-                return default
-            raise
+                value = default
+            else:
+                raise
+        if isinstance(value, str):
+            return value.replace('<b>', '').replace('</b>', '').replace('<strong>', '').replace('</strong>', '')
+        return value
 
     def _get_value(self, item: str) -> Any:
         if item == "RULES_TEXT":

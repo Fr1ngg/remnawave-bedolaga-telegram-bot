@@ -22,7 +22,7 @@ from app.localization.texts import get_texts
 from app.services.user_service import UserService
 from app.database.crud.promo_group import get_promo_groups_with_counts
 from app.utils.decorators import admin_required, error_handler
-from app.utils.formatters import format_datetime, format_time_ago
+from app.utils.formatters import format_datetime, format_time_ago, escape_html
 from app.services.remnawave_service import RemnaWaveService
 from app.external.remnawave_api import TrafficLimitStrategy
 from app.database.crud.server_squad import get_all_server_squads, get_server_squad_by_uuid, get_server_squad_by_id
@@ -129,7 +129,7 @@ async def show_users_list(
         else:
             subscription_emoji = "❌"
         
-        button_text = f"{status_emoji} {subscription_emoji} {user.full_name}"
+        button_text = f"{status_emoji} {subscription_emoji} {escape_html(user.full_name)}"
         
         if user.balance_kopeks > 0:
             button_text += f" | 💰 {settings.format_price(user.balance_kopeks)}"
@@ -141,7 +141,7 @@ async def show_users_list(
             if len(short_name) > 20:
                 short_name = short_name[:17] + "..."
             
-            button_text = f"{status_emoji} {subscription_emoji} {short_name}"
+            button_text = f"{status_emoji} {subscription_emoji} {escape_html(short_name)}"
             if user.balance_kopeks > 0:
                 button_text += f" | 💰 {settings.format_price(user.balance_kopeks)}"
         
@@ -227,7 +227,7 @@ async def show_users_list_by_balance(
         else:
             subscription_emoji = "❌"
         
-        button_text = f"{status_emoji} {subscription_emoji} {user.full_name}"
+        button_text = f"{status_emoji} {subscription_emoji} {escape_html(user.full_name)}"
         
         if user.balance_kopeks > 0:
             button_text += f" | 💰 {settings.format_price(user.balance_kopeks)}"
@@ -242,7 +242,7 @@ async def show_users_list_by_balance(
             if len(short_name) > 20:
                 short_name = short_name[:17] + "..."
             
-            button_text = f"{status_emoji} {subscription_emoji} {short_name}"
+            button_text = f"{status_emoji} {subscription_emoji} {escape_html(short_name)}"
             if user.balance_kopeks > 0:
                 button_text += f" | 💰 {settings.format_price(user.balance_kopeks)}"
         
@@ -433,7 +433,7 @@ async def _render_user_subscription_overview(
     subscription = profile["subscription"]
 
     text = "📱 <b>Подписка и настройки пользователя</b>\n\n"
-    text += f"👤 {user.full_name} (ID: <code>{user.telegram_id}</code>)\n\n"
+    text += f"👤 {escape_html(user.full_name)} (ID: <code>{user.telegram_id}</code>)\n\n"
 
     keyboard = []
 
@@ -593,7 +593,7 @@ async def show_user_transactions(
     transactions = await get_user_transactions(db, user_id, limit=10)
     
     text = f"💳 <b>Транзакции пользователя</b>\n\n"
-    text += f"👤 {user.full_name} (ID: <code>{user.telegram_id}</code>)\n"
+    text += f"👤 {escape_html(user.full_name)} (ID: <code>{user.telegram_id}</code>)\n"
     text += f"💰 Текущий баланс: {settings.format_price(user.balance_kopeks)}\n\n"
     
     if transactions:
@@ -797,9 +797,9 @@ async def show_user_management(
 👤 <b>Управление пользователем</b>
 
 <b>Основная информация:</b>
-• Имя: {user.full_name}
+• Имя: {escape_html(user.full_name)}
 • ID: <code>{user.telegram_id}</code>
-• Username: @{user.username or 'не указан'}
+• Username: @{escape_html(user.username) or 'не указан'}
 • Статус: {status_text}
 • Язык: {user.language}
 
@@ -1224,7 +1224,7 @@ async def show_user_statistics(
         campaign_stats = await get_campaign_statistics(db, campaign_registration.campaign_id)
     
     text = f"📊 <b>Статистика пользователя</b>\n\n"
-    text += f"👤 {user.full_name} (ID: <code>{user.telegram_id}</code>)\n\n"
+    text += f"👤 {escape_html(user.full_name)} (ID: <code>{user.telegram_id}</code>)\n\n"
     
     text += f"<b>Основная информация:</b>\n"
     text += f"• Дней с регистрации: {profile['registration_days']}\n"
@@ -1248,7 +1248,7 @@ async def show_user_statistics(
     if user.referred_by_id:
         referrer = await get_user_by_id(db, user.referred_by_id)
         if referrer:
-            text += f"• Пришел по реферальной ссылке от <b>{referrer.full_name}</b>\n"
+            text += f"• Пришел по реферальной ссылке от <b>{escape_html(referrer.full_name)}</b>\n"
         else:
             text += "• Пришел по реферальной ссылке (реферер не найден)\n"
         if campaign_registration and campaign_registration.campaign:
@@ -2639,7 +2639,7 @@ async def change_subscription_type(
     current_type = "🎁 Триал" if subscription.is_trial else "💎 Платная"
     
     text = f"🔄 <b>Смена типа подписки</b>\n\n"
-    text += f"👤 {profile['user'].full_name}\n"
+    text += f"👤 {escape_html(profile['user'].full_name)}\n"
     text += f"📱 Текущий тип: {current_type}\n\n"
     text += f"Выберите новый тип подписки:"
     
@@ -2719,7 +2719,7 @@ async def admin_buy_subscription(
     ])
     
     text = f"💳 <b>Покупка подписки для пользователя</b>\n\n"
-    text += f"👤 {target_user.full_name} (ID: {target_user.telegram_id})\n"
+    text += f"👤 {escape_html(target_user.full_name)} (ID: {target_user.telegram_id})\n"
     text += f"💰 Баланс пользователя: {settings.format_price(target_user.balance_kopeks)}\n\n"
     text += "Выберите период подписки:\n"
     
@@ -2772,7 +2772,7 @@ async def admin_buy_subscription_confirm(
     
     price_rubles = price_kopeks // 100
     text = f"💳 <b>Подтверждение покупки подписки</b>\n\n"
-    text += f"👤 {target_user.full_name} (ID: {target_user.telegram_id})\n"
+    text += f"👤 {escape_html(target_user.full_name)} (ID: {target_user.telegram_id})\n"
     text += f"📅 Период подписки: {period_days} дней\n"
     text += f"💰 Стоимость: {settings.format_price(price_kopeks)}\n"
     text += f"💰 Баланс пользователя: {settings.format_price(target_user.balance_kopeks)}\n\n"
@@ -2924,7 +2924,7 @@ async def admin_buy_subscription_execute(
         
         await callback.message.edit_text(
             f"{message}\n\n"
-            f"👤 {target_user.full_name} (ID: {target_user.telegram_id})\n"
+            f"👤 {escape_html(target_user.full_name)} (ID: {target_user.telegram_id})\n"
             f"💰 Списано: {settings.format_price(price_kopeks)}\n"
             f"📅 Подписка действительна до: {format_datetime(subscription.end_date)}",
             reply_markup=types.InlineKeyboardMarkup(inline_keyboard=[

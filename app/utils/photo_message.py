@@ -21,7 +21,7 @@ async def edit_or_answer_photo(
     callback: types.CallbackQuery,
     caption: str,
     keyboard: types.InlineKeyboardMarkup,
-    parse_mode: str | None = "HTML",
+    parse_mode: str | None = None,
 ) -> None:
     # Если режим логотипа выключен — работаем текстом
     if not settings.ENABLE_LOGO_MODE:
@@ -31,32 +31,32 @@ async def edit_or_answer_photo(
                 await callback.message.answer(
                     caption,
                     reply_markup=keyboard,
-                    parse_mode=parse_mode,
+                    parse_mode=None,
                 )
             else:
                 await callback.message.edit_text(
                     caption,
                     reply_markup=keyboard,
-                    parse_mode=parse_mode,
+                    parse_mode=None,
                 )
         except TelegramBadRequest:
             await callback.message.delete()
             await callback.message.answer(
                 caption,
                 reply_markup=keyboard,
-                parse_mode=parse_mode,
+                parse_mode=None,
             )
         return
 
     # Если текст слишком длинный для caption — отправим как текст
-    if caption and len(caption) > 1000:
+    if caption and ("<" in caption or ">" in caption or len(caption) > 1000):
         try:
             if callback.message.photo:
                 await callback.message.delete()
             await callback.message.answer(
                 caption,
                 reply_markup=keyboard,
-                parse_mode=parse_mode,
+                parse_mode=None,
             )
         except TelegramBadRequest:
             pass
@@ -65,7 +65,7 @@ async def edit_or_answer_photo(
     media = _resolve_media(callback.message)
     try:
         await callback.message.edit_media(
-            InputMediaPhoto(media=media, caption=caption, parse_mode=(parse_mode or "HTML")),
+            InputMediaPhoto(media=media, caption=caption, parse_mode=None),
             reply_markup=keyboard,
         )
     except TelegramBadRequest:
@@ -80,12 +80,12 @@ async def edit_or_answer_photo(
                 photo=media if isinstance(media, FSInputFile) else FSInputFile(LOGO_PATH),
                 caption=caption,
                 reply_markup=keyboard,
-                parse_mode=(parse_mode or "HTML"),
+                parse_mode=None,
             )
         except Exception:
             # Последний фоллбек — обычный текст
             await callback.message.answer(
                 caption,
                 reply_markup=keyboard,
-                parse_mode=(parse_mode or "HTML"),
+                parse_mode=None,
             )
