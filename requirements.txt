@@ -8,10 +8,10 @@ aiosqlite==0.21.0
 
 # Дополнительные зависимости  
 pydantic==2.11.9
-pydantic-settings==2.10.1
+pydantic-settings==2.11.0
 python-dotenv==1.1.1
 redis==5.0.1
-PyYAML==6.0.2
+PyYAML==6.0.3
 
 # YooKassa SDK
 yookassa==3.7.0
@@ -34,4 +34,4 @@ packaging==23.2
 aiofiles==23.2.1
 
 # Вебхуки PayPalych (Flask)
-Flask==3.1.0
+Flask==3.1.2
