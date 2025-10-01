@@ -2598,6 +2598,51 @@
             return subscriptionUrl;
         }
 
+        function isCustomScheme(link) {
+            if (!link) {
+                return false;
+            }
+
+            const lowerLink = String(link).toLowerCase();
+            if (lowerLink.startsWith('http://') || lowerLink.startsWith('https://')) {
+                return false;
+            }
+
+            const schemeMatch = /^[a-z][a-z0-9+.-]*:/.test(link);
+            return schemeMatch;
+        }
+
+        function tryOpenCustomScheme(link) {
+            if (!isCustomScheme(link)) {
+                return false;
+            }
+
+            try {
+                const anchor = document.createElement('a');
+                anchor.href = link;
+                anchor.style.position = 'absolute';
+                anchor.style.width = '0';
+                anchor.style.height = '0';
+                anchor.style.overflow = 'hidden';
+                anchor.setAttribute('target', '_self');
+                document.body.appendChild(anchor);
+                anchor.click();
+                document.body.removeChild(anchor);
+            } catch (error) {
+                console.warn('Custom scheme anchor open failed:', error);
+            }
+
+            setTimeout(() => {
+                try {
+                    window.location.href = link;
+                } catch (error) {
+                    console.warn('Custom scheme location redirect failed:', error);
+                }
+            }, 50);
+
+            return true;
+        }
+
         function openExternalLink(link, options = {}) {
             if (!link) {
                 return;
@@ -2617,6 +2662,10 @@
                 } catch (error) {
                     console.warn('tg.openLink failed:', error);
                 }
+            }
+
+            if (tryOpenCustomScheme(link)) {
+                return;
             }
 
             const newWindow = window.open(link, '_blank', 'noopener,noreferrer');
