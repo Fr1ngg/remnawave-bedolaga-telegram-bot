@@ -2691,6 +2691,51 @@
             );
         }
 
+        const HAPP_SCHEME_PREFIX = 'happ://';
+
+        function isProbablyMobileDevice() {
+            const ua = navigator.userAgent || '';
+            return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(ua);
+        }
+
+        function openDesktopProtocolRedirect(link) {
+            const redirectWindow = window.open('', '_blank', 'noopener,noreferrer');
+            if (!redirectWindow) {
+                return false;
+            }
+
+            const escapedLink = escapeHtml(link);
+            const linkForScript = JSON.stringify(link);
+            const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>Redirecting...</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="refresh" content="0;url=${escapedLink}">
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0f172a; color: #f8fafc; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; margin: 0; padding: 24px; text-align: center; }
+        a { color: #2481cc; text-decoration: none; font-weight: 600; }
+        a:hover { text-decoration: underline; }
+    </style>
+</head>
+<body>
+    <h1>Redirecting...</h1>
+    <p>If nothing happens, <a href="${escapedLink}">click here to open the subscription link</a>.</p>
+    <script>window.location.replace(${linkForScript});</script>
+</body>
+</html>`;
+
+            redirectWindow.document.open();
+            redirectWindow.document.write(html);
+            redirectWindow.document.close();
+            return true;
+        }
+
+        function shouldUseDesktopRedirect(link) {
+            return typeof link === 'string' && link.startsWith(HAPP_SCHEME_PREFIX) && !isProbablyMobileDevice();
+        }
+
         function getConnectLink() {
             if (!userData) {
                 return null;
@@ -2731,6 +2776,10 @@
 
             if (openInMiniApp) {
                 window.location.href = link;
+                return;
+            }
+
+            if (shouldUseDesktopRedirect(link) && openDesktopProtocolRedirect(link)) {
                 return;
             }
 
