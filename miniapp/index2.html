@@ -43,6 +43,22 @@
             --info: #3b82f6;
         }
 
+        :root[data-theme="dark"] {
+            color-scheme: dark;
+            --bg-primary: #0f172a;
+            --bg-secondary: rgba(30, 41, 59, 0.85);
+            --text-primary: #f8fafc;
+            --text-secondary: #94a3b8;
+            --border-color: rgba(148, 163, 184, 0.25);
+            --shadow-sm: 0 2px 8px rgba(2, 6, 23, 0.3);
+            --shadow-md: 0 4px 16px rgba(2, 6, 23, 0.45);
+            --shadow-lg: 0 8px 32px rgba(2, 6, 23, 0.55);
+        }
+
+        :root[data-theme="light"] {
+            color-scheme: light;
+        }
+
         @media (prefers-color-scheme: dark) {
             :root {
                 --border-color: rgba(255, 255, 255, 0.1);
@@ -1022,45 +1038,96 @@
             .stat-item {
                 background: var(--bg-secondary);
             }
-            
+
             .history-type {
                 background: var(--bg-secondary);
             }
-            
+
             .history-description {
                 background: var(--bg-secondary);
             }
-            
+
             .server-item,
             .device-item {
                 background: var(--bg-secondary);
             }
-            
+
             .app-card {
                 background: var(--bg-secondary);
             }
-            
+
             .platform-btn {
                 background: var(--bg-secondary);
             }
-            
+
             .theme-toggle .icon-sun {
                 display: none;
             }
-            
+
             .theme-toggle .icon-moon {
                 display: block;
             }
         }
 
-        @media (prefers-color-scheme: light) {
-            .theme-toggle .icon-moon {
-                display: none;
-            }
-            
-            .theme-toggle .icon-sun {
-                display: block;
-            }
+        :root[data-theme="dark"] .stat-item,
+        :root[data-theme="dark"] .history-type,
+        :root[data-theme="dark"] .history-description,
+        :root[data-theme="dark"] .server-item,
+        :root[data-theme="dark"] .device-item,
+        :root[data-theme="dark"] .app-card,
+        :root[data-theme="dark"] .platform-btn {
+            background: var(--bg-secondary);
+        }
+
+        :root[data-theme="dark"] .theme-toggle .icon-sun {
+            display: none;
+        }
+
+        :root[data-theme="dark"] .theme-toggle .icon-moon {
+            display: block;
+        }
+
+        :root[data-theme="light"] .theme-toggle .icon-moon {
+            display: none;
+        }
+
+        :root[data-theme="light"] .theme-toggle .icon-sun {
+            display: block;
+        }
+
+        :root[data-theme="dark"] .history-meta,
+        :root[data-theme="dark"] .history-description,
+        :root[data-theme="dark"] .platform-btn,
+        :root[data-theme="dark"] .info-label,
+        :root[data-theme="dark"] .info-value,
+        :root[data-theme="dark"] .card-title,
+        :root[data-theme="dark"] .stat-label,
+        :root[data-theme="dark"] .subtitle,
+        :root[data-theme="dark"] .loading-text {
+            color: var(--text-secondary);
+        }
+
+        :root[data-theme="dark"] body,
+        :root[data-theme="dark"] .card,
+        :root[data-theme="dark"] .user-card,
+        :root[data-theme="dark"] .balance-card,
+        :root[data-theme="dark"] .card.expandable,
+        :root[data-theme="dark"] .language-select,
+        :root[data-theme="dark"] .theme-toggle {
+            background: var(--bg-primary);
+        }
+
+        :root[data-theme="dark"] .language-select,
+        :root[data-theme="dark"] .theme-toggle,
+        :root[data-theme="dark"] .stat-item,
+        :root[data-theme="dark"] .server-item,
+        :root[data-theme="dark"] .device-item,
+        :root[data-theme="dark"] .app-card {
+            border-color: rgba(148, 163, 184, 0.25);
+        }
+
+        :root[data-theme="dark"] .btn-primary {
+            box-shadow: 0 10px 30px rgba(37, 99, 235, 0.45);
         }
 
         /* Responsive Design */
@@ -1089,11 +1156,11 @@
                     <option value="ru">🇷🇺 Русский</option>
                 </select>
             </div>
-            <button class="theme-toggle" id="themeToggle" aria-label="Toggle theme">
+            <button class="theme-toggle" id="themeToggle" aria-label="Toggle theme" aria-pressed="false">
                 <svg class="icon-sun" width="20" height="20" fill="currentColor" viewBox="0 0 24 24">
                     <path d="M12 18a6 6 0 100-12 6 6 0 000 12zM12 2v2M12 20v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M2 12h2M20 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
                 </svg>
-                <svg class="icon-moon" width="20" height="20" fill="currentColor" viewBox="0 0 24 24" style="display:none">
+                <svg class="icon-moon" width="20" height="20" fill="currentColor" viewBox="0 0 24 24">
                     <path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/>
                 </svg>
             </button>
@@ -1328,18 +1395,107 @@
             });
         });
 
-        // Theme toggle functionality
         const themeToggle = document.getElementById('themeToggle');
-        themeToggle?.addEventListener('click', () => {
-            const currentTheme = document.documentElement.getAttribute('data-theme');
-            const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
-            document.documentElement.setAttribute('data-theme', newTheme);
-            localStorage.setItem('theme', newTheme);
-        });
+        const THEME_STORAGE_KEY = 'remnawave-miniapp-theme';
+        let currentTheme = 'light';
+        let themeLockedByUser = false;
 
-        // Load saved theme
-        const savedTheme = localStorage.getItem('theme') || 'light';
-        document.documentElement.setAttribute('data-theme', savedTheme);
+        function resolveTheme(theme) {
+            if (!theme) {
+                return null;
+            }
+            const normalized = String(theme).toLowerCase();
+            if (normalized === 'dark') {
+                return 'dark';
+            }
+            if (normalized === 'light') {
+                return 'light';
+            }
+            return null;
+        }
+
+        function safeGetStoredTheme() {
+            try {
+                return localStorage.getItem(THEME_STORAGE_KEY);
+            } catch (error) {
+                console.warn('Unable to access theme preference:', error);
+                return null;
+            }
+        }
+
+        function safeSetStoredTheme(theme) {
+            try {
+                localStorage.setItem(THEME_STORAGE_KEY, theme);
+            } catch (error) {
+                console.warn('Unable to persist theme preference:', error);
+            }
+        }
+
+        function updateThemeToggleState() {
+            if (!themeToggle) {
+                return;
+            }
+            themeToggle.setAttribute('aria-pressed', currentTheme === 'dark' ? 'true' : 'false');
+        }
+
+        function applyTheme(theme, options = {}) {
+            const resolved = resolveTheme(theme) || 'light';
+            currentTheme = resolved;
+            if (options.persist) {
+                themeLockedByUser = true;
+                safeSetStoredTheme(resolved);
+            }
+            document.documentElement.setAttribute('data-theme', resolved);
+            document.documentElement.style.setProperty('color-scheme', resolved);
+            updateThemeToggleState();
+        }
+
+        function initializeTheme() {
+            const storedTheme = resolveTheme(safeGetStoredTheme());
+            if (storedTheme) {
+                themeLockedByUser = true;
+                applyTheme(storedTheme);
+                return;
+            }
+
+            const telegramTheme = resolveTheme(tg.colorScheme);
+            if (telegramTheme) {
+                applyTheme(telegramTheme);
+            } else if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+                applyTheme('dark');
+            } else {
+                applyTheme('light');
+            }
+        }
+
+        initializeTheme();
+
+        if (typeof tg.onEvent === 'function') {
+            tg.onEvent('themeChanged', () => {
+                if (!themeLockedByUser) {
+                    applyTheme(tg.colorScheme);
+                }
+            });
+        }
+
+        if (window.matchMedia) {
+            const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+            const handleMediaChange = event => {
+                if (!themeLockedByUser) {
+                    applyTheme(event.matches ? 'dark' : 'light');
+                }
+            };
+            if (typeof mediaQuery.addEventListener === 'function') {
+                mediaQuery.addEventListener('change', handleMediaChange);
+            } else if (typeof mediaQuery.addListener === 'function') {
+                mediaQuery.addListener(handleMediaChange);
+            }
+        }
+
+        themeToggle?.addEventListener('click', () => {
+            const nextTheme = currentTheme === 'dark' ? 'light' : 'dark';
+            applyTheme(nextTheme, { persist: true });
+        });
 
         // All original constants and functions
         const LANG_STORAGE_KEY = 'remnawave-miniapp-language';
@@ -2395,3 +2551,7 @@
         });
 
         init();
+
+    </script>
+</body>
+</html>
