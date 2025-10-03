@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.database.crud.promo_group import get_promo_group_by_id
 from app.database.crud.user import get_user_by_id
+from app.database.database import AsyncSessionLocal
 from app.database.models import (
     AdvertisingCampaign,
     PromoCodeType,
@@ -343,40 +344,36 @@ class AdminNotificationService:
             logger.error(f"Ошибка отправки уведомления об ошибке проверки версий: {e}")
             return False
     
-    async def send_balance_topup_notification(
+    async def _build_balance_topup_message(
         self,
         db: AsyncSession,
         user: User,
         transaction: Transaction,
         old_balance: int
-    ) -> bool:
-        if not self._is_enabled():
-            return False
-
-        try:
-            deposit_count_result = await db.execute(
-                select(func.count())
-                .select_from(Transaction)
-                .where(
-                    Transaction.user_id == user.id,
-                    Transaction.type == TransactionType.DEPOSIT.value,
-                    Transaction.is_completed.is_(True)
-                )
+    ) -> str:
+        deposit_count_result = await db.execute(
+            select(func.count())
+            .select_from(Transaction)
+            .where(
+                Transaction.user_id == user.id,
+                Transaction.type == TransactionType.DEPOSIT.value,
+                Transaction.is_completed.is_(True)
             )
-            deposit_count = deposit_count_result.scalar_one() or 0
-            topup_status = "🆕 Первое пополнение" if deposit_count <= 1 else "🔄 Пополнение"
-            payment_method = self._get_payment_method_display(transaction.payment_method)
-            balance_change = user.balance_kopeks - old_balance
-            referrer_info = await self._get_referrer_info(db, user.referred_by_id)
-            subscription_result = await db.execute(
-                select(Subscription).where(Subscription.user_id == user.id)
-            )
-            subscription = subscription_result.scalar_one_or_none()
-            subscription_status = self._get_subscription_status(subscription)
-            promo_group = await self._get_user_promo_group(db, user)
-            promo_block = self._format_promo_group_block(promo_group)
+        )
+        deposit_count = deposit_count_result.scalar_one() or 0
+        topup_status = "🆕 Первое пополнение" if deposit_count <= 1 else "🔄 Пополнение"
+        payment_method = self._get_payment_method_display(transaction.payment_method)
+        balance_change = user.balance_kopeks - old_balance
+        referrer_info = await self._get_referrer_info(db, user.referred_by_id)
+        subscription_result = await db.execute(
+            select(Subscription).where(Subscription.user_id == user.id)
+        )
+        subscription = subscription_result.scalar_one_or_none()
+        subscription_status = self._get_subscription_status(subscription)
+        promo_group = await self._get_user_promo_group(db, user)
+        promo_block = self._format_promo_group_block(promo_group)
 
-            message = f"""💰 <b>ПОПОЛНЕНИЕ БАЛАНСА</b>
+        return f"""💰 <b>ПОПОЛНЕНИЕ БАЛАНСА</b>
 
 👤 <b>Пользователь:</b> {user.full_name}
 🆔 <b>Telegram ID:</b> <code>{user.telegram_id}</code>
@@ -399,9 +396,45 @@ class AdminNotificationService:
 📱 <b>Подписка:</b> {subscription_status}
 
 ⏰ <i>{datetime.now().strftime('%d.%m.%Y %H:%M:%S')}</i>"""
-            
+
+    async def send_balance_topup_notification(
+        self,
+        db: AsyncSession,
+        user: User,
+        transaction: Transaction,
+        old_balance: int
+    ) -> bool:
+        if not self._is_enabled():
+            return False
+
+        try:
+            message = await self._build_balance_topup_message(db, user, transaction, old_balance)
             return await self._send_message(message)
-            
+        except RuntimeError as runtime_error:
+            if "greenlet_spawn has not been called" not in str(runtime_error):
+                logger.error(f"Ошибка отправки уведомления о пополнении: {runtime_error}")
+                return False
+
+            logger.warning(
+                "Не удалось выполнить запрос с переданной сессией: %s. "
+                "Открываем новую сессию для повторной попытки.",
+                runtime_error,
+            )
+
+            try:
+                async with AsyncSessionLocal() as fallback_session:
+                    message = await self._build_balance_topup_message(
+                        fallback_session, user, transaction, old_balance
+                    )
+
+                return await self._send_message(message)
+            except Exception as fallback_error:
+                logger.error(
+                    "Ошибка повторной отправки уведомления о пополнении: %s",
+                    fallback_error,
+                )
+                return False
+
         except Exception as e:
             logger.error(f"Ошибка отправки уведомления о пополнении: {e}")
             return False
