@@ -9,7 +9,12 @@ from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings, PERIOD_PRICES, get_traffic_prices
-from app.database.crud.discount_offer import get_offer_by_id, mark_offer_claimed
+from app.database.crud.discount_offer import (
+    get_offer_by_id,
+    mark_offer_claimed,
+    get_pending_percent_discount_offer,
+    consume_percent_discount_offer,
+)
 from app.database.crud.subscription import (
     create_trial_subscription,
     create_paid_subscription, add_subscription_traffic, add_subscription_devices,
@@ -229,6 +234,7 @@ async def _prepare_subscription_summary(
     total_devices_price = devices_component["total"]
 
     total_price = base_price + total_traffic_price + total_countries_price + total_devices_price
+    total_before_personal_discount = total_price
 
     discounted_monthly_additions = (
             traffic_component["discounted_per_month"]
@@ -246,7 +252,26 @@ async def _prepare_subscription_summary(
     if not is_valid:
         raise ValueError("Subscription price calculation validation failed")
 
+    extra_discount_percent = int(summary_data.get('percent_discount_percent') or 0)
+    extra_discount_value = 0
+
+    if extra_discount_percent > 0:
+        discounted_total, discount_value = apply_percentage_discount(
+            total_price,
+            extra_discount_percent,
+        )
+        if discount_value > 0:
+            total_price = discounted_total
+            extra_discount_value = discount_value
+        else:
+            extra_discount_percent = 0
+
     summary_data['total_price'] = total_price
+    summary_data['total_price_before_extra_discount'] = total_before_personal_discount
+    summary_data['extra_discount_percent'] = extra_discount_percent
+    summary_data['extra_discount_value'] = extra_discount_value
+    if extra_discount_percent <= 0:
+        summary_data.pop('percent_discount_offer_id', None)
     summary_data['server_prices_for_period'] = selected_server_prices
     summary_data['months_in_period'] = months_in_period
     summary_data['base_price'] = base_price
@@ -329,6 +354,11 @@ async def _prepare_subscription_summary(
                 f" -{texts.format_price(devices_component['discount_total'])})"
             )
         details_lines.append(devices_line)
+
+    if extra_discount_value > 0:
+        details_lines.append(
+            f"- Персональная скидка {extra_discount_percent}%: -{texts.format_price(extra_discount_value)}"
+        )
 
     details_text = "\n".join(details_lines)
 
@@ -1375,6 +1405,13 @@ async def apply_countries_changes(
         if should_offer_checkout_resume(db_user, True)
         else None
     )
+
+    percent_offer = await get_pending_percent_discount_offer(
+        db,
+        db_user.id,
+        allowed_offer_types={"purchase_discount"},
+    )
+    percent_discount_percent = max(0, int(percent_offer.discount_percent or 0)) if percent_offer else 0
     subscription = db_user.subscription
 
     selected_countries = data.get('countries', [])
@@ -2375,6 +2412,13 @@ async def handle_extend_subscription(
     available_periods = settings.get_available_renewal_periods()
     renewal_prices = {}
 
+    percent_offer = await get_pending_percent_discount_offer(
+        db,
+        db_user.id,
+        allowed_offer_types={"extend_discount"},
+    )
+    percent_discount_percent = max(0, int(percent_offer.discount_percent or 0)) if percent_offer else 0
+
     for days in available_periods:
         try:
             months_in_period = calculate_months_from_days(days)
@@ -2418,7 +2462,17 @@ async def handle_extend_subscription(
             traffic_discount_per_month = traffic_price_per_month * traffic_discount_percent // 100
             total_traffic_price = (traffic_price_per_month - traffic_discount_per_month) * months_in_period
 
-            price = base_price + total_servers_price + total_devices_price + total_traffic_price
+            base_total_price = base_price + total_servers_price + total_devices_price + total_traffic_price
+
+            if percent_discount_percent > 0:
+                discounted_total, discount_value = apply_percentage_discount(
+                    base_total_price,
+                    percent_discount_percent,
+                )
+                price = discounted_total if discount_value > 0 else base_total_price
+            else:
+                price = base_total_price
+
             renewal_prices[days] = price
 
         except Exception as e:
@@ -2455,6 +2509,11 @@ async def handle_extend_subscription(
 
     if promo_discounts_text:
         message_text += f"{promo_discounts_text}\n\n"
+
+    if percent_discount_percent > 0:
+        message_text += (
+            f"🎁 Персональная скидка {percent_discount_percent}% уже учтена и суммируется с промогруппой.\n\n"
+        )
 
     message_text += "💡 <i>Цена включает все ваши текущие серверы и настройки</i>"
 
@@ -2665,6 +2724,15 @@ async def confirm_extend_subscription(
     old_end_date = subscription.end_date
     server_uuid_prices: Dict[str, int] = {}
 
+    percent_offer = await get_pending_percent_discount_offer(
+        db,
+        db_user.id,
+        allowed_offer_types={"extend_discount"},
+    )
+    percent_discount_percent = max(0, int(percent_offer.discount_percent or 0)) if percent_offer else 0
+
+    extra_discount_value = 0
+
     try:
         from app.config import PERIOD_PRICES
         from app.utils.pricing_utils import apply_percentage_discount
@@ -2719,19 +2787,33 @@ async def confirm_extend_subscription(
         discounted_traffic_price_per_month = traffic_price_per_month - traffic_discount_per_month
         total_traffic_price = discounted_traffic_price_per_month * months_in_period
 
-        price = base_price + total_servers_price + total_devices_price + total_traffic_price
+        calculated_total = base_price + total_servers_price + total_devices_price + total_traffic_price
 
         monthly_additions = (
                 discounted_servers_price_per_month
                 + discounted_devices_price_per_month
                 + discounted_traffic_price_per_month
         )
-        is_valid = validate_pricing_calculation(base_price, monthly_additions, months_in_period, price)
+        is_valid = validate_pricing_calculation(base_price, monthly_additions, months_in_period, calculated_total)
 
         if not is_valid:
             logger.error(f"Ошибка в расчете цены продления для пользователя {db_user.telegram_id}")
             await callback.answer("Ошибка расчета цены. Обратитесь в поддержку.", show_alert=True)
             return
+
+        price = calculated_total
+
+        if percent_discount_percent > 0:
+            discounted_total, discount_value = apply_percentage_discount(
+                calculated_total,
+                percent_discount_percent,
+            )
+            if discount_value > 0:
+                price = discounted_total
+                extra_discount_value = discount_value
+            else:
+                percent_discount_percent = 0
+                percent_offer = None
 
         logger.info(f"💰 Расчет продления подписки {subscription.id} на {days} дней ({months_in_period} мес):")
         base_log = f"   📅 Период {days} дней: {base_price_original / 100}₽"
@@ -2773,6 +2855,10 @@ async def confirm_extend_subscription(
                     if traffic_discount_percent > 0 and traffic_discount_per_month > 0
                     else ""
                 )
+            )
+        if extra_discount_value > 0:
+            logger.info(
+                f"   🎁 Персональная скидка {percent_discount_percent}%: -{extra_discount_value / 100}₽"
             )
         logger.info(f"   💎 ИТОГО: {price / 100}₽")
 
@@ -2881,6 +2967,16 @@ async def confirm_extend_subscription(
             amount_kopeks=price,
             description=f"Продление подписки на {days} дней ({months_in_period} мес)"
         )
+
+        if percent_offer and extra_discount_value > 0:
+            try:
+                await consume_percent_discount_offer(db, percent_offer)
+            except Exception as discount_error:
+                logger.error(
+                    "Не удалось отметить использование персональной скидки %s при продлении: %s",
+                    percent_offer.id,
+                    discount_error,
+                )
 
         try:
             notification_service = AdminNotificationService(callback.bot)
@@ -3373,6 +3469,18 @@ async def devices_continue(
     texts = get_texts(db_user.language)
 
     try:
+        percent_offer = await get_pending_percent_discount_offer(
+            db,
+            db_user.id,
+            allowed_offer_types={"purchase_discount"},
+        )
+        if percent_offer:
+            data['percent_discount_offer_id'] = percent_offer.id
+            data['percent_discount_percent'] = max(0, int(percent_offer.discount_percent or 0))
+        else:
+            data.pop('percent_discount_offer_id', None)
+            data.pop('percent_discount_percent', None)
+
         summary_text, prepared_data = await _prepare_subscription_summary(db_user, data, texts)
     except ValueError:
         logger.error(f"Ошибка в расчете цены подписки для пользователя {db_user.telegram_id}")
@@ -3550,7 +3658,7 @@ async def confirm_purchase(
 
     total_servers_price = data.get('total_servers_price', total_countries_price)
 
-    final_price = data['total_price']
+    calculated_total = base_price + total_servers_price + total_devices_price + total_traffic_price
 
     discounted_monthly_additions = data.get(
         'discounted_monthly_additions',
@@ -3563,13 +3671,28 @@ async def confirm_purchase(
         base_price,
         discounted_monthly_additions,
         months_in_period,
-        final_price,
+        calculated_total,
     )
 
     if not is_valid:
         logger.error(f"Ошибка в расчете цены подписки для пользователя {db_user.telegram_id}")
         await callback.answer("Ошибка расчета цены. Обратитесь в поддержку.", show_alert=True)
         return
+
+    final_price = calculated_total
+    extra_discount_value = 0
+
+    if percent_discount_percent > 0:
+        discounted_total, discount_value = apply_percentage_discount(
+            calculated_total,
+            percent_discount_percent,
+        )
+        if discount_value > 0:
+            final_price = discounted_total
+            extra_discount_value = discount_value
+        else:
+            percent_discount_percent = 0
+            percent_offer = None
 
     logger.info(f"Расчет покупки подписки на {data['period_days']} дней ({months_in_period} мес):")
     base_log = f"   Период: {base_price_original / 100}₽"
@@ -3612,7 +3735,13 @@ async def confirm_purchase(
                 f" -{devices_discount_total / 100}₽)"
             )
         logger.info(message)
-    logger.info(f"   ИТОГО: {final_price / 100}₽")
+    if extra_discount_value > 0:
+        logger.info(
+            f"   🎁 Персональная скидка {percent_discount_percent}%: -{extra_discount_value / 100}₽"
+        )
+        logger.info(f"   💎 ИТОГО: {final_price / 100}₽")
+    else:
+        logger.info(f"   ИТОГО: {final_price / 100}₽")
 
     if db_user.balance_kopeks < final_price:
         missing_kopeks = final_price - db_user.balance_kopeks
@@ -3789,6 +3918,16 @@ async def confirm_purchase(
                 reset_reason="покупка подписки (повторная попытка)",
             )
 
+        if percent_offer and extra_discount_value > 0:
+            try:
+                await consume_percent_discount_offer(db, percent_offer)
+            except Exception as discount_error:
+                logger.error(
+                    "Не удалось отметить использование персональной скидки %s: %s",
+                    percent_offer.id,
+                    discount_error,
+                )
+
         transaction = await create_transaction(
             db=db,
             user_id=db_user.id,
@@ -3953,6 +4092,7 @@ async def resume_subscription_checkout(
         callback: types.CallbackQuery,
         state: FSMContext,
         db_user: User,
+        db: AsyncSession,
 ):
     texts = get_texts(db_user.language)
 
@@ -3963,6 +4103,18 @@ async def resume_subscription_checkout(
         return
 
     try:
+        percent_offer = await get_pending_percent_discount_offer(
+            db,
+            db_user.id,
+            allowed_offer_types={"purchase_discount"},
+        )
+        if percent_offer:
+            draft['percent_discount_offer_id'] = percent_offer.id
+            draft['percent_discount_percent'] = max(0, int(percent_offer.discount_percent or 0))
+        else:
+            draft.pop('percent_discount_offer_id', None)
+            draft.pop('percent_discount_percent', None)
+
         summary_text, prepared_data = await _prepare_subscription_summary(db_user, draft, texts)
     except ValueError as exc:
         logger.error(
@@ -5091,6 +5243,26 @@ async def claim_discount_offer(
 
         popup_text = texts.get("TEST_ACCESS_ACTIVATED_POPUP", "✅ Доступ выдан!")
         await callback.answer(popup_text, show_alert=True)
+        await callback.message.answer(success_message)
+        return
+
+    if effect_type == "percent_discount":
+        payload = dict(offer.extra_data or {})
+        payload["version"] = "percent_discount_v1"
+        payload["consumed"] = False
+        payload["activated_at"] = now.isoformat()
+        offer.extra_data = payload
+
+        await mark_offer_claimed(db, offer, deactivate=False)
+
+        success_message = texts.get(
+            "DISCOUNT_CLAIM_SUCCESS",
+            "🎉 Скидка {percent}% активирована! Она применится при следующей оплате.",
+        ).format(
+            percent=offer.discount_percent,
+        )
+
+        await callback.answer("✅ Скидка активирована!", show_alert=True)
         await callback.message.answer(success_message)
         return
 

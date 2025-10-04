@@ -812,7 +812,7 @@ class DiscountOffer(Base):
     expires_at = Column(DateTime, nullable=False)
     claimed_at = Column(DateTime, nullable=True)
     is_active = Column(Boolean, default=True, nullable=False)
-    effect_type = Column(String(50), nullable=False, default="balance_bonus")
+    effect_type = Column(String(50), nullable=False, default="percent_discount")
     extra_data = Column(JSON, nullable=True)
     created_at = Column(DateTime, default=func.now())
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
