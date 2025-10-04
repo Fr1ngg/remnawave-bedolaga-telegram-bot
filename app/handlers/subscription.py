@@ -9,17 +9,25 @@ from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings, PERIOD_PRICES, get_traffic_prices
-from app.database.crud.discount_offer import get_offer_by_id, mark_offer_claimed
+from app.database.crud.discount_offer import (
+    consume_discount_offer,
+    get_active_percent_discount_offer,
+    get_offer_by_id,
+    mark_offer_claimed,
+)
 from app.database.crud.subscription import (
     create_trial_subscription,
     create_paid_subscription, add_subscription_traffic, add_subscription_devices,
     update_subscription_autopay
 )
 from app.database.crud.transaction import create_transaction
-from app.database.crud.user import subtract_user_balance, add_user_balance
+from app.database.crud.user import subtract_user_balance
 from app.database.models import (
-    User, TransactionType, SubscriptionStatus,
-    Subscription
+    DiscountOffer,
+    Subscription,
+    SubscriptionStatus,
+    TransactionType,
+    User,
 )
 from app.keyboards.inline import (
     get_subscription_keyboard, get_trial_keyboard,
@@ -143,9 +151,20 @@ async def _prepare_subscription_summary(
         db_user: User,
         data: Dict[str, Any],
         texts,
+        active_offer: Optional[DiscountOffer] = None,
 ) -> Tuple[str, Dict[str, Any]]:
     summary_data = dict(data)
     countries = await _get_available_countries(db_user.promo_group_id)
+
+    offer_discount_percent = summary_data.get('offer_discount_percent') or 0
+    discount_offer_id = summary_data.get('discount_offer_id')
+
+    if active_offer:
+        offer_discount_percent = max(0, active_offer.discount_percent)
+        discount_offer_id = active_offer.id
+    else:
+        offer_discount_percent = 0
+        discount_offer_id = None
 
     months_in_period = calculate_months_from_days(summary_data['period_days'])
     period_display = format_period_description(summary_data['period_days'], db_user.language)
@@ -230,6 +249,14 @@ async def _prepare_subscription_summary(
 
     total_price = base_price + total_traffic_price + total_countries_price + total_devices_price
 
+    offer_discount_total = 0
+    final_total_price = total_price
+    if offer_discount_percent > 0 and total_price > 0:
+        final_total_price, offer_discount_total = apply_percentage_discount(
+            total_price,
+            offer_discount_percent,
+        )
+
     discounted_monthly_additions = (
             traffic_component["discounted_per_month"]
             + discounted_servers_price_per_month
@@ -246,7 +273,8 @@ async def _prepare_subscription_summary(
     if not is_valid:
         raise ValueError("Subscription price calculation validation failed")
 
-    summary_data['total_price'] = total_price
+    summary_data['total_price_before_offer'] = total_price
+    summary_data['total_price'] = final_total_price
     summary_data['server_prices_for_period'] = selected_server_prices
     summary_data['months_in_period'] = months_in_period
     summary_data['base_price'] = base_price
@@ -272,6 +300,9 @@ async def _prepare_subscription_summary(
     summary_data['devices_discounted_price_per_month'] = devices_component["discounted_per_month"]
     summary_data['total_devices_price'] = total_devices_price
     summary_data['discounted_monthly_additions'] = discounted_monthly_additions
+    summary_data['offer_discount_percent'] = offer_discount_percent
+    summary_data['offer_discount_total'] = offer_discount_total
+    summary_data['discount_offer_id'] = discount_offer_id if offer_discount_percent > 0 else None
 
     if settings.is_traffic_fixed():
         if final_traffic_gb == 0:
@@ -330,7 +361,22 @@ async def _prepare_subscription_summary(
             )
         details_lines.append(devices_line)
 
+    if offer_discount_total > 0:
+        details_lines.append(
+            texts.t(
+                "SUBSCRIPTION_OFFER_DISCOUNT_LINE",
+                "🎯 Доп. скидка: -{amount} (скидка {percent}%)",
+            ).format(
+                amount=texts.format_price(offer_discount_total),
+                percent=offer_discount_percent,
+            )
+        )
+
     details_text = "\n".join(details_lines)
+
+    total_display = texts.format_price(final_total_price)
+    if offer_discount_total > 0 and total_price > final_total_price:
+        total_display = f"<s>{texts.format_price(total_price)}</s> {total_display}"
 
     summary_text = (
         "📋 <b>Сводка заказа</b>\n\n"
@@ -340,7 +386,7 @@ async def _prepare_subscription_summary(
         f"📱 <b>Устройства:</b> {devices_selected}\n\n"
         "💰 <b>Детализация стоимости:</b>\n"
         f"{details_text}\n\n"
-        f"💎 <b>Общая стоимость:</b> {texts.format_price(total_price)}\n\n"
+        f"💎 <b>Общая стоимость:</b> {total_display}\n\n"
         "Подтверждаете покупку?"
     )
 
@@ -1368,6 +1414,15 @@ async def apply_countries_changes(
 
     data = await state.get_data()
     texts = get_texts(db_user.language)
+
+    offer_discount_percent = data.get('offer_discount_percent', 0)
+    offer_discount_total = data.get('offer_discount_total', 0)
+    final_price = data.get('total_price', 0)
+    original_total_price = data.get('total_price_before_offer', final_price)
+    applied_discount_offer_id = data.get('discount_offer_id')
+    applied_discount_offer: Optional[DiscountOffer] = None
+    if applied_discount_offer_id:
+        applied_discount_offer = await get_offer_by_id(db, applied_discount_offer_id)
 
     await save_subscription_checkout_draft(db_user.id, dict(data))
     resume_callback = (
@@ -3373,7 +3428,13 @@ async def devices_continue(
     texts = get_texts(db_user.language)
 
     try:
-        summary_text, prepared_data = await _prepare_subscription_summary(db_user, data, texts)
+        active_offer = await get_active_percent_discount_offer(db, db_user.id)
+        summary_text, prepared_data = await _prepare_subscription_summary(
+            db_user,
+            data,
+            texts,
+            active_offer,
+        )
     except ValueError:
         logger.error(f"Ошибка в расчете цены подписки для пользователя {db_user.telegram_id}")
         await callback.answer("Ошибка расчета цены. Обратитесь в поддержку.", show_alert=True)
@@ -3550,8 +3611,6 @@ async def confirm_purchase(
 
     total_servers_price = data.get('total_servers_price', total_countries_price)
 
-    final_price = data['total_price']
-
     discounted_monthly_additions = data.get(
         'discounted_monthly_additions',
         discounted_traffic_price_per_month
@@ -3563,7 +3622,7 @@ async def confirm_purchase(
         base_price,
         discounted_monthly_additions,
         months_in_period,
-        final_price,
+        original_total_price,
     )
 
     if not is_valid:
@@ -3612,10 +3671,25 @@ async def confirm_purchase(
                 f" -{devices_discount_total / 100}₽)"
             )
         logger.info(message)
-    logger.info(f"   ИТОГО: {final_price / 100}₽")
+    if offer_discount_total > 0 and original_total_price > final_price:
+        logger.info(
+            "   ИТОГО: %s₽ → %s₽ (доп. скидка %s%%: -%s₽)",
+            original_total_price / 100,
+            final_price / 100,
+            offer_discount_percent,
+            offer_discount_total / 100,
+        )
+    else:
+        logger.info(f"   ИТОГО: {final_price / 100}₽")
 
     if db_user.balance_kopeks < final_price:
         missing_kopeks = final_price - db_user.balance_kopeks
+        required_display = texts.format_price(final_price)
+        if offer_discount_total > 0 and original_total_price > final_price:
+            required_display = (
+                f"<s>{texts.format_price(original_total_price)}</s> "
+                f"{texts.format_price(final_price)}"
+            )
         message_text = texts.t(
             "ADDON_INSUFFICIENT_FUNDS_MESSAGE",
             (
@@ -3626,10 +3700,19 @@ async def confirm_purchase(
                 "Выберите способ пополнения. Сумма подставится автоматически."
             ),
         ).format(
-            required=texts.format_price(final_price),
+            required=required_display,
             balance=texts.format_price(db_user.balance_kopeks),
             missing=texts.format_price(missing_kopeks),
         )
+
+        if offer_discount_total > 0 and original_total_price > final_price:
+            message_text += "\n" + texts.t(
+                "ADDON_INSUFFICIENT_FUNDS_DISCOUNT_NOTE",
+                "🎯 Доп. скидка {percent}% уменьшила стоимость на {amount}.",
+            ).format(
+                percent=offer_discount_percent,
+                amount=texts.format_price(offer_discount_total),
+            )
 
         await callback.message.edit_text(
             message_text,
@@ -3653,6 +3736,12 @@ async def confirm_purchase(
 
         if not success:
             missing_kopeks = final_price - db_user.balance_kopeks
+            required_display = texts.format_price(final_price)
+            if offer_discount_total > 0 and original_total_price > final_price:
+                required_display = (
+                    f"<s>{texts.format_price(original_total_price)}</s> "
+                    f"{texts.format_price(final_price)}"
+                )
             message_text = texts.t(
                 "ADDON_INSUFFICIENT_FUNDS_MESSAGE",
                 (
@@ -3663,10 +3752,19 @@ async def confirm_purchase(
                     "Выберите способ пополнения. Сумма подставится автоматически."
                 ),
             ).format(
-                required=texts.format_price(final_price),
+                required=required_display,
                 balance=texts.format_price(db_user.balance_kopeks),
                 missing=texts.format_price(missing_kopeks),
             )
+
+            if offer_discount_total > 0 and original_total_price > final_price:
+                message_text += "\n" + texts.t(
+                    "ADDON_INSUFFICIENT_FUNDS_DISCOUNT_NOTE",
+                    "🎯 Доп. скидка {percent}% уменьшила стоимость на {amount}.",
+                ).format(
+                    percent=offer_discount_percent,
+                    amount=texts.format_price(offer_discount_total),
+                )
 
             await callback.message.edit_text(
                 message_text,
@@ -3942,6 +4040,16 @@ async def confirm_purchase(
             reply_markup=get_back_keyboard(db_user.language)
         )
 
+    if purchase_completed and applied_discount_offer and applied_discount_offer.consumed_at is None:
+        try:
+            await consume_discount_offer(db, applied_discount_offer)
+        except Exception as exc:  # pragma: no cover - defensive logging
+            logger.error(
+                "Не удалось отметить скидочное предложение %s использованным: %s",
+                applied_discount_offer.id,
+                exc,
+            )
+
     if purchase_completed:
         await clear_subscription_checkout_draft(db_user.id)
 
@@ -3953,6 +4061,7 @@ async def resume_subscription_checkout(
         callback: types.CallbackQuery,
         state: FSMContext,
         db_user: User,
+        db: AsyncSession,
 ):
     texts = get_texts(db_user.language)
 
@@ -3963,7 +4072,13 @@ async def resume_subscription_checkout(
         return
 
     try:
-        summary_text, prepared_data = await _prepare_subscription_summary(db_user, draft, texts)
+        active_offer = await get_active_percent_discount_offer(db, db_user.id)
+        summary_text, prepared_data = await _prepare_subscription_summary(
+            db_user,
+            draft,
+            texts,
+            active_offer,
+        )
     except ValueError as exc:
         logger.error(
             f"Ошибка восстановления заказа подписки для пользователя {db_user.telegram_id}: {exc}"
@@ -5053,7 +5168,7 @@ async def claim_discount_offer(
         )
         return
 
-    effect_type = (offer.effect_type or "balance_bonus").lower()
+    effect_type = (offer.effect_type or "percent_discount").lower()
 
     if effect_type == "test_access":
         success, added_squads, expires_at, error_code = await promo_offer_service.grant_test_access(
@@ -5094,29 +5209,13 @@ async def claim_discount_offer(
         await callback.message.answer(success_message)
         return
 
-    bonus_amount = offer.bonus_amount_kopeks or 0
-    if bonus_amount > 0:
-        success = await add_user_balance(
-            db,
-            db_user,
-            bonus_amount,
-            texts.get("DISCOUNT_BONUS_DESCRIPTION", "Скидка за продление подписки"),
-        )
-        if not success:
-            await callback.answer(
-                texts.get("DISCOUNT_CLAIM_ERROR", "❌ Не удалось начислить скидку. Попробуйте позже."),
-                show_alert=True,
-            )
-            return
-
     await mark_offer_claimed(db, offer)
 
     success_message = texts.get(
         "DISCOUNT_CLAIM_SUCCESS",
-        "🎉 Скидка {percent}% активирована! На баланс начислено {amount}.",
+        "🎉 Скидка {percent}% активирована! Она автоматически применится к следующему платежу.",
     ).format(
         percent=offer.discount_percent,
-        amount=settings.format_price(bonus_amount),
     )
 
     await callback.answer("✅ Скидка активирована!", show_alert=True)

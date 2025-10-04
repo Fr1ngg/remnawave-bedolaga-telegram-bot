@@ -1,6 +1,9 @@
 from datetime import datetime, timedelta
 from typing import Optional
 
+from datetime import datetime, timedelta
+from typing import Optional
+
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -14,9 +17,9 @@ async def upsert_discount_offer(
     subscription_id: Optional[int],
     notification_type: str,
     discount_percent: int,
-    bonus_amount_kopeks: int,
+    bonus_amount_kopeks: int = 0,
     valid_hours: int,
-    effect_type: str = "balance_bonus",
+    effect_type: str = "percent_discount",
     extra_data: Optional[dict] = None,
 ) -> DiscountOffer:
     """Create or refresh a discount offer for a user."""
@@ -41,6 +44,7 @@ async def upsert_discount_offer(
         offer.subscription_id = subscription_id
         offer.effect_type = effect_type
         offer.extra_data = extra_data
+        offer.consumed_at = None
     else:
         offer = DiscountOffer(
             user_id=user_id,
@@ -73,6 +77,30 @@ async def mark_offer_claimed(db: AsyncSession, offer: DiscountOffer) -> Discount
     await db.commit()
     await db.refresh(offer)
     return offer
+
+
+async def consume_discount_offer(db: AsyncSession, offer: DiscountOffer) -> DiscountOffer:
+    offer.consumed_at = datetime.utcnow()
+    await db.commit()
+    await db.refresh(offer)
+    return offer
+
+
+async def get_active_percent_discount_offer(
+    db: AsyncSession,
+    user_id: int,
+) -> Optional[DiscountOffer]:
+    result = await db.execute(
+        select(DiscountOffer)
+        .where(
+            DiscountOffer.user_id == user_id,
+            DiscountOffer.effect_type == "percent_discount",
+            DiscountOffer.claimed_at.isnot(None),
+            DiscountOffer.consumed_at.is_(None),
+        )
+        .order_by(DiscountOffer.claimed_at.desc())
+    )
+    return result.scalars().first()
 
 
 async def deactivate_expired_offers(db: AsyncSession) -> int:

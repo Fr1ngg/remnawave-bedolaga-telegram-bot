@@ -727,8 +727,9 @@ async def create_discount_offers_table():
                         bonus_amount_kopeks INTEGER NOT NULL DEFAULT 0,
                         expires_at DATETIME NOT NULL,
                         claimed_at DATETIME NULL,
+                        consumed_at DATETIME NULL,
                         is_active BOOLEAN NOT NULL DEFAULT 1,
-                        effect_type VARCHAR(50) NOT NULL DEFAULT 'balance_bonus',
+                        effect_type VARCHAR(50) NOT NULL DEFAULT 'percent_discount',
                         extra_data TEXT NULL,
                         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -752,8 +753,9 @@ async def create_discount_offers_table():
                         bonus_amount_kopeks INTEGER NOT NULL DEFAULT 0,
                         expires_at TIMESTAMP NOT NULL,
                         claimed_at TIMESTAMP NULL,
+                        consumed_at TIMESTAMP NULL,
                         is_active BOOLEAN NOT NULL DEFAULT TRUE,
-                        effect_type VARCHAR(50) NOT NULL DEFAULT 'balance_bonus',
+                        effect_type VARCHAR(50) NOT NULL DEFAULT 'percent_discount',
                         extra_data JSON NULL,
                         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -775,8 +777,9 @@ async def create_discount_offers_table():
                         bonus_amount_kopeks INTEGER NOT NULL DEFAULT 0,
                         expires_at DATETIME NOT NULL,
                         claimed_at DATETIME NULL,
+                        consumed_at DATETIME NULL,
                         is_active BOOLEAN NOT NULL DEFAULT TRUE,
-                        effect_type VARCHAR(50) NOT NULL DEFAULT 'balance_bonus',
+                        effect_type VARCHAR(50) NOT NULL DEFAULT 'percent_discount',
                         extra_data JSON NULL,
                         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -804,8 +807,9 @@ async def ensure_discount_offer_columns():
     try:
         effect_exists = await check_column_exists('discount_offers', 'effect_type')
         extra_exists = await check_column_exists('discount_offers', 'extra_data')
+        consumed_exists = await check_column_exists('discount_offers', 'consumed_at')
 
-        if effect_exists and extra_exists:
+        if effect_exists and extra_exists and consumed_exists:
             return True
 
         async with engine.begin() as conn:
@@ -814,15 +818,15 @@ async def ensure_discount_offer_columns():
             if not effect_exists:
                 if db_type == 'sqlite':
                     await conn.execute(text(
-                        "ALTER TABLE discount_offers ADD COLUMN effect_type VARCHAR(50) NOT NULL DEFAULT 'balance_bonus'"
+                        "ALTER TABLE discount_offers ADD COLUMN effect_type VARCHAR(50) NOT NULL DEFAULT 'percent_discount'"
                     ))
                 elif db_type == 'postgresql':
                     await conn.execute(text(
-                        "ALTER TABLE discount_offers ADD COLUMN effect_type VARCHAR(50) NOT NULL DEFAULT 'balance_bonus'"
+                        "ALTER TABLE discount_offers ADD COLUMN effect_type VARCHAR(50) NOT NULL DEFAULT 'percent_discount'"
                     ))
                 elif db_type == 'mysql':
                     await conn.execute(text(
-                        "ALTER TABLE discount_offers ADD COLUMN effect_type VARCHAR(50) NOT NULL DEFAULT 'balance_bonus'"
+                        "ALTER TABLE discount_offers ADD COLUMN effect_type VARCHAR(50) NOT NULL DEFAULT 'percent_discount'"
                     ))
                 else:
                     raise ValueError(f"Unsupported database type: {db_type}")
@@ -843,7 +847,24 @@ async def ensure_discount_offer_columns():
                 else:
                     raise ValueError(f"Unsupported database type: {db_type}")
 
-        logger.info("✅ Колонки effect_type и extra_data для discount_offers проверены")
+            if not consumed_exists:
+                column_sql = "ALTER TABLE discount_offers ADD COLUMN consumed_at"
+                if db_type == 'sqlite':
+                    await conn.execute(text(f"{column_sql} DATETIME NULL"))
+                elif db_type == 'postgresql':
+                    await conn.execute(text(f"{column_sql} TIMESTAMP NULL"))
+                elif db_type == 'mysql':
+                    await conn.execute(text(f"{column_sql} DATETIME NULL"))
+                else:
+                    raise ValueError(f"Unsupported database type: {db_type}")
+
+            # Ensure existing offers use the new effect type naming
+            await conn.execute(text(
+                "UPDATE discount_offers SET effect_type = 'percent_discount' "
+                "WHERE effect_type = 'balance_bonus'"
+            ))
+
+        logger.info("✅ Колонки discount_offers приведены к актуальному состоянию")
         return True
 
     except Exception as e:
