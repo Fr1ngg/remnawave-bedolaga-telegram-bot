@@ -172,3 +172,7 @@ class AdminSubmenuStates(StatesGroup):
     in_communications_submenu = State()
     in_settings_submenu = State()
     in_system_submenu = State()
+
+
+class ExternalAdminApiKeysStates(StatesGroup):
+    waiting_for_target_id = State()
