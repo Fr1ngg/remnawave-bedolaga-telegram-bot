@@ -4,6 +4,7 @@ from datetime import datetime
 from typing import Any, Optional
 
 from fastapi import APIRouter, HTTPException, Query, Security, status
+from fastapi.responses import FileResponse
 
 from app.services.backup_service import backup_service
 
@@ -13,6 +14,8 @@ from ..schemas.backups import (
     BackupCreateResponse,
     BackupInfo,
     BackupListResponse,
+    BackupSettingsResponse,
+    BackupSettingsUpdateRequest,
     BackupStatusResponse,
     BackupTaskInfo,
     BackupTaskListResponse,
@@ -82,6 +85,60 @@ async def create_backup_endpoint(
     created_by = getattr(token, "id", None)
     state = await backup_task_manager.enqueue(created_by=created_by)
     return BackupCreateResponse(task_id=state.task_id, status=state.status)
+
+
+@router.post(
+    "/restore",
+    status_code=status.HTTP_200_OK,
+    summary="Восстановить данные из резервной копии",
+)
+async def restore_backup_endpoint(
+    filepath: str,
+    clear_existing: bool = Query(False, description="Очистить существующие данные перед восстановлением"),
+    _: Any = Security(require_api_token),
+) -> dict:
+    success, message = await backup_service.restore_backup(filepath, clear_existing=clear_existing)
+    if not success:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, message)
+    return {"detail": message}
+
+
+@router.get("/settings", response_model=BackupSettingsResponse)
+async def get_backup_settings(_: Any = Security(require_api_token)) -> BackupSettingsResponse:
+    s = await backup_service.get_backup_settings()
+    return BackupSettingsResponse(
+        auto_backup_enabled=s.auto_backup_enabled,
+        backup_interval_hours=s.backup_interval_hours,
+        backup_time=s.backup_time,
+        max_backups_keep=s.max_backups_keep,
+        compression_enabled=s.compression_enabled,
+        include_logs=s.include_logs,
+        backup_location=s.backup_location,
+    )
+
+
+@router.put("/settings", response_model=BackupSettingsResponse)
+async def update_backup_settings(payload: BackupSettingsUpdateRequest, _: Any = Security(require_api_token)) -> BackupSettingsResponse:
+    ok = await backup_service.update_backup_settings(**{k: v for k, v in payload.model_dump(exclude_none=True).items()})
+    if not ok:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Не удалось обновить настройки")
+    return await get_backup_settings()  # type: ignore[return-value]
+
+
+@router.delete("/{filename}")
+async def delete_backup_file(filename: str, _: Any = Security(require_api_token)) -> dict:
+    success, message = await backup_service.delete_backup(filename)
+    if not success:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, message)
+    return {"detail": message}
+
+
+@router.get("/download/{filename}")
+async def download_backup_file(filename: str, _: Any = Security(require_api_token)) -> FileResponse:
+    path = backup_service.backup_dir / filename
+    if not path.exists() or not path.is_file():
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Файл бекапа не найден")
+    return FileResponse(str(path), media_type="application/octet-stream", filename=filename)
 
 
 @router.get(

@@ -11,6 +11,7 @@ from app.services.system_settings_service import (
 )
 
 from ..dependencies import get_db_session, require_api_token
+from .notifications import broker
 from ..schemas.config import (
     SettingCategoryRef,
     SettingCategorySummary,
@@ -163,6 +164,11 @@ async def update_setting(
         raise HTTPException(status.HTTP_403_FORBIDDEN, str(error)) from error
     await db.commit()
 
+    try:
+        await broker.publish("settings.update")
+    except Exception:
+        pass
+
     return _serialize_definition(definition)
 
 
@@ -182,4 +188,8 @@ async def reset_setting(
     except ReadOnlySettingError as error:
         raise HTTPException(status.HTTP_403_FORBIDDEN, str(error)) from error
     await db.commit()
+    try:
+        await broker.publish("settings.update")
+    except Exception:
+        pass
     return _serialize_definition(definition)

@@ -15,6 +15,8 @@ class TransactionResponse(BaseModel):
     description: Optional[str] = None
     payment_method: Optional[str] = None
     external_id: Optional[str] = None
+    currency: Optional[str] = None
+    status: Optional[str] = None
     is_completed: bool
     created_at: datetime
     completed_at: Optional[datetime] = None

@@ -1,10 +1,26 @@
-from typing import List, Optional
+from typing import List, Optional, Any
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, desc, and_, or_, update, func
 from sqlalchemy.orm import selectinload
 from datetime import datetime
 
 from app.database.models import Ticket, TicketMessage, TicketStatus, User, SupportAuditLog
+"""Lazy resolver for SSE broker to avoid import-order issues.
+The web API (and its notifications broker) may start after this module is imported.
+We attempt to resolve on first use, and reuse the instance afterwards.
+"""
+sse_broker: Any | None = None
+
+def _resolve_sse_broker() -> Any | None:
+    global sse_broker
+    if sse_broker is not None:
+        return sse_broker
+    try:
+        from app.webapi.routes.notifications import broker as _broker  # type: ignore
+        sse_broker = _broker
+    except Exception:  # pragma: no cover
+        sse_broker = None
+    return sse_broker
 
 
 class TicketCRUD:
@@ -47,6 +63,16 @@ class TicketCRUD:
         
         await db.commit()
         await db.refresh(ticket)
+        # Publish SSE: new ticket created
+        try:
+            broker = _resolve_sse_broker()
+            if broker is not None:
+                await broker.publish("ticket.created")
+                # Generic update and initial message event for lists/detail views
+                await broker.publish("ticket.update")
+                await broker.publish(f"ticket.message:{ticket.id}")
+        except Exception:
+            pass
         return ticket
     
     @staticmethod
@@ -246,6 +272,14 @@ class TicketCRUD:
             ticket.closed_at = closed_at
         
         await db.commit()
+        # Publish SSE about status change
+        try:
+            broker = _resolve_sse_broker()
+            if broker is not None:
+                await broker.publish("ticket.update")
+                await broker.publish(f"ticket.status:{ticket_id}")
+        except Exception:
+            pass
         return True
 
     @staticmethod
@@ -262,6 +296,14 @@ class TicketCRUD:
         ticket.user_reply_block_until = until
         ticket.updated_at = datetime.utcnow()
         await db.commit()
+        # Publish SSE about block change
+        try:
+            broker = _resolve_sse_broker()
+            if broker is not None:
+                await broker.publish("ticket.update")
+                await broker.publish(f"ticket.block:{ticket_id}")
+        except Exception:
+            pass
         return True
     
     @staticmethod
@@ -270,9 +312,21 @@ class TicketCRUD:
         ticket_id: int
     ) -> bool:
         """Закрыть тикет"""
-        return await TicketCRUD.update_ticket_status(
+        ok = await TicketCRUD.update_ticket_status(
             db, ticket_id, TicketStatus.CLOSED.value, datetime.utcnow()
         )
+        # Publish SSE: ticket closed
+        try:
+            if ok:
+                broker = _resolve_sse_broker()
+                if broker is not None:
+                    await broker.publish("ticket.closed")
+                    # Also notify specific ticket status for detail view refresh
+                    await broker.publish("ticket.update")
+                    await broker.publish(f"ticket.status:{ticket_id}")
+        except Exception:
+            pass
+        return ok
 
     @staticmethod
     async def add_support_audit(
@@ -386,6 +440,15 @@ class TicketMessageCRUD:
         
         await db.commit()
         await db.refresh(message)
+        # Publish SSE: message added and possible status change
+        try:
+            broker = _resolve_sse_broker()
+            if broker is not None:
+                await broker.publish("ticket.update")
+                await broker.publish(f"ticket.message:{ticket_id}")
+                await broker.publish(f"ticket.status:{ticket_id}")
+        except Exception:
+            pass
         return message
     
     @staticmethod

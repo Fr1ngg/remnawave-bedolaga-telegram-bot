@@ -12,6 +12,7 @@ from app.database.models import WebApiToken
 from app.services.web_api_token_service import web_api_token_service
 
 from ..dependencies import get_db_session, require_api_token
+from .notifications import broker
 from ..schemas.tokens import TokenCreateRequest, TokenCreateResponse, TokenResponse
 
 router = APIRouter()
@@ -56,6 +57,10 @@ async def create_token(
         created_by=actor.name,
     )
     await db.commit()
+    try:
+        await broker.publish("tokens.update")
+    except Exception:
+        pass
 
     base = _serialize(token).model_dump()
     base["token"] = token_value
@@ -74,6 +79,10 @@ async def revoke_token(
 
     await web_api_token_service.revoke_token(db, token)
     await db.commit()
+    try:
+        await broker.publish("tokens.update")
+    except Exception:
+        pass
     return _serialize(token)
 
 
@@ -89,10 +98,14 @@ async def activate_token(
 
     await web_api_token_service.activate_token(db, token)
     await db.commit()
+    try:
+        await broker.publish("tokens.update")
+    except Exception:
+        pass
     return _serialize(token)
 
 
-@router.delete("/{token_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{token_id}", status_code=status.HTTP_204_NO_CONTENT, response_class=Response)
 async def delete_token_endpoint(
     token_id: int,
     _: WebApiToken = Security(require_api_token),
@@ -104,4 +117,8 @@ async def delete_token_endpoint(
 
     await delete_token(db, token)
     await db.commit()
+    try:
+        await broker.publish("tokens.update")
+    except Exception:
+        pass
     return Response(status_code=status.HTTP_204_NO_CONTENT)

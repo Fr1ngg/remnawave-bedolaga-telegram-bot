@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Security, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Security, status, Response
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -122,18 +122,19 @@ async def list_campaigns(
     "/{campaign_id}",
     status_code=status.HTTP_204_NO_CONTENT,
     summary="Удалить рекламную кампанию",
+    response_class=Response,
 )
 async def delete_campaign_endpoint(
     campaign_id: int,
     _: Any = Security(require_api_token),
     db: AsyncSession = Depends(get_db_session),
-):
+) -> Response:
     campaign = await get_campaign_by_id(db, campaign_id)
     if not campaign:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Campaign not found")
 
     await delete_campaign(db, campaign)
-    return None
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.patch(

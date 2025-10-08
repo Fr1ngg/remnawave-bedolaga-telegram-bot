@@ -618,7 +618,9 @@ class Transaction(Base):
     description = Column(Text, nullable=True)
     
     payment_method = Column(String(50), nullable=True)
-    external_id = Column(String(255), nullable=True)  
+    status = Column(String(50), nullable=True)
+    currency = Column(String(10), nullable=True)
+    external_id = Column(String(255), nullable=True)
     
     is_completed = Column(Boolean, default=True)
     
@@ -999,7 +1001,13 @@ class ServerSquad(Base):
         back_populates="server_squads",
         lazy="selectin",
     )
-    
+
+    metrics = relationship(
+        "ServerHealthMetric",
+        back_populates="server_squad",
+        passive_deletes=True,
+    )
+
     @property
     def price_rubles(self) -> float:
         return self.price_kopeks / 100
@@ -1018,6 +1026,56 @@ class ServerSquad(Base):
             return "Переполнен"
         else:
             return "Доступен"
+
+
+class ServerHealthMetric(Base):
+    __tablename__ = "server_health_metrics"
+
+    id = Column(Integer, primary_key=True, index=True)
+    agent_id = Column(String(128), nullable=False, index=True)
+    server_name = Column(String(255), nullable=True)
+    server_squad_id = Column(Integer, ForeignKey("server_squads.id", ondelete="SET NULL"), nullable=True)
+    cpu_percent = Column(Float, nullable=False)
+    memory_percent = Column(Float, nullable=True)
+    memory_used_mb = Column(Integer, nullable=True)
+    memory_total_mb = Column(Integer, nullable=True)
+    swap_percent = Column(Float, nullable=True)
+    load_avg_1m = Column(Float, nullable=True)
+    load_avg_5m = Column(Float, nullable=True)
+    load_avg_15m = Column(Float, nullable=True)
+    uptime_seconds = Column(BigInteger, nullable=True)
+    process_count = Column(Integer, nullable=True)
+    recorded_at = Column(DateTime, nullable=True)
+    extra = Column(JSON, nullable=True)
+    created_at = Column(DateTime, default=func.now())
+
+    server_squad = relationship("ServerSquad", back_populates="metrics")
+
+    __table_args__ = (
+        Index("ix_server_health_metrics_agent_created_at", "agent_id", "created_at"),
+        Index("ix_server_health_metrics_server_squad_created_at", "server_squad_id", "created_at"),
+    )
+
+    def as_dict(self) -> Dict[str, object]:
+        return {
+            "id": self.id,
+            "agent_id": self.agent_id,
+            "server_name": self.server_name,
+            "server_squad_id": self.server_squad_id,
+            "cpu_percent": self.cpu_percent,
+            "memory_percent": self.memory_percent,
+            "memory_used_mb": self.memory_used_mb,
+            "memory_total_mb": self.memory_total_mb,
+            "swap_percent": self.swap_percent,
+            "load_avg_1m": self.load_avg_1m,
+            "load_avg_5m": self.load_avg_5m,
+            "load_avg_15m": self.load_avg_15m,
+            "uptime_seconds": self.uptime_seconds,
+            "process_count": self.process_count,
+            "recorded_at": self.recorded_at,
+            "extra": self.extra or {},
+            "created_at": self.created_at,
+        }
 
 
 class SubscriptionServer(Base):

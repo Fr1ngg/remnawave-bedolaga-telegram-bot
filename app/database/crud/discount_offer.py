@@ -86,6 +86,7 @@ async def list_discount_offers(
     limit: int = 50,
     user_id: Optional[int] = None,
     notification_type: Optional[str] = None,
+    notification_type_prefix: Optional[str] = None,
     is_active: Optional[bool] = None,
 ) -> List[DiscountOffer]:
     stmt = (
@@ -103,6 +104,8 @@ async def list_discount_offers(
         stmt = stmt.where(DiscountOffer.user_id == user_id)
     if notification_type:
         stmt = stmt.where(DiscountOffer.notification_type == notification_type)
+    elif notification_type_prefix:
+        stmt = stmt.where(DiscountOffer.notification_type.like(f"{notification_type_prefix}%"))
     if is_active is not None:
         stmt = stmt.where(DiscountOffer.is_active == is_active)
 
@@ -115,6 +118,7 @@ async def count_discount_offers(
     *,
     user_id: Optional[int] = None,
     notification_type: Optional[str] = None,
+    notification_type_prefix: Optional[str] = None,
     is_active: Optional[bool] = None,
 ) -> int:
     stmt = select(func.count(DiscountOffer.id))
@@ -123,6 +127,8 @@ async def count_discount_offers(
         stmt = stmt.where(DiscountOffer.user_id == user_id)
     if notification_type:
         stmt = stmt.where(DiscountOffer.notification_type == notification_type)
+    elif notification_type_prefix:
+        stmt = stmt.where(DiscountOffer.notification_type.like(f"{notification_type_prefix}%"))
     if is_active is not None:
         stmt = stmt.where(DiscountOffer.is_active == is_active)
 

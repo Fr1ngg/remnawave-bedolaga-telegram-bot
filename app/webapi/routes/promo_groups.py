@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import Any
+from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, Security, status
 from sqlalchemy.exc import IntegrityError
@@ -18,6 +19,7 @@ from app.database.crud.promo_group import (
 from app.database.models import PromoGroup
 
 from ..dependencies import get_db_session, require_api_token
+from .notifications import broker
 from ..schemas.promo_groups import (
     PromoGroupCreateRequest,
     PromoGroupListResponse,
@@ -40,7 +42,20 @@ def _normalize_period_discounts(group: PromoGroup) -> dict[int, int]:
     return normalized
 
 
+def _ensure_datetime(value: Any) -> datetime:
+    if isinstance(value, datetime):
+        return value
+    if isinstance(value, str):
+        try:
+            return datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except ValueError:
+            pass
+    return datetime.utcnow()
+
+
 def _serialize(group: PromoGroup, members_count: int = 0) -> PromoGroupResponse:
+    created_at = _ensure_datetime(getattr(group, "created_at", None) or getattr(group, "updated_at", None))
+    updated_at = _ensure_datetime(getattr(group, "updated_at", None) or getattr(group, "created_at", None))
     return PromoGroupResponse(
         id=group.id,
         name=group.name,
@@ -52,8 +67,8 @@ def _serialize(group: PromoGroup, members_count: int = 0) -> PromoGroupResponse:
         apply_discounts_to_addons=group.apply_discounts_to_addons,
         is_default=group.is_default,
         members_count=members_count,
-        created_at=group.created_at,
-        updated_at=group.updated_at,
+        created_at=created_at,
+        updated_at=updated_at,
     )
 
 
@@ -117,6 +132,10 @@ async def create_promo_group_endpoint(
             status.HTTP_400_BAD_REQUEST,
             "Promo group with this name already exists",
         ) from exc
+    try:
+        await broker.publish("promo_groups.update")
+    except Exception:
+        pass
     return _serialize(group, members_count=0)
 
 
@@ -151,10 +170,14 @@ async def update_promo_group_endpoint(
             "Promo group with this name already exists",
         ) from exc
     members_count = await count_promo_group_members(db, group_id)
+    try:
+        await broker.publish("promo_groups.update")
+    except Exception:
+        pass
     return _serialize(group, members_count=members_count)
 
 
-@router.delete("/{group_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{group_id}", status_code=status.HTTP_204_NO_CONTENT, response_class=Response)
 async def delete_promo_group_endpoint(
     group_id: int,
     _: Any = Security(require_api_token),
@@ -168,4 +191,8 @@ async def delete_promo_group_endpoint(
     if not success:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Cannot delete default promo group")
 
+    try:
+        await broker.publish("promo_groups.update")
+    except Exception:
+        pass
     return Response(status_code=status.HTTP_204_NO_CONTENT)

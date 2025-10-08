@@ -16,6 +16,10 @@ from app.handlers.admin.messages import (
     get_custom_users,
     get_target_users,
 )
+try:
+    from app.webapi.routes.notifications import broker as sse_broker  # type: ignore
+except Exception:  # pragma: no cover
+    sse_broker = None  # type: ignore
 
 
 logger = logging.getLogger(__name__)
@@ -114,6 +118,12 @@ class BroadcastService:
                 broadcast.sent_count = 0
                 broadcast.failed_count = 0
                 await session.commit()
+                # Notify UI that broadcast started
+                try:
+                    if sse_broker is not None:
+                        await sse_broker.publish("broadcasts.update")
+                except Exception:
+                    pass
 
             recipients = await self._fetch_recipients(config.target)
 
@@ -125,6 +135,11 @@ class BroadcastService:
 
                 broadcast.total_count = len(recipients)
                 await session.commit()
+                try:
+                    if sse_broker is not None:
+                        await sse_broker.publish("broadcasts.update")
+                except Exception:
+                    pass
 
             if cancel_event.is_set():
                 await self._mark_cancelled(broadcast_id, sent_count, failed_count)
@@ -161,15 +176,36 @@ class BroadcastService:
 
                 if index % 20 == 0:
                     await asyncio.sleep(1)
+                    # Periodic progress ping
+                    try:
+                        if sse_broker is not None:
+                            await sse_broker.publish("broadcasts.update")
+                    except Exception:
+                        pass
 
             await self._mark_finished(broadcast_id, sent_count, failed_count, cancelled=False)
+            try:
+                if sse_broker is not None:
+                    await sse_broker.publish("broadcasts.update")
+            except Exception:
+                pass
 
         except asyncio.CancelledError:
             await self._mark_cancelled(broadcast_id, sent_count, failed_count)
+            try:
+                if sse_broker is not None:
+                    await sse_broker.publish("broadcasts.update")
+            except Exception:
+                pass
             raise
         except Exception as exc:  # noqa: BLE001
             logger.exception("Критическая ошибка при выполнении рассылки %s: %s", broadcast_id, exc)
             await self._mark_failed(broadcast_id, sent_count, failed_count)
+            try:
+                if sse_broker is not None:
+                    await sse_broker.publish("broadcasts.update")
+            except Exception:
+                pass
 
     async def _fetch_recipients(self, target: str):
         async with AsyncSessionLocal() as session:
@@ -243,6 +279,11 @@ class BroadcastService:
             )
             broadcast.completed_at = datetime.utcnow()
             await session.commit()
+        try:
+            if sse_broker is not None:
+                await sse_broker.publish("broadcasts.update")
+        except Exception:
+            pass
 
     async def _mark_cancelled(
         self,
@@ -273,6 +314,11 @@ class BroadcastService:
             broadcast.status = "failed"
             broadcast.completed_at = datetime.utcnow()
             await session.commit()
+        try:
+            if sse_broker is not None:
+                await sse_broker.publish("broadcasts.update")
+        except Exception:
+            pass
 
 
 broadcast_service = BroadcastService()
