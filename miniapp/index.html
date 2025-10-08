@@ -576,6 +576,118 @@
             text-align: right;
         }
 
+        /* Promo Levels */
+        .promo-levels-card .card-header {
+            cursor: default;
+        }
+
+        .promo-levels-card .card-content {
+            padding-top: 16px;
+        }
+
+        .promo-levels-summary {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+
+        .promo-level-summary-item {
+            background: var(--bg-primary);
+            border-radius: var(--radius);
+            border: 1px solid var(--border-color);
+            padding: 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .promo-level-summary-label {
+            font-size: 12px;
+            text-transform: uppercase;
+            font-weight: 600;
+            color: var(--text-secondary);
+            letter-spacing: 0.4px;
+        }
+
+        .promo-level-summary-value {
+            font-size: 15px;
+            font-weight: 700;
+            color: var(--text-primary);
+            line-height: 1.4;
+        }
+
+        .promo-levels-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .promo-level-item {
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius);
+            padding: 12px 14px;
+            background: rgba(var(--primary-rgb), 0.02);
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+            border-left: 4px solid transparent;
+        }
+
+        .promo-level-item.achieved {
+            border-left-color: var(--success);
+        }
+
+        .promo-level-item.locked {
+            border-left-color: var(--border-color);
+        }
+
+        .promo-level-item.current {
+            border-left-color: var(--primary);
+            box-shadow: var(--shadow-sm);
+        }
+
+        .promo-level-header {
+            display: flex;
+            align-items: baseline;
+            justify-content: space-between;
+            gap: 12px;
+            margin-bottom: 6px;
+        }
+
+        .promo-level-name {
+            font-weight: 700;
+            font-size: 15px;
+            color: var(--text-primary);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .promo-level-badge {
+            background: rgba(var(--primary-rgb), 0.1);
+            color: var(--primary);
+            padding: 2px 8px;
+            border-radius: 999px;
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .promo-level-threshold {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--text-secondary);
+            text-align: right;
+        }
+
+        .promo-level-status {
+            font-size: 13px;
+            color: var(--text-secondary);
+        }
+
         /* Balance Card */
         .balance-card {
             background: linear-gradient(135deg, rgba(var(--primary-rgb), 0.1), rgba(var(--primary-rgb), 0.05));
@@ -1385,9 +1497,37 @@
                         <span class="info-value" id="deviceLimit">-</span>
                     </div>
                     <div class="info-item">
+                        <span class="info-label" data-i18n="info.promo_group">Promo group</span>
+                        <span class="info-value" id="promoGroupName">-</span>
+                    </div>
+                    <div class="info-item">
                         <span class="info-label" data-i18n="info.autopay">Auto-Pay</span>
                         <span class="info-value" id="autopayStatus">-</span>
                     </div>
+                </div>
+            </div>
+
+            <div class="card promo-levels-card" id="promoLevelsCard">
+                <div class="card-header">
+                    <div class="card-title" data-i18n="card.promo_levels.title">Promo levels</div>
+                </div>
+                <div class="card-content">
+                    <div class="promo-levels-summary">
+                        <div class="promo-level-summary-item">
+                            <div class="promo-level-summary-label" data-i18n="promo_levels.total_spent">Total spent</div>
+                            <div class="promo-level-summary-value" id="promoLevelsTotalSpent">—</div>
+                        </div>
+                        <div class="promo-level-summary-item">
+                            <div class="promo-level-summary-label" data-i18n="promo_levels.current_level">Current level</div>
+                            <div class="promo-level-summary-value" id="promoLevelsCurrent">—</div>
+                        </div>
+                        <div class="promo-level-summary-item">
+                            <div class="promo-level-summary-label" data-i18n="promo_levels.next_level">Next level</div>
+                            <div class="promo-level-summary-value" id="promoLevelsNext">—</div>
+                        </div>
+                    </div>
+                    <ul class="promo-levels-list hidden" id="promoLevelsList"></ul>
+                    <div class="empty-state hidden" id="promoLevelsEmpty" data-i18n="promo_levels.empty">Promo levels for auto assignment are not configured yet.</div>
                 </div>
             </div>
 
@@ -1671,6 +1811,19 @@
                 'card.history.title': 'Transaction History',
                 'card.servers.title': 'Connected Servers',
                 'card.devices.title': 'Connected Devices',
+                'card.promo_levels.title': 'Promo levels',
+                'promo_levels.total_spent': 'Total spent',
+                'promo_levels.current_level': 'Current level',
+                'promo_levels.current_level.none': 'Not assigned yet',
+                'promo_levels.next_level': 'Next level',
+                'promo_levels.next_level.value': '«{name}» — {amount} left',
+                'promo_levels.next_level.max': 'Maximum level reached',
+                'promo_levels.empty': 'Promo levels for auto assignment are not configured yet.',
+                'promo_levels.status.achieved': 'Achieved',
+                'promo_levels.status.locked': 'Locked',
+                'promo_levels.threshold': 'From {amount}',
+                'promo_levels.badge.current': 'Current',
+                'promo_levels.remaining': '{amount} left',
                 'apps.title': 'Installation guide',
                 'apps.no_data': 'No installation guide available for this platform yet.',
                 'apps.featured': 'Recommended',
@@ -1735,6 +1888,19 @@
                 'card.history.title': 'История операций',
                 'card.servers.title': 'Подключённые серверы',
                 'card.devices.title': 'Подключенные устройства',
+                'card.promo_levels.title': 'Уровни промогрупп',
+                'promo_levels.total_spent': 'Потрачено',
+                'promo_levels.current_level': 'Текущий уровень',
+                'promo_levels.current_level.none': 'Ещё не получен',
+                'promo_levels.next_level': 'Следующий уровень',
+                'promo_levels.next_level.value': '«{name}» — осталось {amount}',
+                'promo_levels.next_level.max': 'Получен максимальный уровень',
+                'promo_levels.empty': 'Уровни с автовыдачей пока не настроены.',
+                'promo_levels.status.achieved': 'Получен',
+                'promo_levels.status.locked': 'Недоступен',
+                'promo_levels.threshold': 'От {amount}',
+                'promo_levels.badge.current': 'Текущий',
+                'promo_levels.remaining': 'Осталось {amount}',
                 'apps.title': 'Инструкция по установке',
                 'apps.no_data': 'Для этой платформы инструкция пока недоступна.',
                 'apps.featured': 'Рекомендуем',
@@ -2289,6 +2455,7 @@
                     : autopayLabel;
             }
 
+            renderPromoGroupSection();
             renderBalanceSection();
             renderTransactionHistory();
             renderServersList();
@@ -2533,6 +2700,133 @@
             } catch (error) {
                 return date.toLocaleString();
             }
+        }
+
+        function formatKopeksToCurrency(kopeks, currency = 'RUB') {
+            const numeric = typeof kopeks === 'number'
+                ? kopeks
+                : Number.parseInt(kopeks ?? '0', 10);
+            const safeValue = Number.isFinite(numeric) ? numeric : 0;
+            return formatCurrency(safeValue / 100, currency);
+        }
+
+        function renderPromoGroupSection() {
+            const promoGroupElement = document.getElementById('promoGroupName');
+            if (promoGroupElement) {
+                const groupName = userData?.promo_group?.name;
+                promoGroupElement.textContent = groupName
+                    ? groupName
+                    : t('values.not_available');
+            }
+
+            const card = document.getElementById('promoLevelsCard');
+            if (!card) {
+                return;
+            }
+
+            const totalSpentElement = document.getElementById('promoLevelsTotalSpent');
+            const currentLevelElement = document.getElementById('promoLevelsCurrent');
+            const nextLevelElement = document.getElementById('promoLevelsNext');
+            const listElement = document.getElementById('promoLevelsList');
+            const emptyElement = document.getElementById('promoLevelsEmpty');
+            if (!totalSpentElement || !currentLevelElement || !nextLevelElement || !listElement || !emptyElement) {
+                return;
+            }
+
+            const levels = Array.isArray(userData?.auto_promo_levels)
+                ? userData.auto_promo_levels
+                : [];
+            const totalSpentRaw = typeof userData?.user_total_spent_kopeks === 'number'
+                ? userData.user_total_spent_kopeks
+                : Number.parseInt(userData?.user_total_spent_kopeks ?? '0', 10);
+            const totalSpent = Number.isFinite(totalSpentRaw) ? Math.max(totalSpentRaw, 0) : 0;
+            const currency = (userData?.balance_currency || 'RUB').toUpperCase();
+
+            totalSpentElement.textContent = formatKopeksToCurrency(totalSpent, currency);
+
+            const currentName = userData?.promo_group?.name;
+            currentLevelElement.textContent = currentName
+                ? currentName
+                : t('promo_levels.current_level.none');
+
+            if (!levels.length) {
+                nextLevelElement.textContent = t('promo_levels.empty');
+            } else {
+                const nextLevel = levels.find(level => {
+                    const thresholdRaw = typeof level?.threshold_kopeks === 'number'
+                        ? level.threshold_kopeks
+                        : Number.parseInt(level?.threshold_kopeks ?? '0', 10);
+                    return Number.isFinite(thresholdRaw) && thresholdRaw > totalSpent;
+                });
+
+                if (nextLevel) {
+                    const threshold = Number(nextLevel.threshold_kopeks) || 0;
+                    const remaining = Math.max(threshold - totalSpent, 0);
+                    const amountLabel = formatKopeksToCurrency(remaining, currency);
+                    const template = t('promo_levels.next_level.value');
+                    nextLevelElement.textContent = template
+                        .replace('{name}', nextLevel.name || '')
+                        .replace('{amount}', amountLabel);
+                } else {
+                    nextLevelElement.textContent = t('promo_levels.next_level.max');
+                }
+            }
+
+            listElement.innerHTML = '';
+
+            if (!levels.length) {
+                listElement.classList.add('hidden');
+                emptyElement.classList.remove('hidden');
+                emptyElement.textContent = t('promo_levels.empty');
+                return;
+            }
+
+            listElement.classList.remove('hidden');
+            emptyElement.classList.add('hidden');
+
+            const currentGroupId = userData?.promo_group?.id ?? null;
+
+            levels.forEach(level => {
+                const thresholdRaw = typeof level?.threshold_kopeks === 'number'
+                    ? level.threshold_kopeks
+                    : Number.parseInt(level?.threshold_kopeks ?? '0', 10);
+                const threshold = Number.isFinite(thresholdRaw) ? Math.max(thresholdRaw, 0) : 0;
+                const achieved = totalSpent >= threshold;
+                const remaining = Math.max(threshold - totalSpent, 0);
+                const isCurrent = currentGroupId !== null && level?.id === currentGroupId;
+
+                const thresholdLabel = t('promo_levels.threshold')
+                    .replace('{amount}', formatKopeksToCurrency(threshold, currency));
+
+                const statusKey = achieved ? 'promo_levels.status.achieved' : 'promo_levels.status.locked';
+                let statusText = t(statusKey);
+                if (!achieved) {
+                    const remainingLabel = t('promo_levels.remaining')
+                        .replace('{amount}', formatKopeksToCurrency(remaining, currency));
+                    statusText = `${statusText} · ${remainingLabel}`;
+                }
+
+                const item = document.createElement('li');
+                item.classList.add('promo-level-item');
+                item.classList.add(achieved ? 'achieved' : 'locked');
+                if (isCurrent) {
+                    item.classList.add('current');
+                }
+
+                const badgeHtml = isCurrent
+                    ? ` <span class="promo-level-badge">${escapeHtml(t('promo_levels.badge.current'))}</span>`
+                    : '';
+
+                item.innerHTML = `
+                    <div class="promo-level-header">
+                        <div class="promo-level-name">${escapeHtml(level?.name || '-')}${badgeHtml}</div>
+                        <div class="promo-level-threshold">${escapeHtml(thresholdLabel)}</div>
+                    </div>
+                    <div class="promo-level-status">${escapeHtml(statusText)}</div>
+                `;
+
+                listElement.appendChild(item);
+            });
         }
 
         function renderBalanceSection() {
