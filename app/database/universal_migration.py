@@ -3014,13 +3014,6 @@ async def run_universal_migration():
         else:
             logger.warning("⚠️ Проблемы с таблицей web_api_tokens")
 
-        logger.info("=== СОЗДАНИЕ ТАБЛИЦЫ ADMIN_USERS ===")
-        admin_users_ready = await create_admin_users_table()
-        if admin_users_ready:
-            logger.info("✅ Таблица admin_users готова")
-        else:
-            logger.warning("⚠️ Проблемы с таблицей admin_users")
-
         logger.info("=== ДОБАВЛЕНИЕ КОЛОНКИ ДЛЯ ТРИАЛЬНЫХ СКВАДОВ ===")
         trial_column_ready = await add_server_trial_flag_column()
         if trial_column_ready:
