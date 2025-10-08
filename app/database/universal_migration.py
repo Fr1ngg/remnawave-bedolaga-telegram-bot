@@ -2607,6 +2607,164 @@ async def create_web_api_tokens_table() -> bool:
         return False
 
 
+async def ensure_external_admin_api_keys_unique_target() -> bool:
+    constraint_name = "uq_external_admin_api_keys_target"
+
+    try:
+        db_type = await get_database_type()
+
+        if db_type == "sqlite":
+            index_exists = await check_index_exists(
+                "external_admin_api_keys",
+                constraint_name,
+            )
+            if index_exists:
+                return True
+        else:
+            constraint_exists = await check_constraint_exists(
+                "external_admin_api_keys",
+                constraint_name,
+            )
+            if constraint_exists:
+                return True
+
+        async with engine.begin() as conn:
+            if db_type == "sqlite":
+                await conn.execute(
+                    text(
+                        """
+                    DELETE FROM external_admin_api_keys
+                    WHERE id NOT IN (
+                        SELECT MIN(id)
+                        FROM external_admin_api_keys
+                        GROUP BY target_telegram_id
+                    );
+                    """
+                    )
+                )
+                await conn.execute(
+                    text(
+                        """
+                    CREATE UNIQUE INDEX IF NOT EXISTS uq_external_admin_api_keys_target
+                    ON external_admin_api_keys(target_telegram_id);
+                    """
+                    )
+                )
+            elif db_type == "postgresql":
+                await conn.execute(
+                    text(
+                        """
+                    DELETE FROM external_admin_api_keys a
+                    USING external_admin_api_keys b
+                    WHERE a.target_telegram_id = b.target_telegram_id
+                      AND a.id > b.id;
+                    """
+                    )
+                )
+                await conn.execute(
+                    text(
+                        """
+                    ALTER TABLE external_admin_api_keys
+                    ADD CONSTRAINT uq_external_admin_api_keys_target
+                    UNIQUE (target_telegram_id);
+                    """
+                    )
+                )
+            else:
+                await conn.execute(
+                    text(
+                        """
+                    DELETE t1
+                    FROM external_admin_api_keys t1
+                    INNER JOIN external_admin_api_keys t2
+                        ON t1.target_telegram_id = t2.target_telegram_id
+                        AND t1.id > t2.id;
+                    """
+                    )
+                )
+                await conn.execute(
+                    text(
+                        """
+                    ALTER TABLE external_admin_api_keys
+                    ADD UNIQUE KEY uq_external_admin_api_keys_target (target_telegram_id);
+                    """
+                    )
+                )
+
+        logger.info("✅ Ограничение уникальности target_telegram_id для external_admin_api_keys обеспечено")
+        return True
+    except Exception as error:
+        logger.error(
+            f"❌ Ошибка настройки уникальности target_telegram_id в external_admin_api_keys: {error}"
+        )
+        return False
+
+
+async def create_external_admin_api_keys_table() -> bool:
+    table_exists = await check_table_exists("external_admin_api_keys")
+    if table_exists:
+        logger.info("ℹ️ Таблица external_admin_api_keys уже существует")
+        constraints_ready = await ensure_external_admin_api_keys_unique_target()
+        return constraints_ready
+
+    try:
+        async with engine.begin() as conn:
+            db_type = await get_database_type()
+
+            if db_type == "sqlite":
+                create_sql = """
+                CREATE TABLE external_admin_api_keys (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    creator_user_id INTEGER NOT NULL,
+                    target_telegram_id BIGINT NOT NULL,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
+                    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
+                    CONSTRAINT uq_external_admin_api_keys_creator_target UNIQUE (creator_user_id, target_telegram_id),
+                    CONSTRAINT uq_external_admin_api_keys_target UNIQUE (target_telegram_id),
+                    FOREIGN KEY (creator_user_id) REFERENCES users(id) ON DELETE CASCADE
+                );
+                CREATE INDEX idx_external_admin_api_keys_target ON external_admin_api_keys(target_telegram_id);
+                """
+            elif db_type == "postgresql":
+                create_sql = """
+                CREATE TABLE external_admin_api_keys (
+                    id SERIAL PRIMARY KEY,
+                    creator_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                    target_telegram_id BIGINT NOT NULL,
+                    created_at TIMESTAMP DEFAULT NOW() NOT NULL,
+                    updated_at TIMESTAMP DEFAULT NOW() NOT NULL,
+                    CONSTRAINT uq_external_admin_api_keys_creator_target UNIQUE (creator_user_id, target_telegram_id),
+                    CONSTRAINT uq_external_admin_api_keys_target UNIQUE (target_telegram_id)
+                );
+                CREATE INDEX idx_external_admin_api_keys_target ON external_admin_api_keys(target_telegram_id);
+                """
+            else:
+                create_sql = """
+                CREATE TABLE external_admin_api_keys (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    creator_user_id INT NOT NULL,
+                    target_telegram_id BIGINT NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP NOT NULL,
+                    UNIQUE KEY uq_external_admin_api_keys_creator_target (creator_user_id, target_telegram_id),
+                    UNIQUE KEY uq_external_admin_api_keys_target (target_telegram_id),
+                    CONSTRAINT fk_external_admin_api_keys_creator FOREIGN KEY (creator_user_id) REFERENCES users(id) ON DELETE CASCADE
+                ) ENGINE=InnoDB;
+                CREATE INDEX idx_external_admin_api_keys_target ON external_admin_api_keys(target_telegram_id);
+                """
+
+            await conn.execute(text(create_sql))
+            logger.info("✅ Таблица external_admin_api_keys создана")
+            unique_ready = await ensure_external_admin_api_keys_unique_target()
+            return unique_ready
+
+    except Exception as error:
+        logger.error(
+            f"❌ Ошибка создания таблицы external_admin_api_keys: {error}"
+        )
+        return False
+
+
 async def create_privacy_policies_table() -> bool:
     table_exists = await check_table_exists("privacy_policies")
     if table_exists:
@@ -2908,6 +3066,13 @@ async def run_universal_migration():
             logger.info("✅ Таблица web_api_tokens готова")
         else:
             logger.warning("⚠️ Проблемы с таблицей web_api_tokens")
+
+        logger.info("=== СОЗДАНИЕ ТАБЛИЦЫ EXTERNAL_ADMIN_API_KEYS ===")
+        external_api_keys_ready = await create_external_admin_api_keys_table()
+        if external_api_keys_ready:
+            logger.info("✅ Таблица external_admin_api_keys готова")
+        else:
+            logger.warning("⚠️ Проблемы с таблицей external_admin_api_keys")
 
         logger.info("=== ДОБАВЛЕНИЕ КОЛОНКИ ДЛЯ ТРИАЛЬНЫХ СКВАДОВ ===")
         trial_column_ready = await add_server_trial_flag_column()
