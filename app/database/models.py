@@ -79,6 +79,17 @@ class PaymentMethod(Enum):
     PAL24 = "pal24"
     MANUAL = "manual"
 
+
+class MainMenuButtonActionType(Enum):
+    URL = "url"
+    MINI_APP = "mini_app"
+
+
+class MainMenuButtonVisibility(Enum):
+    ALL = "all"
+    ADMINS = "admins"
+    SUBSCRIBERS = "subscribers"
+
 class YooKassaPayment(Base):
     __tablename__ = "yookassa_payments"
     
@@ -386,9 +397,13 @@ class User(Base):
     transactions = relationship("Transaction", back_populates="user")
     referral_earnings = relationship("ReferralEarning", foreign_keys="ReferralEarning.user_id", back_populates="user")
     discount_offers = relationship("DiscountOffer", back_populates="user")
+    promo_offer_logs = relationship("PromoOfferLog", back_populates="user")
     lifetime_used_traffic_bytes = Column(BigInteger, default=0)
     auto_promo_group_assigned = Column(Boolean, nullable=False, default=False)
     auto_promo_group_threshold_kopeks = Column(BigInteger, nullable=False, default=0)
+    promo_offer_discount_percent = Column(Integer, nullable=False, default=0)
+    promo_offer_discount_source = Column(String(100), nullable=True)
+    promo_offer_discount_expires_at = Column(DateTime, nullable=True)
     last_remnawave_sync = Column(DateTime, nullable=True)
     trojan_password = Column(String(255), nullable=True)
     vless_uuid = Column(String(255), nullable=True)
@@ -453,6 +468,7 @@ class Subscription(Base):
 
     user = relationship("User", back_populates="subscription")
     discount_offers = relationship("DiscountOffer", back_populates="subscription")
+    temporary_accesses = relationship("SubscriptionTemporaryAccess", back_populates="subscription")
     
     @property
     def is_active(self) -> bool:
@@ -571,8 +587,7 @@ class Subscription(Base):
         return 0.0
     
     def extend_subscription(self, days: int):
-        from datetime import timedelta, datetime
-    
+
         if self.end_date > datetime.utcnow():
             self.end_date = self.end_date + timedelta(days=days)
         else:
@@ -740,9 +755,9 @@ class Squad(Base):
 
 class ServiceRule(Base):
     __tablename__ = "service_rules"
-    
+
     id = Column(Integer, primary_key=True, index=True)
-    
+
     order = Column(Integer, default=0)
     title = Column(String(255), nullable=False)
     
@@ -756,9 +771,54 @@ class ServiceRule(Base):
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
 
 
+class PrivacyPolicy(Base):
+    __tablename__ = "privacy_policies"
+
+    id = Column(Integer, primary_key=True, index=True)
+    language = Column(String(10), nullable=False, unique=True)
+    content = Column(Text, nullable=False)
+    is_enabled = Column(Boolean, default=True, nullable=False)
+    created_at = Column(DateTime, default=func.now())
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+
+
+class PublicOffer(Base):
+    __tablename__ = "public_offers"
+
+    id = Column(Integer, primary_key=True, index=True)
+    language = Column(String(10), nullable=False, unique=True)
+    content = Column(Text, nullable=False)
+    is_enabled = Column(Boolean, default=True, nullable=False)
+    created_at = Column(DateTime, default=func.now())
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+
+
+class FaqSetting(Base):
+    __tablename__ = "faq_settings"
+
+    id = Column(Integer, primary_key=True, index=True)
+    language = Column(String(10), nullable=False, unique=True)
+    is_enabled = Column(Boolean, default=True, nullable=False)
+    created_at = Column(DateTime, default=func.now())
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+
+
+class FaqPage(Base):
+    __tablename__ = "faq_pages"
+
+    id = Column(Integer, primary_key=True, index=True)
+    language = Column(String(10), nullable=False, index=True)
+    title = Column(String(255), nullable=False)
+    content = Column(Text, nullable=False)
+    display_order = Column(Integer, default=0, nullable=False)
+    is_active = Column(Boolean, default=True, nullable=False)
+    created_at = Column(DateTime, default=func.now())
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+
+
 class SystemSetting(Base):
     __tablename__ = "system_settings"
-    
+
     id = Column(Integer, primary_key=True, index=True)
     key = Column(String(255), unique=True, nullable=False)
     value = Column(Text, nullable=True)
@@ -812,11 +872,73 @@ class DiscountOffer(Base):
     expires_at = Column(DateTime, nullable=False)
     claimed_at = Column(DateTime, nullable=True)
     is_active = Column(Boolean, default=True, nullable=False)
+    effect_type = Column(String(50), nullable=False, default="percent_discount")
+    extra_data = Column(JSON, nullable=True)
     created_at = Column(DateTime, default=func.now())
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
 
     user = relationship("User", back_populates="discount_offers")
     subscription = relationship("Subscription", back_populates="discount_offers")
+    logs = relationship("PromoOfferLog", back_populates="offer")
+
+
+class PromoOfferTemplate(Base):
+    __tablename__ = "promo_offer_templates"
+    __table_args__ = (
+        Index("ix_promo_offer_templates_type", "offer_type"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(255), nullable=False)
+    offer_type = Column(String(50), nullable=False)
+    message_text = Column(Text, nullable=False)
+    button_text = Column(String(255), nullable=False)
+    valid_hours = Column(Integer, nullable=False, default=24)
+    discount_percent = Column(Integer, nullable=False, default=0)
+    bonus_amount_kopeks = Column(Integer, nullable=False, default=0)
+    active_discount_hours = Column(Integer, nullable=True)
+    test_duration_hours = Column(Integer, nullable=True)
+    test_squad_uuids = Column(JSON, default=list)
+    is_active = Column(Boolean, default=True, nullable=False)
+    created_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_at = Column(DateTime, default=func.now())
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+
+    creator = relationship("User")
+
+
+class SubscriptionTemporaryAccess(Base):
+    __tablename__ = "subscription_temporary_access"
+
+    id = Column(Integer, primary_key=True, index=True)
+    subscription_id = Column(Integer, ForeignKey("subscriptions.id", ondelete="CASCADE"), nullable=False)
+    offer_id = Column(Integer, ForeignKey("discount_offers.id", ondelete="CASCADE"), nullable=False)
+    squad_uuid = Column(String(255), nullable=False)
+    expires_at = Column(DateTime, nullable=False)
+    created_at = Column(DateTime, default=func.now())
+    deactivated_at = Column(DateTime, nullable=True)
+    is_active = Column(Boolean, default=True, nullable=False)
+    was_already_connected = Column(Boolean, default=False, nullable=False)
+
+    subscription = relationship("Subscription", back_populates="temporary_accesses")
+    offer = relationship("DiscountOffer")
+
+
+class PromoOfferLog(Base):
+    __tablename__ = "promo_offer_logs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    offer_id = Column(Integer, ForeignKey("discount_offers.id", ondelete="SET NULL"), nullable=True, index=True)
+    action = Column(String(50), nullable=False)
+    source = Column(String(100), nullable=True)
+    percent = Column(Integer, nullable=True)
+    effect_type = Column(String(50), nullable=True)
+    details = Column(JSON, nullable=True)
+    created_at = Column(DateTime, default=func.now())
+
+    user = relationship("User", back_populates="promo_offer_logs")
+    offer = relationship("DiscountOffer", back_populates="logs")
 
 class BroadcastHistory(Base):
     __tablename__ = "broadcast_history"
@@ -852,6 +974,7 @@ class ServerSquad(Base):
     country_code = Column(String(5), nullable=True)
     
     is_available = Column(Boolean, default=True)
+    is_trial_eligible = Column(Boolean, default=False, nullable=False)
     
     price_kopeks = Column(Integer, default=0)
     
@@ -1091,7 +1214,7 @@ class Ticket(Base):
 
 class TicketMessage(Base):
     __tablename__ = "ticket_messages"
-    
+
     id = Column(Integer, primary_key=True, index=True)
     ticket_id = Column(Integer, ForeignKey("tickets.id", ondelete="CASCADE"), nullable=False)
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
@@ -1118,6 +1241,65 @@ class TicketMessage(Base):
     @property
     def is_admin_message(self) -> bool:
         return self.is_from_admin
-    
+
     def __repr__(self):
         return f"<TicketMessage(id={self.id}, ticket_id={self.ticket_id}, is_admin={self.is_from_admin}, text='{self.message_text[:30]}...')>"
+
+
+class WebApiToken(Base):
+    __tablename__ = "web_api_tokens"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(255), nullable=False)
+    token_hash = Column(String(128), nullable=False, unique=True, index=True)
+    token_prefix = Column(String(32), nullable=False, index=True)
+    description = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=func.now())
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+    expires_at = Column(DateTime, nullable=True)
+    last_used_at = Column(DateTime, nullable=True)
+    last_used_ip = Column(String(64), nullable=True)
+    is_active = Column(Boolean, default=True, nullable=False)
+    created_by = Column(String(255), nullable=True)
+
+    def __repr__(self) -> str:
+        status = "active" if self.is_active else "revoked"
+        return f"<WebApiToken id={self.id} name='{self.name}' status={status}>"
+
+
+class MainMenuButton(Base):
+    __tablename__ = "main_menu_buttons"
+
+    id = Column(Integer, primary_key=True, index=True)
+    text = Column(String(64), nullable=False)
+    action_type = Column(String(20), nullable=False)
+    action_value = Column(Text, nullable=False)
+    visibility = Column(String(20), nullable=False, default=MainMenuButtonVisibility.ALL.value)
+    is_active = Column(Boolean, nullable=False, default=True)
+    display_order = Column(Integer, nullable=False, default=0)
+    created_at = Column(DateTime, default=func.now())
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+
+    __table_args__ = (
+        Index("ix_main_menu_buttons_order", "display_order", "id"),
+    )
+
+    @property
+    def action_type_enum(self) -> MainMenuButtonActionType:
+        try:
+            return MainMenuButtonActionType(self.action_type)
+        except ValueError:
+            return MainMenuButtonActionType.URL
+
+    @property
+    def visibility_enum(self) -> MainMenuButtonVisibility:
+        try:
+            return MainMenuButtonVisibility(self.visibility)
+        except ValueError:
+            return MainMenuButtonVisibility.ALL
+
+    def __repr__(self) -> str:
+        return (
+            f"<MainMenuButton id={self.id} text='{self.text}' "
+            f"action={self.action_type} visibility={self.visibility} active={self.is_active}>"
+        )

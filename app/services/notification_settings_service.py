@@ -1,5 +1,4 @@
 import json
-import json
 import logging
 from copy import deepcopy
 from pathlib import Path
@@ -21,6 +20,7 @@ class NotificationSettingsService:
     _DEFAULTS: Dict[str, Dict[str, Any]] = {
         "trial_inactive_1h": {"enabled": True},
         "trial_inactive_24h": {"enabled": True},
+        "trial_channel_unsubscribed": {"enabled": True},
         "expired_1d": {"enabled": True},
         "expired_second_wave": {
             "enabled": True,
@@ -138,6 +138,14 @@ class NotificationSettingsService:
     @classmethod
     def set_trial_inactive_24h_enabled(cls, enabled: bool) -> bool:
         return cls.set_enabled("trial_inactive_24h", enabled)
+
+    @classmethod
+    def is_trial_channel_unsubscribed_enabled(cls) -> bool:
+        return cls.is_enabled("trial_channel_unsubscribed")
+
+    @classmethod
+    def set_trial_channel_unsubscribed_enabled(cls, enabled: bool) -> bool:
+        return cls.set_enabled("trial_channel_unsubscribed", enabled)
 
     # Expired subscription notifications
     @classmethod

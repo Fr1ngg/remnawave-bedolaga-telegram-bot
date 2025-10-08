@@ -4,7 +4,6 @@ from aiogram.fsm.context import FSMContext
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 
-from app.config import settings
 from app.states import AdminStates
 from app.database.models import User
 from app.keyboards.admin import get_admin_subscriptions_keyboard
@@ -87,10 +86,6 @@ async def show_subscriptions_menu(
         ],
         [
             types.InlineKeyboardButton(text="📊 Статистика", callback_data="admin_subs_stats"),
-            types.InlineKeyboardButton(text="💰 Настройки цен", callback_data="admin_subs_pricing")
-        ],
-        [
-            types.InlineKeyboardButton(text="🌐 Управление серверами", callback_data="admin_servers"),
             types.InlineKeyboardButton(text="🌍 География", callback_data="admin_subs_countries")
         ],
         [
@@ -277,56 +272,6 @@ async def show_subscriptions_stats(
 
 @admin_required
 @error_handler
-async def show_pricing_settings(
-    callback: types.CallbackQuery,
-    db_user: User,
-    db: AsyncSession
-):
-    text = f"""
-⚙️ <b>Настройки цен</b>
-
-<b>Периоды подписки:</b>
-- 14 дней: {settings.format_price(settings.PRICE_14_DAYS)}
-- 30 дней: {settings.format_price(settings.PRICE_30_DAYS)}
-- 60 дней: {settings.format_price(settings.PRICE_60_DAYS)}
-- 90 дней: {settings.format_price(settings.PRICE_90_DAYS)}
-- 180 дней: {settings.format_price(settings.PRICE_180_DAYS)}
-- 360 дней: {settings.format_price(settings.PRICE_360_DAYS)}
-
-<b>Трафик-пакеты:</b>
-- 5 ГБ: {settings.format_price(settings.PRICE_TRAFFIC_5GB)}
-- 10 ГБ: {settings.format_price(settings.PRICE_TRAFFIC_10GB)}
-- 25 ГБ: {settings.format_price(settings.PRICE_TRAFFIC_25GB)}
-- 50 ГБ: {settings.format_price(settings.PRICE_TRAFFIC_50GB)}
-- 100 ГБ: {settings.format_price(settings.PRICE_TRAFFIC_100GB)}
-- 250 ГБ: {settings.format_price(settings.PRICE_TRAFFIC_250GB)}
-
-<b>Дополнительно:</b>
-- За устройство: {settings.format_price(settings.PRICE_PER_DEVICE)}
-"""
-    
-    keyboard = [
-      #  [
-      #      types.InlineKeyboardButton(text="📅 Периоды", callback_data="admin_edit_period_prices"),
-      #      types.InlineKeyboardButton(text="📈 Трафик", callback_data="admin_edit_traffic_prices")
-      #  ],
-      #  [
-      #      types.InlineKeyboardButton(text="📱 Устройства", callback_data="admin_edit_device_price")
-      #  ],
-        [
-            types.InlineKeyboardButton(text="⬅️ Назад", callback_data="admin_subscriptions")
-        ]
-    ]
-    
-    await callback.message.edit_text(
-        text,
-        reply_markup=types.InlineKeyboardMarkup(inline_keyboard=keyboard)
-    )
-    await callback.answer()
-
-
-@admin_required  
-@error_handler
 async def show_countries_management(
     callback: types.CallbackQuery,
     db_user: User,
@@ -487,7 +432,6 @@ def register_handlers(dp: Dispatcher):
     dp.callback_query.register(show_subscriptions_list, F.data == "admin_subs_list")
     dp.callback_query.register(show_expiring_subscriptions, F.data == "admin_subs_expiring")
     dp.callback_query.register(show_subscriptions_stats, F.data == "admin_subs_stats")
-    dp.callback_query.register(show_pricing_settings, F.data == "admin_subs_pricing")
     dp.callback_query.register(show_countries_management, F.data == "admin_subs_countries")
     dp.callback_query.register(send_expiry_reminders, F.data == "admin_send_expiry_reminders")
     

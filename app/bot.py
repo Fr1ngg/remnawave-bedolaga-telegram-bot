@@ -33,13 +33,19 @@ from app.handlers.admin import (
     maintenance as admin_maintenance,
     promo_groups as admin_promo_groups,
     campaigns as admin_campaigns,
+    promo_offers as admin_promo_offers,
     user_messages as admin_user_messages,
     updates as admin_updates,
     backup as admin_backup,
+    system_logs as admin_system_logs,
     welcome_text as admin_welcome_text,
     tickets as admin_tickets,
     reports as admin_reports,
     bot_configuration as admin_bot_configuration,
+    pricing as admin_pricing,
+    privacy_policy as admin_privacy_policy,
+    public_offer as admin_public_offer,
+    faq as admin_faq,
 )
 from app.handlers.stars_payments import register_stars_handlers
 
@@ -135,14 +141,20 @@ async def setup_bot() -> tuple[Bot, Dispatcher]:
     admin_statistics.register_handlers(dp)
     admin_promo_groups.register_handlers(dp)
     admin_campaigns.register_handlers(dp)
+    admin_promo_offers.register_handlers(dp)
     admin_maintenance.register_handlers(dp)
     admin_user_messages.register_handlers(dp)
     admin_updates.register_handlers(dp)
     admin_backup.register_handlers(dp)
+    admin_system_logs.register_handlers(dp)
     admin_welcome_text.register_welcome_text_handlers(dp)
     admin_tickets.register_handlers(dp)
     admin_reports.register_handlers(dp)
     admin_bot_configuration.register_handlers(dp)
+    admin_pricing.register_handlers(dp)
+    admin_privacy_policy.register_handlers(dp)
+    admin_public_offer.register_handlers(dp)
+    admin_faq.register_handlers(dp)
     common.register_handlers(dp)
     register_stars_handlers(dp)
     logger.info("⭐ Зарегистрированы обработчики Telegram Stars платежей")

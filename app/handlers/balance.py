@@ -1,3 +1,4 @@
+import html
 import logging
 from aiogram import Dispatcher, types, F
 from aiogram.fsm.context import FSMContext
@@ -1002,9 +1003,7 @@ async def process_pal24_payment_amount(
             language=db_user.language,
         )
 
-        if not payment_result or not (
-            payment_result.get("link_url") or payment_result.get("link_page_url")
-        ):
+        if not payment_result:
             await message.answer(
                 texts.t(
                     "PAL24_PAYMENT_ERROR",
@@ -1014,49 +1013,146 @@ async def process_pal24_payment_amount(
             await state.clear()
             return
 
-        payment_url = (
+        sbp_url = (
+            payment_result.get("sbp_url")
+            or payment_result.get("transfer_url")
+        )
+        card_url = payment_result.get("card_url")
+        fallback_url = (
             payment_result.get("link_page_url")
             or payment_result.get("link_url")
         )
+
+        if not (sbp_url or card_url or fallback_url):
+            await message.answer(
+                texts.t(
+                    "PAL24_PAYMENT_ERROR",
+                    "❌ Ошибка создания платежа PayPalych. Попробуйте позже или обратитесь в поддержку.",
+                )
+            )
+            await state.clear()
+            return
+
+        if not sbp_url:
+            sbp_url = fallback_url
+
         bill_id = payment_result.get("bill_id")
         local_payment_id = payment_result.get("local_payment_id")
 
-        keyboard = types.InlineKeyboardMarkup(
-            inline_keyboard=[
-                [
-                    types.InlineKeyboardButton(
-                        text=texts.t("PAL24_PAY_BUTTON", "🏦 Оплатить через PayPalych (СБП)"),
-                        url=payment_url,
-                    )
-                ],
-                [
-                    types.InlineKeyboardButton(
-                        text=texts.t("CHECK_STATUS_BUTTON", "📊 Проверить статус"),
-                        callback_data=f"check_pal24_{local_payment_id}",
-                    )
-                ],
-                [types.InlineKeyboardButton(text=texts.BACK, callback_data="balance_topup")],
-            ]
+        pay_buttons: list[list[types.InlineKeyboardButton]] = []
+        steps: list[str] = []
+        step_counter = 1
+
+        default_sbp_text = texts.t(
+            "PAL24_SBP_PAY_BUTTON",
+            "🏦 Оплатить через PayPalych (СБП)",
         )
+        sbp_button_text = settings.get_pal24_sbp_button_text(default_sbp_text)
+
+        if sbp_url:
+            pay_buttons.append(
+                [
+                    types.InlineKeyboardButton(
+                        text=sbp_button_text,
+                        url=sbp_url,
+                    )
+                ]
+            )
+            steps.append(
+                texts.t(
+                    "PAL24_INSTRUCTION_BUTTON",
+                    "{step}. Нажмите кнопку «{button}»",
+                ).format(step=step_counter, button=html.escape(sbp_button_text))
+            )
+            step_counter += 1
+
+        default_card_text = texts.t(
+            "PAL24_CARD_PAY_BUTTON",
+            "💳 Оплатить банковской картой (PayPalych)",
+        )
+        card_button_text = settings.get_pal24_card_button_text(default_card_text)
+
+        if card_url and card_url != sbp_url:
+            pay_buttons.append(
+                [
+                    types.InlineKeyboardButton(
+                        text=card_button_text,
+                        url=card_url,
+                    )
+                ]
+            )
+            steps.append(
+                texts.t(
+                    "PAL24_INSTRUCTION_BUTTON",
+                    "{step}. Нажмите кнопку «{button}»",
+                ).format(step=step_counter, button=html.escape(card_button_text))
+            )
+            step_counter += 1
+
+        if not pay_buttons and fallback_url:
+            pay_buttons.append(
+                [
+                    types.InlineKeyboardButton(
+                        text=sbp_button_text,
+                        url=fallback_url,
+                    )
+                ]
+            )
+            steps.append(
+                texts.t(
+                    "PAL24_INSTRUCTION_BUTTON",
+                    "{step}. Нажмите кнопку «{button}»",
+                ).format(step=step_counter, button=html.escape(sbp_button_text))
+            )
+            step_counter += 1
+
+        follow_template = texts.t(
+            "PAL24_INSTRUCTION_FOLLOW",
+            "{step}. Следуйте подсказкам платёжной системы",
+        )
+        steps.append(follow_template.format(step=step_counter))
+        step_counter += 1
+
+        confirm_template = texts.t(
+            "PAL24_INSTRUCTION_CONFIRM",
+            "{step}. Подтвердите перевод",
+        )
+        steps.append(confirm_template.format(step=step_counter))
+        step_counter += 1
+
+        success_template = texts.t(
+            "PAL24_INSTRUCTION_COMPLETE",
+            "{step}. Средства зачислятся автоматически",
+        )
+        steps.append(success_template.format(step=step_counter))
 
         message_template = texts.t(
             "PAL24_PAYMENT_INSTRUCTIONS",
             (
-                "🏦 <b>Оплата через PayPalych (СБП)</b>\n\n"
+                "🏦 <b>Оплата через PayPalych</b>\n\n"
                 "💰 Сумма: {amount}\n"
                 "🆔 ID счета: {bill_id}\n\n"
-                "📱 <b>Инструкция:</b>\n"
-                "1. Нажмите кнопку ‘Оплатить через PayPalych (СБП)’\n"
-                "2. Следуйте подсказкам платежной системы\n"
-                "3. Подтвердите перевод\n"
-                "4. Средства зачислятся автоматически\n\n"
+                "📱 <b>Инструкция:</b>\n{steps}\n\n"
                 "❓ Если возникнут проблемы, обратитесь в {support}"
             ),
         )
 
+        keyboard_rows = pay_buttons + [
+            [
+                types.InlineKeyboardButton(
+                    text=texts.t("CHECK_STATUS_BUTTON", "📊 Проверить статус"),
+                    callback_data=f"check_pal24_{local_payment_id}",
+                )
+            ],
+            [types.InlineKeyboardButton(text=texts.BACK, callback_data="balance_topup")],
+        ]
+
+        keyboard = types.InlineKeyboardMarkup(inline_keyboard=keyboard_rows)
+
         message_text = message_template.format(
             amount=settings.format_price(amount_kopeks),
             bill_id=bill_id,
+            steps="\n".join(steps),
             support=settings.get_support_contact_display_html(),
         )
 
@@ -1231,28 +1327,48 @@ async def check_pal24_payment_status(
 
         emoji, status_text = status_labels.get(payment.status, ("❓", "Неизвестно"))
 
-        payment_link = payment.link_page_url or payment.link_url
+        metadata = payment.metadata_json or {}
+        links_meta = metadata.get("links") if isinstance(metadata, dict) else None
+        if not isinstance(links_meta, dict):
+            links_meta = {}
+
+        sbp_link = links_meta.get("sbp") or payment.link_url
+        card_link = links_meta.get("card")
+
+        if not card_link and payment.link_page_url and payment.link_page_url != sbp_link:
+            card_link = payment.link_page_url
 
         message_lines = [
-            "🏦 Статус платежа PayPalych (СБП):\n\n",
-            f"🆔 ID счета: {payment.bill_id}\n",
-            f"💰 Сумма: {settings.format_price(payment.amount_kopeks)}\n",
-            f"📊 Статус: {emoji} {status_text}\n",
-            f"📅 Создан: {payment.created_at.strftime('%d.%m.%Y %H:%M')}\n",
+            "🏦 Статус платежа PayPalych:",
+            "",
+            f"🆔 ID счета: {payment.bill_id}",
+            f"💰 Сумма: {settings.format_price(payment.amount_kopeks)}",
+            f"📊 Статус: {emoji} {status_text}",
+            f"📅 Создан: {payment.created_at.strftime('%d.%m.%Y %H:%M')}",
         ]
 
         if payment.is_paid:
-            message_lines.append("\n✅ Платеж успешно завершен! Средства уже на балансе.")
+            message_lines.append("")
+            message_lines.append("✅ Платеж успешно завершен! Средства уже на балансе.")
         elif payment.status in {"NEW", "PROCESS"}:
-            message_lines.append("\n⏳ Платеж еще не завершен. Оплатите счет и проверьте статус позже.")
-            if payment_link:
-                message_lines.append(f"\n🔗 Ссылка на оплату: {payment_link}")
+            message_lines.append("")
+            message_lines.append("⏳ Платеж еще не завершен. Оплатите счет и проверьте статус позже.")
+            if sbp_link:
+                message_lines.append("")
+                message_lines.append(f"🏦 СБП: {sbp_link}")
+            if card_link and card_link != sbp_link:
+                message_lines.append(f"💳 Банковская карта: {card_link}")
         elif payment.status in {"FAIL", "UNDERPAID", "OVERPAID"}:
+            message_lines.append("")
             message_lines.append(
-                f"\n❌ Платеж не завершен корректно. Обратитесь в {settings.get_support_contact_display()}"
+                f"❌ Платеж не завершен корректно. Обратитесь в {settings.get_support_contact_display()}"
             )
 
-        await callback.answer("".join(message_lines), show_alert=True)
+        await callback.answer()
+        await callback.message.answer(
+            "\n".join(message_lines),
+            disable_web_page_preview=True,
+        )
 
     except Exception as e:
         logger.error(f"Ошибка проверки статуса PayPalych: {e}")

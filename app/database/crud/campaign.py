@@ -32,6 +32,7 @@ async def create_campaign(
     subscription_traffic_gb: Optional[int] = None,
     subscription_device_limit: Optional[int] = None,
     subscription_squads: Optional[List[str]] = None,
+    is_active: bool = True,
 ) -> AdvertisingCampaign:
     campaign = AdvertisingCampaign(
         name=name,
@@ -43,7 +44,7 @@ async def create_campaign(
         subscription_device_limit=subscription_device_limit,
         subscription_squads=subscription_squads or [],
         created_by=created_by,
-        is_active=True,
+        is_active=is_active,
     )
 
     db.add(campaign)
@@ -135,7 +136,10 @@ async def update_campaign(
         "is_active",
     }
 
-    update_data = {key: value for key, value in kwargs.items() if key in allowed_fields}
+    update_data = {}
+    for key, value in kwargs.items():
+        if key in allowed_fields and value is not None:
+            update_data[key] = value
 
     if not update_data:
         return campaign

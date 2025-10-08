@@ -9,6 +9,7 @@ from app.database.models import User
 from app.keyboards.inline import get_back_keyboard
 from app.localization.texts import get_texts
 from app.services.promocode_service import PromoCodeService
+from app.services.admin_notification_service import AdminNotificationService
 from app.utils.decorators import error_handler
 
 logger = logging.getLogger(__name__)
@@ -61,6 +62,21 @@ async def process_promocode(
             reply_markup=get_back_keyboard(db_user.language)
         )
         logger.info(f"✅ Пользователь {db_user.telegram_id} активировал промокод {code}")
+
+        try:
+            notification_service = AdminNotificationService(message.bot)
+            await notification_service.send_promocode_activation_notification(
+                db,
+                db_user,
+                result.get("promocode", {"code": code}),
+                result["description"],
+            )
+        except Exception as notify_error:
+            logger.error(
+                "Ошибка отправки админ уведомления об активации промокода %s: %s",
+                code,
+                notify_error,
+            )
     else:
         error_messages = {
             "not_found": texts.PROMOCODE_INVALID,

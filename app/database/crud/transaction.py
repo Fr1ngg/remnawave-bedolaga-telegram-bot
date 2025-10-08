@@ -118,12 +118,7 @@ async def get_user_total_spent_kopeks(db: AsyncSession, user_id: int) -> int:
             and_(
                 Transaction.user_id == user_id,
                 Transaction.is_completed.is_(True),
-                Transaction.type.in_(
-                    [
-                        TransactionType.DEPOSIT.value,
-                        TransactionType.SUBSCRIPTION_PAYMENT.value,
-                    ]
-                ),
+                Transaction.type == TransactionType.SUBSCRIPTION_PAYMENT.value,
             )
         )
     )

@@ -2,23 +2,28 @@ import logging
 from datetime import datetime, timedelta
 from typing import Optional, List, Dict, Any, Tuple
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import delete, select, update
+from sqlalchemy import delete, select, update, func
 from aiogram import Bot
 from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError
 from app.database.crud.user import (
     get_user_by_id, get_user_by_telegram_id, get_users_list,
     get_users_count, get_users_statistics, get_inactive_users,
-    add_user_balance, subtract_user_balance, update_user, delete_user
+    add_user_balance, subtract_user_balance, update_user, delete_user,
+    get_users_spending_stats
 )
 from app.database.crud.promo_group import get_promo_group_by_id
 from app.database.crud.transaction import get_user_transactions_count
-from app.database.crud.subscription import get_subscription_by_user_id
+from app.database.crud.subscription import (
+    get_subscription_by_user_id,
+    decrement_subscription_server_counts,
+)
 from app.database.models import (
     User, UserStatus, Subscription, Transaction, PromoCode, PromoCodeUse,
     ReferralEarning, SubscriptionServer, YooKassaPayment, BroadcastHistory,
     CryptoBotPayment, SubscriptionConversion, UserMessage, WelcomeText,
     SentNotification, PromoGroup, MulenPayPayment, Pal24Payment,
-    AdvertisingCampaign
+    AdvertisingCampaign, AdvertisingCampaignRegistration, PaymentMethod,
+    TransactionType
 )
 from app.config import settings
 
@@ -141,20 +146,32 @@ class UserService:
                 "has_next": False,
                 "has_prev": False
             }
-    
+
     async def get_users_page(
         self,
         db: AsyncSession,
         page: int = 1,
         limit: int = 20,
         status: Optional[UserStatus] = None,
-        order_by_balance: bool = False
+        order_by_balance: bool = False,
+        order_by_traffic: bool = False,
+        order_by_last_activity: bool = False,
+        order_by_total_spent: bool = False,
+        order_by_purchase_count: bool = False
     ) -> Dict[str, Any]:
         try:
             offset = (page - 1) * limit
             
             users = await get_users_list(
-                db, offset=offset, limit=limit, status=status, order_by_balance=order_by_balance
+                db,
+                offset=offset,
+                limit=limit,
+                status=status,
+                order_by_balance=order_by_balance,
+                order_by_traffic=order_by_traffic,
+                order_by_last_activity=order_by_last_activity,
+                order_by_total_spent=order_by_total_spent,
+                order_by_purchase_count=order_by_purchase_count,
             )
             total_count = await get_users_count(db, status=status)
             
@@ -179,7 +196,110 @@ class UserService:
                 "has_next": False,
                 "has_prev": False
             }
-    
+
+    async def get_user_spending_stats_map(
+        self,
+        db: AsyncSession,
+        user_ids: List[int]
+    ) -> Dict[int, Dict[str, int]]:
+        try:
+            return await get_users_spending_stats(db, user_ids)
+        except Exception as e:
+            logger.error(f"Ошибка получения статистики трат пользователей: {e}")
+            return {}
+
+    async def get_users_by_campaign_page(
+        self,
+        db: AsyncSession,
+        page: int = 1,
+        limit: int = 20
+    ) -> Dict[str, Any]:
+        try:
+            offset = (page - 1) * limit
+
+            campaign_ranked = (
+                select(
+                    AdvertisingCampaignRegistration.user_id.label("user_id"),
+                    AdvertisingCampaignRegistration.campaign_id.label("campaign_id"),
+                    AdvertisingCampaignRegistration.created_at.label("created_at"),
+                    func.row_number()
+                    .over(
+                        partition_by=AdvertisingCampaignRegistration.user_id,
+                        order_by=AdvertisingCampaignRegistration.created_at.desc(),
+                    )
+                    .label("rn"),
+                )
+                .cte("campaign_ranked")
+            )
+
+            latest_campaign = (
+                select(
+                    campaign_ranked.c.user_id,
+                    campaign_ranked.c.campaign_id,
+                    campaign_ranked.c.created_at,
+                )
+                .where(campaign_ranked.c.rn == 1)
+                .subquery()
+            )
+
+            query = (
+                select(
+                    User,
+                    AdvertisingCampaign.name.label("campaign_name"),
+                    latest_campaign.c.created_at,
+                )
+                .join(latest_campaign, latest_campaign.c.user_id == User.id)
+                .join(
+                    AdvertisingCampaign,
+                    AdvertisingCampaign.id == latest_campaign.c.campaign_id,
+                )
+                .order_by(
+                    AdvertisingCampaign.name.asc(),
+                    latest_campaign.c.created_at.desc(),
+                )
+                .offset(offset)
+                .limit(limit)
+            )
+
+            result = await db.execute(query)
+            rows = result.all()
+
+            users = [row[0] for row in rows]
+            campaign_map = {
+                row[0].id: {
+                    "campaign_name": row[1],
+                    "registered_at": row[2],
+                }
+                for row in rows
+            }
+
+            total_stmt = select(func.count()).select_from(latest_campaign)
+            total_result = await db.execute(total_stmt)
+            total_count = total_result.scalar() or 0
+            total_pages = (total_count + limit - 1) // limit if total_count else 1
+
+            return {
+                "users": users,
+                "campaigns": campaign_map,
+                "current_page": page,
+                "total_pages": total_pages,
+                "total_count": total_count,
+                "has_next": page < total_pages,
+                "has_prev": page > 1,
+            }
+
+        except Exception as e:
+            logger.error(f"Ошибка получения пользователей по кампаниям: {e}")
+            return {
+                "users": [],
+                "campaigns": {},
+                "current_page": 1,
+                "total_pages": 1,
+                "total_count": 0,
+                "has_next": False,
+                "has_prev": False,
+            }
+
     async def update_user_balance(
         self,
         db: AsyncSession,
@@ -203,7 +323,14 @@ class UserService:
                 logger.info(f"Админ {admin_id} пополнил баланс пользователя {user_id} на {amount_kopeks/100}₽")
                 success = True
             else:
-                success = await subtract_user_balance(db, user, abs(amount_kopeks), description)
+                success = await subtract_user_balance(
+                    db,
+                    user,
+                    abs(amount_kopeks),
+                    description,
+                    create_transaction=True,
+                    payment_method=PaymentMethod.MANUAL,
+                )
                 if success:
                     logger.info(f"Админ {admin_id} списал с баланса пользователя {user_id} {abs(amount_kopeks)/100}₽")
 
@@ -231,15 +358,17 @@ class UserService:
         db: AsyncSession,
         user_id: int,
         promo_group_id: int
-    ) -> Tuple[bool, Optional[User], Optional[PromoGroup]]:
+    ) -> Tuple[bool, Optional[User], Optional[PromoGroup], Optional[PromoGroup]]:
         try:
             user = await get_user_by_id(db, user_id)
             if not user:
-                return False, None, None
+                return False, None, None, None
+
+            old_group = user.promo_group
 
             promo_group = await get_promo_group_by_id(db, promo_group_id)
             if not promo_group:
-                return False, None, None
+                return False, None, None, old_group
 
             user.promo_group_id = promo_group.id
             user.promo_group = promo_group
@@ -254,12 +383,12 @@ class UserService:
                 promo_group.name,
             )
 
-            return True, user, promo_group
+            return True, user, promo_group, old_group
 
         except Exception as e:
             await db.rollback()
             logger.error(f"Ошибка обновления промогруппы пользователя {user_id}: {e}")
-            return False, None, None
+            return False, None, None, None
 
     async def block_user(
         self,
@@ -408,7 +537,13 @@ class UserService:
                         )
                     )
                     subscription_servers = subscription_servers_result.scalars().all()
-                    
+
+                    await decrement_subscription_server_counts(
+                        db,
+                        user.subscription,
+                        subscription_servers=subscription_servers,
+                    )
+
                     if subscription_servers:
                         logger.info(f"🔄 Удаляем {len(subscription_servers)} связей подписка-сервер")
                         await db.execute(

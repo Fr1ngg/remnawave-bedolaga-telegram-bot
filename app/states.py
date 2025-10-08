@@ -1,6 +1,7 @@
 from aiogram.fsm.state import State, StatesGroup
 
 class RegistrationStates(StatesGroup):
+    waiting_for_language = State()
     waiting_for_rules_accept = State()
     waiting_for_referral_code = State()
 
@@ -86,6 +87,12 @@ class AdminStates(StatesGroup):
     editing_user_traffic = State()
 
     editing_rules_page = State()
+    editing_privacy_policy = State()
+    editing_public_offer = State()
+    creating_faq_title = State()
+    creating_faq_content = State()
+    editing_faq_title = State()
+    editing_faq_content = State()
     editing_notification_value = State()
 
     confirming_sync = State()
@@ -96,17 +103,32 @@ class AdminStates(StatesGroup):
     editing_server_limit = State()
     editing_server_description = State()
     editing_server_promo_groups = State()
-    
+
     creating_server_uuid = State()
     creating_server_name = State()
     creating_server_price = State()
     creating_server_country = State()
-    
+
     editing_welcome_text = State()
     waiting_for_message_buttons = "waiting_for_message_buttons"
+
+    editing_promo_offer_message = State()
+    editing_promo_offer_button = State()
+    editing_promo_offer_valid_hours = State()
+    editing_promo_offer_active_duration = State()
+    editing_promo_offer_discount = State()
+    editing_promo_offer_test_duration = State()
+    editing_promo_offer_squads = State()
+    selecting_promo_offer_user = State()
+    searching_promo_offer_user = State()
     
     # Состояния для отслеживания источника перехода
     viewing_user_from_balance_list = State()
+    viewing_user_from_traffic_list = State()
+    viewing_user_from_last_activity_list = State()
+    viewing_user_from_spending_list = State()
+    viewing_user_from_purchases_list = State()
+    viewing_user_from_campaign_list = State()
 
 class SupportStates(StatesGroup):
     waiting_for_message = State()
@@ -125,6 +147,12 @@ class SupportSettingsStates(StatesGroup):
 
 
 class BotConfigStates(StatesGroup):
+    waiting_for_value = State()
+    waiting_for_search_query = State()
+    waiting_for_import_file = State()
+
+
+class PricingStates(StatesGroup):
     waiting_for_value = State()
 
 class AutoPayStates(StatesGroup):

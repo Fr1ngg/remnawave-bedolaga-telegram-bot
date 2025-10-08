@@ -1,0 +1,703 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#2481cc">
+    <title>Connecting to VPN...</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        :root {
+            --tg-theme-bg-color: #ffffff;
+            --tg-theme-text-color: #000000;
+            --tg-theme-hint-color: #999999;
+            --tg-theme-link-color: #2481cc;
+            --tg-theme-button-color: #2481cc;
+            --tg-theme-button-text-color: #ffffff;
+            --tg-theme-secondary-bg-color: #f0f0f0;
+            
+            --primary: var(--tg-theme-button-color);
+            --primary-rgb: 36, 129, 204;
+            --text-primary: var(--tg-theme-text-color);
+            --text-secondary: var(--tg-theme-hint-color);
+            --bg-primary: var(--tg-theme-bg-color);
+            --bg-secondary: var(--tg-theme-secondary-bg-color);
+            --border-color: rgba(0, 0, 0, 0.08);
+            --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.06);
+            --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.1);
+            --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.12);
+            --radius-sm: 8px;
+            --radius: 12px;
+            --radius-lg: 16px;
+            --radius-xl: 20px;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+            --info: #3b82f6;
+        }
+
+        :root[data-theme="dark"] {
+            color-scheme: dark;
+            --bg-primary: #0f172a;
+            --bg-secondary: rgba(30, 41, 59, 0.85);
+            --text-primary: #f8fafc;
+            --text-secondary: #94a3b8;
+            --border-color: rgba(148, 163, 184, 0.25);
+            --shadow-sm: 0 2px 8px rgba(2, 6, 23, 0.3);
+            --shadow-md: 0 4px 16px rgba(2, 6, 23, 0.45);
+            --shadow-lg: 0 8px 32px rgba(2, 6, 23, 0.55);
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            overflow-x: hidden;
+            line-height: 1.6;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .container {
+            max-width: 480px;
+            width: 100%;
+            margin: 0 auto;
+            padding: 16px;
+        }
+
+        /* Animations */
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        @keyframes shimmer {
+            to { transform: translateX(100%); }
+        }
+
+        .animate-in {
+            animation: fadeIn 0.5s ease-out forwards;
+        }
+
+        /* Language Switcher */
+        .top-bar {
+            position: fixed;
+            top: 16px;
+            right: 16px;
+            z-index: 100;
+            display: flex;
+            gap: 12px;
+        }
+
+        .language-select {
+            padding: 8px 32px 8px 12px;
+            border-radius: var(--radius);
+            border: 2px solid var(--border-color);
+            background: var(--bg-secondary);
+            color: var(--text-primary);
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            appearance: none;
+            transition: all 0.3s ease;
+            position: relative;
+            min-width: 120px;
+        }
+
+        .language-select:hover {
+            border-color: var(--primary);
+            transform: translateY(-1px);
+            box-shadow: var(--shadow-sm);
+        }
+
+        /* Theme Toggle */
+        .theme-toggle {
+            width: 44px;
+            height: 44px;
+            border-radius: var(--radius);
+            border: 2px solid var(--border-color);
+            background: var(--bg-secondary);
+            color: var(--text-primary);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s ease;
+        }
+
+        .theme-toggle:hover {
+            border-color: var(--primary);
+            transform: translateY(-1px);
+            box-shadow: var(--shadow-sm);
+        }
+
+        /* Header */
+        .header {
+            text-align: center;
+            margin-bottom: 32px;
+            position: relative;
+        }
+
+        .logo-container {
+            width: 80px;
+            height: 80px;
+            margin: 0 auto 16px;
+            background: linear-gradient(135deg, var(--primary), rgba(var(--primary-rgb), 0.7));
+            border-radius: var(--radius-xl);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: var(--shadow-md);
+            position: relative;
+            overflow: hidden;
+            animation: pulse 2s infinite;
+        }
+
+        .logo-container::after {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: linear-gradient(45deg, transparent, rgba(255, 255, 255, 0.3), transparent);
+            transform: rotate(45deg);
+            animation: shimmer 3s infinite;
+        }
+
+        .logo-icon {
+            font-size: 40px;
+            color: white;
+            z-index: 1;
+            font-weight: 700;
+        }
+
+        .logo {
+            font-size: 28px;
+            font-weight: 800;
+            background: linear-gradient(135deg, var(--primary), rgba(var(--primary-rgb), 0.7));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 8px;
+        }
+
+        .subtitle {
+            font-size: 15px;
+            color: var(--text-secondary);
+            font-weight: 500;
+        }
+
+        /* Main Card */
+        .card {
+            background: var(--bg-secondary);
+            border-radius: var(--radius-lg);
+            padding: 32px;
+            box-shadow: var(--shadow-sm);
+            transition: all 0.3s ease;
+            overflow: hidden;
+            text-align: center;
+        }
+
+        .card:hover {
+            box-shadow: var(--shadow-md);
+            transform: translateY(-2px);
+        }
+
+        /* Error State */
+        .card.error {
+            border: 2px solid var(--danger);
+            background: linear-gradient(135deg, var(--bg-secondary), rgba(239, 68, 68, 0.05));
+        }
+
+        .card.error .logo-container {
+            background: linear-gradient(135deg, var(--danger), rgba(239, 68, 68, 0.7));
+        }
+
+        /* Loading State */
+        .loading {
+            text-align: center;
+            padding: 24px;
+        }
+
+        .spinner {
+            width: 48px;
+            height: 48px;
+            border: 4px solid var(--bg-secondary);
+            border-top-color: var(--primary);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            margin: 0 auto 20px;
+        }
+
+        .loading-text {
+            font-size: 16px;
+            color: var(--text-secondary);
+            font-weight: 500;
+            margin-bottom: 8px;
+        }
+
+        /* Timer */
+        .timer-container {
+            background: var(--bg-primary);
+            border-radius: var(--radius);
+            padding: 24px;
+            margin: 24px 0;
+            border: 2px solid var(--border-color);
+        }
+
+        .timer-label {
+            font-size: 14px;
+            color: var(--text-secondary);
+            margin-bottom: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            font-weight: 600;
+        }
+
+        .timer-display {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+
+        .timer-number {
+            font-size: 48px;
+            font-weight: 800;
+            background: linear-gradient(135deg, var(--primary), rgba(var(--primary-rgb), 0.7));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            line-height: 1;
+        }
+
+        .timer-unit {
+            font-size: 16px;
+            color: var(--text-secondary);
+            font-weight: 500;
+        }
+
+        .progress-track {
+            width: 100%;
+            height: 6px;
+            background: var(--border-color);
+            border-radius: 3px;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--primary), rgba(var(--primary-rgb), 0.6));
+            border-radius: 3px;
+            transition: width 1s linear;
+            width: 100%;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .progress-fill::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.4), transparent);
+            animation: shimmer 2s infinite;
+        }
+
+        /* Status Text */
+        .status-text {
+            font-size: 18px;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 8px;
+        }
+
+        .status-description {
+            font-size: 14px;
+            color: var(--text-secondary);
+            line-height: 1.6;
+            margin-bottom: 24px;
+        }
+
+        .error-text {
+            color: var(--danger);
+        }
+
+        /* Button */
+        .btn {
+            width: 100%;
+            padding: 16px 24px;
+            border: none;
+            border-radius: var(--radius);
+            font-size: 15px;
+            font-weight: 700;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            text-decoration: none;
+        }
+
+        .btn::before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 0;
+            height: 0;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.3);
+            transform: translate(-50%, -50%);
+            transition: width 0.6s, height 0.6s;
+        }
+
+        .btn:active::before {
+            width: 300px;
+            height: 300px;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, var(--primary), rgba(var(--primary-rgb), 0.8));
+            color: white;
+            box-shadow: var(--shadow-md);
+        }
+
+        .btn-primary:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-lg);
+        }
+
+        .btn-primary:active {
+            transform: scale(0.98);
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none !important;
+        }
+
+        .btn-icon {
+            width: 20px;
+            height: 20px;
+            stroke-width: 2.5;
+        }
+
+        /* Hidden */
+        .hidden {
+            display: none !important;
+        }
+
+        /* Mobile Optimizations */
+        @media (max-width: 480px) {
+            .container {
+                padding: 12px;
+            }
+
+            .timer-number {
+                font-size: 40px;
+            }
+
+            .logo {
+                font-size: 24px;
+            }
+        }
+
+        /* Dark Mode Adjustments */
+        :root[data-theme="dark"] .timer-container {
+            background: var(--bg-secondary);
+        }
+
+        :root[data-theme="dark"] .btn-primary {
+            box-shadow: 0 10px 30px rgba(37, 99, 235, 0.45);
+        }
+    </style>
+</head>
+<body>
+    <!-- Top Bar -->
+    <div class="top-bar">
+        <select id="languageSelect" class="language-select">
+            <option value="en">🇬🇧 English</option>
+            <option value="ru">🇷🇺 Русский</option>
+        </select>
+        <button class="theme-toggle" id="themeToggle">
+            <svg class="icon-sun" width="20" height="20" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M12 18a6 6 0 100-12 6 6 0 000 12zM12 2v2M12 20v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M2 12h2M20 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
+            </svg>
+            <svg class="icon-moon" width="20" height="20" fill="currentColor" viewBox="0 0 24 24" style="display: none;">
+                <path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/>
+            </svg>
+        </button>
+    </div>
+
+    <div class="container">
+        <!-- Header -->
+        <div class="header animate-in">
+            <div class="logo-container">
+                <div class="logo-icon" id="appIcon">⚡</div>
+            </div>
+            <div class="logo" data-i18n="app.name">VPN</div>
+            <div class="subtitle" id="appSubtitle" data-i18n="app.connecting">Connecting to VPN...</div>
+        </div>
+
+        <!-- Main Card -->
+        <div class="card animate-in" id="mainCard">
+            <div class="loading" id="loadingState">
+                <div class="spinner"></div>
+                <div class="loading-text" id="statusText" data-i18n="status.connecting">Establishing secure connection...</div>
+                
+                <div class="timer-container" id="timerContainer">
+                    <div class="timer-label" data-i18n="timer.label">Redirecting in</div>
+                    <div class="timer-display">
+                        <span class="timer-number" id="timer">10</span>
+                        <span class="timer-unit" data-i18n="timer.seconds">seconds</span>
+                    </div>
+                    <div class="progress-track">
+                        <div class="progress-fill" id="progressFill"></div>
+                    </div>
+                </div>
+                
+                <p class="status-description" data-i18n="status.manual">If nothing happens, click the button below.</p>
+            </div>
+
+            <!-- Error State (hidden by default) -->
+            <div class="error-state hidden" id="errorState">
+                <div class="status-text error-text" data-i18n="error.title">Connection Error</div>
+                <p class="status-description" data-i18n="error.description">The connection link is missing or invalid.</p>
+            </div>
+
+            <!-- Action Button -->
+            <a class="btn btn-primary" id="actionButton" href="#" target="_blank" rel="noopener">
+                <svg class="btn-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+                </svg>
+                <span data-i18n="button.connect">Connect to VPN</span>
+            </a>
+        </div>
+    </div>
+
+    <script>
+        // App schemes configuration
+        const appSchemes = [
+            { scheme: 'happ://', id: 'happ', icon: 'H', name: { en: 'Happ', ru: 'Happ' } },
+            { scheme: 'flclash://', id: 'flclash', icon: 'F', name: { en: 'FlClash', ru: 'FlClash' } },
+            { scheme: 'clash://', id: 'clash-meta', icon: 'C', name: { en: 'Clash Meta', ru: 'Clash Meta' } },
+            { scheme: 'sing-box://', id: 'sing-box', icon: 'S', name: { en: 'Sing-box', ru: 'Sing-box' } },
+            { scheme: 'v2rayng://', id: 'v2rayng', icon: 'V', name: { en: 'v2rayNG', ru: 'v2rayNG' } },
+            { scheme: 'sub://', id: 'shadowrocket', icon: 'R', name: { en: 'Shadowrocket', ru: 'Shadowrocket' } },
+            { scheme: 'hiddify://', id: 'hiddify', icon: 'H', name: { en: 'Hiddify', ru: 'Hiddify' } }
+        ];
+
+        // Translations
+        const translations = {
+            en: {
+                'app.name': 'VPN',
+                'app.connecting': 'Connecting to VPN...',
+                'status.connecting': 'Establishing secure connection...',
+                'timer.label': 'Redirecting in',
+                'timer.seconds': 'seconds',
+                'status.manual': 'If nothing happens, click the button below.',
+                'button.connect': 'Connect to VPN',
+                'error.title': 'Connection Error',
+                'error.description': 'The connection link is missing or invalid. Please contact support.'
+            },
+            ru: {
+                'app.name': 'VPN',
+                'app.connecting': 'Подключение к VPN...',
+                'status.connecting': 'Установка безопасного соединения...',
+                'timer.label': 'Перенаправление через',
+                'timer.seconds': 'секунд',
+                'status.manual': 'Если ничего не происходит, нажмите кнопку ниже.',
+                'button.connect': 'Подключиться к VPN',
+                'error.title': 'Ошибка подключения',
+                'error.description': 'Ссылка для подключения отсутствует или недействительна. Обратитесь в поддержку.'
+            }
+        };
+
+        // Global variables
+        let currentLanguage = 'en';
+        let currentTheme = 'light';
+        let timerValue = 10;
+        let timerId = null;
+        let redirectTo = '';
+        let appInfo = null;
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', function() {
+            loadSettings();
+            
+            // Get redirect URL from URL parameters
+            const urlParams = new URLSearchParams(window.location.search);
+            redirectTo = urlParams.get('redirect_to') || '';
+            
+            // Detect app from URL scheme
+            if (redirectTo) {
+                appInfo = appSchemes.find(a => redirectTo.startsWith(a.scheme));
+            }
+            
+            updateUI();
+            
+            if (redirectTo) {
+                startTimer();
+            } else {
+                showError();
+            }
+        });
+
+        // Load saved settings
+        function loadSettings() {
+            const savedTheme = localStorage.getItem('remnawave-miniapp-theme') || 'light';
+            const savedLang = localStorage.getItem('remnawave-miniapp-language') || getBrowserLanguage();
+            
+            currentTheme = savedTheme;
+            currentLanguage = savedLang;
+            
+            applyTheme(savedTheme);
+            document.getElementById('languageSelect').value = currentLanguage;
+        }
+
+        // Get browser language
+        function getBrowserLanguage() {
+            const lang = navigator.language || navigator.userLanguage;
+            if (lang.startsWith('ru')) return 'ru';
+            return 'en';
+        }
+
+        // Apply theme
+        function applyTheme(theme) {
+            document.documentElement.setAttribute('data-theme', theme);
+            updateThemeToggle();
+        }
+
+        // Update theme toggle icon
+        function updateThemeToggle() {
+            const sunIcon = document.querySelector('.icon-sun');
+            const moonIcon = document.querySelector('.icon-moon');
+            
+            if (currentTheme === 'dark') {
+                sunIcon.style.display = 'none';
+                moonIcon.style.display = 'block';
+            } else {
+                sunIcon.style.display = 'block';
+                moonIcon.style.display = 'none';
+            }
+        }
+
+        // Toggle theme
+        document.getElementById('themeToggle').addEventListener('click', function() {
+            currentTheme = currentTheme === 'dark' ? 'light' : 'dark';
+            localStorage.setItem('remnawave-miniapp-theme', currentTheme);
+            applyTheme(currentTheme);
+        });
+
+        // Change language
+        document.getElementById('languageSelect').addEventListener('change', function(e) {
+            currentLanguage = e.target.value;
+            localStorage.setItem('remnawave-miniapp-language', currentLanguage);
+            updateUI();
+        });
+
+        // Get translation
+        function t(key) {
+            return translations[currentLanguage]?.[key] || translations.en[key] || key;
+        }
+
+        // Update UI with translations
+        function updateUI() {
+            document.querySelectorAll('[data-i18n]').forEach(el => {
+                const key = el.getAttribute('data-i18n');
+                el.textContent = t(key);
+            });
+            
+            // Update app-specific info
+            if (appInfo && redirectTo) {
+                const appName = appInfo.name[currentLanguage] || appInfo.name.en;
+                document.getElementById('appIcon').textContent = appInfo.icon;
+                document.getElementById('appSubtitle').textContent = `${t('app.connecting').replace('VPN', appName)}`;
+                
+                const statusText = document.getElementById('statusText');
+                if (statusText) {
+                    statusText.textContent = `${t('status.connecting').replace('...', '')} ${appName}...`;
+                }
+            }
+            
+            // Update action button
+            const actionButton = document.getElementById('actionButton');
+            if (actionButton && redirectTo) {
+                actionButton.href = redirectTo;
+            }
+        }
+
+        // Start countdown timer
+        function startTimer() {
+            if (!redirectTo || timerId) return;
+            
+            const timerEl = document.getElementById('timer');
+            const progressEl = document.getElementById('progressFill');
+            const totalTime = 10;
+            
+            timerEl.textContent = timerValue;
+            
+            timerId = setInterval(() => {
+                timerValue--;
+                timerEl.textContent = timerValue;
+                
+                // Update progress bar
+                const progress = ((totalTime - timerValue) / totalTime) * 100;
+                progressEl.style.width = `${100 - progress}%`;
+                
+                if (timerValue <= 0) {
+                    clearInterval(timerId);
+                    window.location.href = redirectTo;
+                }
+            }, 1000);
+        }
+
+        // Show error state
+        function showError() {
+            document.getElementById('loadingState').classList.add('hidden');
+            document.getElementById('errorState').classList.remove('hidden');
+            document.getElementById('actionButton').classList.add('hidden');
+            document.getElementById('mainCard').classList.add('error');
+            document.getElementById('appIcon').textContent = '!';
+            
+            // Update subtitle
+            document.getElementById('appSubtitle').textContent = t('error.title');
+        }
+    </script>
+</body>
+</html>

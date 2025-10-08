@@ -79,12 +79,16 @@ async def show_admin_tickets(
     ticket_data = []
     for ticket in tickets:
         user_name = ticket.user.full_name if ticket.user else "Unknown"
+        username = ticket.user.username if ticket.user else None
+        telegram_id = ticket.user.telegram_id if ticket.user else None
         ticket_data.append({
             'id': ticket.id,
             'title': ticket.title,
             'status_emoji': ticket.status_emoji,
             'priority_emoji': ticket.priority_emoji,
             'user_name': user_name,
+            'username': username,
+            'telegram_id': telegram_id,
             'is_closed': ticket.is_closed,
             'locked_emoji': ("🔒" if ticket.is_user_reply_blocked else "")
         })
@@ -169,9 +173,13 @@ async def view_admin_ticket(
     }.get(ticket.status, ticket.status)
     
     user_name = ticket.user.full_name if ticket.user else "Unknown"
-    
+    telegram_id_display = ticket.user.telegram_id if ticket.user else "—"
+    username_display = (ticket.user.username or "отсутствует") if ticket.user else "отсутствует"
+
     ticket_text = f"🎫 Тикет #{ticket.id}\n\n"
     ticket_text += f"👤 Пользователь: {user_name}\n"
+    ticket_text += f"🆔 Telegram ID: <code>{telegram_id_display}</code>\n"
+    ticket_text += f"📱 Username: @{username_display}\n"
     ticket_text += f"📝 Заголовок: {ticket.title}\n"
     ticket_text += f"📊 Статус: {ticket.status_emoji} {status_text}\n"
     ticket_text += f"📅 Создан: {ticket.created_at.strftime('%d.%m.%Y %H:%M')}\n"
@@ -201,6 +209,33 @@ async def view_admin_ticket(
         db_user.language,
         is_user_blocked=ticket.is_user_reply_blocked
     )
+    # Кнопка открытия профиля пользователя в админке
+    try:
+        if ticket.user:
+            admin_profile_btn = types.InlineKeyboardButton(
+                text="👤 К пользователю",
+                callback_data=f"admin_user_manage_{ticket.user.id}_from_ticket_{ticket.id}"
+            )
+            keyboard.inline_keyboard.insert(0, [admin_profile_btn])
+    except Exception:
+        pass
+    # Кнопки ЛС и профиль
+    try:
+        if ticket.user and ticket.user.telegram_id:
+            buttons_row = []
+            # DM: при наличии username используем tg://resolve, иначе fallback по ID
+            if ticket.user.username:
+                pm_url = f"tg://resolve?domain={ticket.user.username}"
+            else:
+                pm_url = f"tg://user?id={ticket.user.telegram_id}"
+            buttons_row.append(types.InlineKeyboardButton(text="✉ Написать в ЛС", url=pm_url))
+            # Профиль: по ID
+            profile_url = f"tg://user?id={ticket.user.telegram_id}"
+            buttons_row.append(types.InlineKeyboardButton(text="👤 Профиль", url=profile_url))
+            if buttons_row:
+                keyboard.inline_keyboard.insert(0, buttons_row)
+    except Exception:
+        pass
     if has_photos:
         try:
             keyboard.inline_keyboard.insert(0, [types.InlineKeyboardButton(text=texts.t("TICKET_ATTACHMENTS", "📎 Вложения"), callback_data=f"admin_ticket_attachments_{ticket_id}")])
@@ -445,6 +480,17 @@ async def close_admin_ticket(
             # audit
             try:
                 is_mod = (not settings.is_admin(callback.from_user.id) and SupportSettingsService.is_moderator(callback.from_user.id))
+                # обогатим details контактами пользователя тикета
+                details = {}
+                try:
+                    t = await TicketCRUD.get_ticket_by_id(db, ticket_id, load_user=True)
+                    if t and t.user:
+                        details.update({
+                            "target_telegram_id": t.user.telegram_id,
+                            "target_username": t.user.username,
+                        })
+                except Exception:
+                    pass
                 await TicketCRUD.add_support_audit(
                     db,
                     actor_user_id=db_user.id if db_user else None,
@@ -453,7 +499,7 @@ async def close_admin_ticket(
                     action="close_ticket",
                     ticket_id=ticket_id,
                     target_user_id=None,
-                    details={}
+                    details=details
                 )
             except Exception:
                 pass
@@ -645,6 +691,31 @@ async def handle_admin_block_duration_input(
                         ticket_text += "📎 Вложение: фото\n\n"
 
             kb = get_admin_ticket_view_keyboard(updated.id, updated.is_closed, db_user.language, is_user_blocked=updated.is_user_reply_blocked)
+            # Кнопка открытия профиля пользователя в админке
+            try:
+                if updated.user:
+                    admin_profile_btn = types.InlineKeyboardButton(
+                        text="👤 К пользователю",
+                        callback_data=f"admin_user_manage_{updated.user.id}_from_ticket_{updated.id}"
+                    )
+                    kb.inline_keyboard.insert(0, [admin_profile_btn])
+            except Exception:
+                pass
+            # Кнопки ЛС и профиль при обновлении карточки
+            try:
+                if updated.user and updated.user.telegram_id:
+                    buttons_row = []
+                    if updated.user.username:
+                        pm_url = f"tg://resolve?domain={updated.user.username}"
+                    else:
+                        pm_url = f"tg://user?id={updated.user.telegram_id}"
+                    buttons_row.append(types.InlineKeyboardButton(text="✉ Написать в ЛС", url=pm_url))
+                    profile_url = f"tg://user?id={updated.user.telegram_id}"
+                    buttons_row.append(types.InlineKeyboardButton(text="👤 Профиль", url=profile_url))
+                    if buttons_row:
+                        kb.inline_keyboard.insert(0, buttons_row)
+            except Exception:
+                pass
             has_photos = any(getattr(m, "has_media", False) and getattr(m, "media_type", None) == "photo" for m in updated.messages or [])
             if has_photos:
                 try:
@@ -699,6 +770,16 @@ async def unblock_user_in_ticket(
         try:
             is_mod = (not settings.is_admin(callback.from_user.id) and SupportSettingsService.is_moderator(callback.from_user.id))
             ticket_id = int(callback.data.replace("admin_unblock_user_ticket_", ""))
+            details = {}
+            try:
+                t = await TicketCRUD.get_ticket_by_id(db, ticket_id, load_user=True)
+                if t and t.user:
+                    details.update({
+                        "target_telegram_id": t.user.telegram_id,
+                        "target_username": t.user.username,
+                    })
+            except Exception:
+                pass
             await TicketCRUD.add_support_audit(
                 db,
                 actor_user_id=db_user.id if db_user else None,
@@ -707,7 +788,7 @@ async def unblock_user_in_ticket(
                 action="unblock_user",
                 ticket_id=ticket_id,
                 target_user_id=None,
-                details={}
+                details=details
             )
         except Exception:
             pass
@@ -741,6 +822,16 @@ async def block_user_permanently(
         # audit
         try:
             is_mod = (not settings.is_admin(callback.from_user.id) and SupportSettingsService.is_moderator(callback.from_user.id))
+            details = {}
+            try:
+                t = await TicketCRUD.get_ticket_by_id(db, ticket_id, load_user=True)
+                if t and t.user:
+                    details.update({
+                        "target_telegram_id": t.user.telegram_id,
+                        "target_username": t.user.username,
+                    })
+            except Exception:
+                pass
             await TicketCRUD.add_support_audit(
                 db,
                 actor_user_id=db_user.id if db_user else None,
@@ -749,7 +840,7 @@ async def block_user_permanently(
                 action="block_user_perm",
                 ticket_id=ticket_id,
                 target_user_id=None,
-                details={}
+                details=details
             )
         except Exception:
             pass

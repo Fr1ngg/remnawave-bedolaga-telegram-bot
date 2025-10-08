@@ -1,4 +1,5 @@
 import logging
+from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
 from typing import Optional, List, Tuple
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -6,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.database.models import Subscription, User, SubscriptionStatus, PromoGroup
 from app.external.remnawave_api import (
-    RemnaWaveAPI, RemnaWaveUser, UserStatus, 
+    RemnaWaveAPI, RemnaWaveUser, UserStatus,
     TrafficLimitStrategy, RemnaWaveAPIError
 )
 from app.database.crud.user import get_user_by_id
@@ -75,21 +76,88 @@ def get_traffic_reset_strategy():
 
 
 class SubscriptionService:
-    
+
     def __init__(self):
+        self._config_error: Optional[str] = None
+        self.api: Optional[RemnaWaveAPI] = None
+        self._last_config_signature: Optional[Tuple[str, ...]] = None
+
+        self._refresh_configuration()
+
+    def _refresh_configuration(self) -> None:
         auth_params = settings.get_remnawave_auth_params()
-        self.api = RemnaWaveAPI(
-            base_url=auth_params["base_url"],
-            api_key=auth_params["api_key"],
-            secret_key=auth_params["secret_key"],
-            username=auth_params["username"],
-            password=auth_params["password"]
+        base_url = (auth_params.get("base_url") or "").strip()
+        api_key = (auth_params.get("api_key") or "").strip()
+        secret_key = (auth_params.get("secret_key") or "").strip() or None
+        username = (auth_params.get("username") or "").strip() or None
+        password = (auth_params.get("password") or "").strip() or None
+        auth_type = (auth_params.get("auth_type") or "").strip() or None
+
+        config_signature = (
+            base_url,
+            api_key,
+            secret_key or "",
+            username or "",
+            password or "",
+            auth_type or "",
         )
+
+        if config_signature == self._last_config_signature:
+            return
+
+        if not base_url:
+            self._config_error = "REMNAWAVE_API_URL не настроен"
+            self.api = None
+        elif not api_key:
+            self._config_error = "REMNAWAVE_API_KEY не настроен"
+            self.api = None
+        else:
+            self._config_error = None
+            self.api = RemnaWaveAPI(
+                base_url=base_url,
+                api_key=api_key,
+                secret_key=secret_key,
+                username=username,
+                password=password,
+            )
+
+        if self._config_error:
+            logger.warning(
+                "RemnaWave API недоступен: %s. Подписочный сервис будет работать в оффлайн-режиме.",
+                self._config_error
+            )
+
+        self._last_config_signature = config_signature
+
+    @property
+    def is_configured(self) -> bool:
+        return self._config_error is None
+
+    @property
+    def configuration_error(self) -> Optional[str]:
+        return self._config_error
+
+    def _ensure_configured(self) -> None:
+        self._refresh_configuration()
+        if not self.api or not self.is_configured:
+            raise RemnaWaveAPIError(
+                self._config_error or "RemnaWave API не настроен"
+            )
+
+    @asynccontextmanager
+    async def get_api_client(self):
+        self._ensure_configured()
+        assert self.api is not None
+        async with self.api as api:
+            yield api
     
     async def create_remnawave_user(
-        self, 
-        db: AsyncSession, 
-        subscription: Subscription
+        self,
+        db: AsyncSession,
+        subscription: Subscription,
+        *,
+        reset_traffic: bool = False,
+        reset_reason: Optional[str] = None,
     ) -> Optional[RemnaWaveUser]:
         
         try:
@@ -103,7 +171,7 @@ class SubscriptionService:
                 logger.error(f"Ошибка валидации подписки для пользователя {user.telegram_id}")
                 return None
             
-            async with self.api as api:
+            async with self.get_api_client() as api:
                 existing_users = await api.get_user_by_telegram_id(user.telegram_id)
                 if existing_users:
                     logger.info(f"🔄 Найден существующий пользователь в панели для {user.telegram_id}")
@@ -130,6 +198,14 @@ class SubscriptionService:
                         active_internal_squads=subscription.connected_squads
                     )
                     
+                    if reset_traffic:
+                        await self._reset_user_traffic(
+                            api,
+                            updated_user.uuid,
+                            user.telegram_id,
+                            reset_reason,
+                        )
+
                 else:
                     logger.info(f"🆕 Создаем нового пользователя в панели для {user.telegram_id}")
                     username = f"user_{user.telegram_id}"
@@ -148,7 +224,15 @@ class SubscriptionService:
                         ),
                         active_internal_squads=subscription.connected_squads
                     )
-                
+
+                    if reset_traffic:
+                        await self._reset_user_traffic(
+                            api,
+                            updated_user.uuid,
+                            user.telegram_id,
+                            reset_reason,
+                        )
+
                 subscription.remnawave_short_uuid = updated_user.short_uuid
                 subscription.subscription_url = updated_user.subscription_url
                 subscription.subscription_crypto_link = updated_user.happ_crypto_link
@@ -172,7 +256,10 @@ class SubscriptionService:
     async def update_remnawave_user(
         self,
         db: AsyncSession,
-        subscription: Subscription
+        subscription: Subscription,
+        *,
+        reset_traffic: bool = False,
+        reset_reason: Optional[str] = None,
     ) -> Optional[RemnaWaveUser]:
         
         try:
@@ -194,7 +281,7 @@ class SubscriptionService:
                 is_actually_active = False
                 logger.info(f"🔔 Статус подписки {subscription.id} автоматически изменен на 'expired'")
             
-            async with self.api as api:
+            async with self.get_api_client() as api:
                 updated_user = await api.update_user(
                     uuid=user.remnawave_uuid,
                     status=UserStatus.ACTIVE if is_actually_active else UserStatus.EXPIRED,
@@ -210,6 +297,14 @@ class SubscriptionService:
                     active_internal_squads=subscription.connected_squads
                 )
                 
+                if reset_traffic:
+                    await self._reset_user_traffic(
+                        api,
+                        user.remnawave_uuid,
+                        user.telegram_id,
+                        reset_reason,
+                    )
+
                 subscription.subscription_url = updated_user.subscription_url
                 subscription.subscription_crypto_link = updated_user.happ_crypto_link
                 await db.commit()
@@ -219,18 +314,39 @@ class SubscriptionService:
                 strategy_name = settings.DEFAULT_TRAFFIC_RESET_STRATEGY
                 logger.info(f"📊 Стратегия сброса трафика: {strategy_name}")
                 return updated_user
-                
+
         except RemnaWaveAPIError as e:
             logger.error(f"Ошибка RemnaWave API: {e}")
             return None
         except Exception as e:
             logger.error(f"Ошибка обновления RemnaWave пользователя: {e}")
             return None
-    
-    async def disable_remnawave_user(self, user_uuid: str) -> bool:
-        
+
+    async def _reset_user_traffic(
+        self,
+        api: RemnaWaveAPI,
+        user_uuid: str,
+        telegram_id: int,
+        reset_reason: Optional[str] = None,
+    ) -> None:
+        if not user_uuid:
+            return
+
         try:
-            async with self.api as api:
+            await api.reset_user_traffic(user_uuid)
+            reason_text = f" ({reset_reason})" if reset_reason else ""
+            logger.info(
+                f"🔄 Сброшен трафик RemnaWave для пользователя {telegram_id}{reason_text}"
+            )
+        except Exception as exc:
+            logger.warning(
+                f"⚠️ Не удалось сбросить трафик RemnaWave для пользователя {telegram_id}: {exc}"
+            )
+
+    async def disable_remnawave_user(self, user_uuid: str) -> bool:
+
+        try:
+            async with self.get_api_client() as api:
                 await api.disable_user(user_uuid)
                 logger.info(f"✅ Отключен RemnaWave пользователь {user_uuid}")
                 return True
@@ -250,7 +366,7 @@ class SubscriptionService:
             if not user or not user.remnawave_uuid:
                 return None
             
-            async with self.api as api:
+            async with self.get_api_client() as api:
                 updated_user = await api.revoke_user_subscription(user.remnawave_uuid)
                 
                 subscription.remnawave_short_uuid = updated_user.short_uuid
@@ -268,7 +384,7 @@ class SubscriptionService:
     async def get_subscription_info(self, short_uuid: str) -> Optional[dict]:
         
         try:
-            async with self.api as api:
+            async with self.get_api_client() as api:
                 info = await api.get_subscription_info(short_uuid)
                 return info
                 
@@ -287,7 +403,7 @@ class SubscriptionService:
             if not user or not user.remnawave_uuid:
                 return False
             
-            async with self.api as api:
+            async with self.get_api_client() as api:
                 remnawave_user = await api.get_user_by_uuid(user.remnawave_uuid)
                 if not remnawave_user:
                     return False
@@ -534,7 +650,7 @@ class SubscriptionService:
             
             if user.remnawave_uuid:
                 try:
-                    async with self.api as api:
+                    async with self.get_api_client() as api:
                         remnawave_user = await api.get_user_by_uuid(user.remnawave_uuid)
                         
                         if not remnawave_user:

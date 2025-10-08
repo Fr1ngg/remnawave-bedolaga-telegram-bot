@@ -1,19 +1,27 @@
+import html
+import io
+import logging
 import math
 import time
-from typing import Iterable, List, Tuple
+from datetime import datetime
+from typing import Dict, Iterable, List, Optional, Tuple
 
 from aiogram import Dispatcher, F, types
 from aiogram.filters import BaseFilter, StateFilter
 from aiogram.fsm.context import FSMContext
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.database.models import User
+from app.database.models import SystemSetting, User
 from app.localization.texts import get_texts
 from app.config import settings
 from app.services.remnawave_service import RemnaWaveService
 from app.services.payment_service import PaymentService
 from app.services.tribute_service import TributeService
-from app.services.system_settings_service import bot_configuration_service
+from app.services.system_settings_service import (
+    ReadOnlySettingError,
+    bot_configuration_service,
+)
 from app.states import BotConfigStates
 from app.utils.decorators import admin_required, error_handler
 from app.utils.currency_converter import currency_converter
@@ -23,83 +31,964 @@ from app.external.telegram_stars import TelegramStarsService
 CATEGORY_PAGE_SIZE = 10
 SETTINGS_PAGE_SIZE = 8
 
+CATEGORY_GROUP_METADATA: Dict[str, Dict[str, object]] = {
+    "core": {
+        "title": "🤖 Основные",
+        "description": "Базовые настройки бота, обязательные каналы и ключевые сервисы.",
+        "icon": "🤖",
+        "categories": ("CORE", "CHANNEL"),
+    },
+    "support": {
+        "title": "💬 Поддержка",
+        "description": "Контакты, режимы тикетов, SLA и уведомления модераторов.",
+        "icon": "💬",
+        "categories": ("SUPPORT",),
+    },
+    "payments": {
+        "title": "💳 Платежные системы",
+        "description": "YooKassa, CryptoBot, MulenPay, PAL24, Tribute и Telegram Stars.",
+        "icon": "💳",
+        "categories": ("PAYMENT", "YOOKASSA", "CRYPTOBOT", "MULENPAY", "PAL24", "TRIBUTE", "TELEGRAM"),
+    },
+    "subscriptions": {
+        "title": "📅 Подписки и цены",
+        "description": "Тарифы, периоды, лимиты трафика и автопродление.",
+        "icon": "📅",
+        "categories": ("SUBSCRIPTIONS_CORE", "PERIODS", "SUBSCRIPTION_PRICES", "TRAFFIC", "TRAFFIC_PACKAGES", "AUTOPAY"),
+    },
+    "trial": {
+        "title": "🎁 Пробный период",
+        "description": "Длительность и ограничения бесплатного доступа.",
+        "icon": "🎁",
+        "categories": ("TRIAL",),
+    },
+    "referral": {
+        "title": "👥 Реферальная программа",
+        "description": "Бонусы, пороги и уведомления для партнеров.",
+        "icon": "👥",
+        "categories": ("REFERRAL",),
+    },
+    "notifications": {
+        "title": "🔔 Уведомления",
+        "description": "Пользовательские, админские оповещения и отчеты.",
+        "icon": "🔔",
+        "categories": ("NOTIFICATIONS", "ADMIN_NOTIFICATIONS", "ADMIN_REPORTS"),
+    },
+    "interface": {
+        "title": "🎨 Интерфейс и брендинг",
+        "description": "Логотип, тексты, языки, miniapp и deep links.",
+        "icon": "🎨",
+        "categories": ("INTERFACE_BRANDING", "INTERFACE_SUBSCRIPTION", "CONNECT_BUTTON", "MINIAPP", "HAPP", "SKIP", "LOCALIZATION", "ADDITIONAL"),
+    },
+    "database": {
+        "title": "💾 База данных",
+        "description": "Режим базы, параметры PostgreSQL, SQLite и Redis.",
+        "icon": "💾",
+        "categories": ("DATABASE", "POSTGRES", "SQLITE", "REDIS"),
+    },
+    "remnawave": {
+        "title": "🌐 RemnaWave API",
+        "description": "Интеграция с RemnaWave: URL, ключи и способы авторизации.",
+        "icon": "🌐",
+        "categories": ("REMNAWAVE",),
+    },
+    "server": {
+        "title": "📊 Статус серверов",
+        "description": "Мониторинг серверов, SLA и внешние метрики.",
+        "icon": "📊",
+        "categories": ("SERVER_STATUS", "MONITORING"),
+    },
+    "maintenance": {
+        "title": "🔧 Обслуживание",
+        "description": "Режим техработ, бэкапы и проверка обновлений.",
+        "icon": "🔧",
+        "categories": ("MAINTENANCE", "BACKUP", "VERSION"),
+    },
+    "advanced": {
+        "title": "⚡ Расширенные",
+        "description": "Web API, webhook, логирование и режим отладки.",
+        "icon": "⚡",
+        "categories": ("WEB_API", "WEBHOOK", "LOG", "DEBUG"),
+    },
+    "external_admin": {
+        "title": "🛡️ Внешняя админка",
+        "description": "Токен, по которому внешняя админка проверяет запросы.",
+        "icon": "🛡️",
+        "categories": ("EXTERNAL_ADMIN",),
+    },
+}
 
-CATEGORY_GROUP_DEFINITIONS: Tuple[Tuple[str, str, Tuple[str, ...]], ...] = (
-    (
-        "telegram_bot",
-        "🤖 Telegram бот",
-        ("SUPPORT", "ADMIN_NOTIFICATIONS", "ADMIN_REPORTS", "CHANNEL"),
-    ),
-    (
-        "database",
-        "🗄️ База данных",
-        ("DATABASE", "POSTGRES", "SQLITE", "REDIS"),
-    ),
-    (
-        "remnawave",
-        "🌊 Remnawave API",
-        ("REMNAWAVE",),
-    ),
-    (
-        "subscriptions",
-        "🪙 Подписки и тарифы",
-        (
-            "TRIAL",
-            "PAID_SUBSCRIPTION",
-            "SUBSCRIPTIONS_GLOBAL",
-            "TRAFFIC",
-            "PERIODS",
-            "SUBSCRIPTION_PRICES",
-            "TRAFFIC_PACKAGES",
-            "DISCOUNTS",
-            "REFERRAL",
-            "AUTOPAY",
-        ),
-    ),
-    (
-        "payments",
-        "💳 Платежные системы",
-        ("TELEGRAM", "TRIBUTE", "YOOKASSA", "CRYPTOBOT", "MULENPAY", "PAL24", "PAYMENT"),
-    ),
-    (
-        "interface",
-        "🎨 Интерфейс и UX",
-        ("INTERFACE_BRANDING", "INTERFACE_SUBSCRIPTION", "CONNECT_BUTTON", "HAPP", "SKIP"),
-    ),
-    (
-        "monitoring",
-        "📣 Мониторинг и уведомления",
-        ("MONITORING", "NOTIFICATIONS"),
-    ),
-    (
-        "operations",
-        "🛠️ Статусы и обслуживание",
-        ("SERVER", "MAINTENANCE"),
-    ),
-    (
-        "localization",
-        "🈯 Локализация",
-        ("LOCALIZATION",),
-    ),
-    (
-        "extras",
-        "🧩 Дополнительные настройки",
-        ("ADDITIONAL",),
-    ),
-    (
-        "reliability",
-        "💾 Бекапы и обновления",
-        ("BACKUP", "VERSION"),
-    ),
-    (
-        "technical",
-        "🧰 Технические",
-        ("LOG", "WEBHOOK", "DEBUG"),
-    ),
+CATEGORY_GROUP_ORDER: Tuple[str, ...] = (
+    "core",
+    "support",
+    "payments",
+    "subscriptions",
+    "trial",
+    "referral",
+    "notifications",
+    "interface",
+    "database",
+    "remnawave",
+    "server",
+    "maintenance",
+    "advanced",
+    "external_admin",
 )
+
+CATEGORY_GROUP_DEFINITIONS: Tuple[Tuple[str, str, Tuple[str, ...]], ...] = tuple(
+    (
+        group_key,
+        str(CATEGORY_GROUP_METADATA[group_key]["title"]),
+        tuple(CATEGORY_GROUP_METADATA[group_key]["categories"]),
+    )
+    for group_key in CATEGORY_GROUP_ORDER
+)
+
+CATEGORY_TO_GROUP: Dict[str, str] = {}
+for _group_key, _title, _category_keys in CATEGORY_GROUP_DEFINITIONS:
+    for _category_key in _category_keys:
+        CATEGORY_TO_GROUP[_category_key] = _group_key
 
 CATEGORY_FALLBACK_KEY = "other"
 CATEGORY_FALLBACK_TITLE = "📦 Прочие настройки"
+
+PRESET_CONFIGS: Dict[str, Dict[str, object]] = {
+    "recommended": {
+        "ENABLE_NOTIFICATIONS": True,
+        "ADMIN_NOTIFICATIONS_ENABLED": True,
+        "ADMIN_REPORTS_ENABLED": True,
+        "MONITORING_INTERVAL": 60,
+        "TRIAL_DURATION_DAYS": 3,
+    },
+    "minimal": {
+        "ENABLE_NOTIFICATIONS": False,
+        "ADMIN_NOTIFICATIONS_ENABLED": False,
+        "ADMIN_REPORTS_ENABLED": False,
+        "TRIAL_DURATION_DAYS": 0,
+        "REFERRAL_NOTIFICATIONS_ENABLED": False,
+    },
+    "secure": {
+        "MAINTENANCE_AUTO_ENABLE": True,
+        "ADMIN_NOTIFICATIONS_ENABLED": True,
+        "ADMIN_REPORTS_ENABLED": True,
+        "REFERRAL_MINIMUM_TOPUP_KOPEKS": 100000,
+        "SERVER_STATUS_MODE": "disabled",
+    },
+    "testing": {
+        "DEBUG": True,
+        "ENABLE_NOTIFICATIONS": False,
+        "TRIAL_DURATION_DAYS": 7,
+        "SERVER_STATUS_MODE": "disabled",
+        "ADMIN_NOTIFICATIONS_ENABLED": False,
+    },
+}
+
+PRESET_METADATA: Dict[str, Dict[str, str]] = {
+    "recommended": {
+        "title": "Рекомендуемые настройки",
+        "description": "Баланс между стабильностью и информированием команды.",
+    },
+    "minimal": {
+        "title": "Минимальная конфигурация",
+        "description": "Подходит для тестового запуска без уведомлений.",
+    },
+    "secure": {
+        "title": "Максимальная безопасность",
+        "description": "Усиленный контроль доступа и отключение лишних интеграций.",
+    },
+    "testing": {
+        "title": "Для тестирования",
+        "description": "Включает режим отладки и отключает внешние уведомления.",
+    },
+}
+
+
+def _get_group_meta(group_key: str) -> Dict[str, object]:
+    return CATEGORY_GROUP_METADATA.get(group_key, {})
+
+
+def _get_group_description(group_key: str) -> str:
+    meta = _get_group_meta(group_key)
+    return str(meta.get("description", ""))
+
+
+def _get_group_icon(group_key: str) -> str:
+    meta = _get_group_meta(group_key)
+    return str(meta.get("icon", "⚙️"))
+
+
+def _get_group_status(group_key: str) -> Tuple[str, str]:
+    key = group_key
+    if key == "payments":
+        payment_statuses = {
+            "YooKassa": settings.is_yookassa_enabled(),
+            "CryptoBot": settings.is_cryptobot_enabled(),
+            "MulenPay": settings.is_mulenpay_enabled(),
+            "PAL24": settings.is_pal24_enabled(),
+            "Tribute": settings.TRIBUTE_ENABLED,
+            "Stars": settings.TELEGRAM_STARS_ENABLED,
+        }
+        active = sum(1 for value in payment_statuses.values() if value)
+        total = len(payment_statuses)
+        if active == 0:
+            return "🔴", "Нет активных платежей"
+        if active < total:
+            return "🟡", f"Активно {active} из {total}"
+        return "🟢", "Все системы активны"
+
+    if key == "remnawave":
+        api_ready = bool(
+            settings.REMNAWAVE_API_URL
+            and (
+                settings.REMNAWAVE_API_KEY
+                or (settings.REMNAWAVE_USERNAME and settings.REMNAWAVE_PASSWORD)
+            )
+        )
+        return ("🟢", "API подключено") if api_ready else ("🟡", "Нужно указать URL и ключи")
+
+    if key == "server":
+        mode = (settings.SERVER_STATUS_MODE or "").lower()
+        monitoring_active = mode not in {"", "disabled"}
+        if monitoring_active:
+            return "🟢", "Мониторинг активен"
+        if settings.MONITORING_INTERVAL:
+            return "🟡", "Доступны только отчеты"
+        return "⚪", "Мониторинг выключен"
+
+    if key == "maintenance":
+        if settings.MAINTENANCE_MODE:
+            return "🟡", "Режим ТО включен"
+        return "🟢", "Рабочий режим"
+
+    if key == "notifications":
+        user_on = settings.is_notifications_enabled()
+        admin_on = settings.is_admin_notifications_enabled()
+        if user_on and admin_on:
+            return "🟢", "Все уведомления включены"
+        if user_on or admin_on:
+            return "🟡", "Часть уведомлений включена"
+        return "⚪", "Уведомления отключены"
+
+    if key == "trial":
+        if settings.TRIAL_DURATION_DAYS > 0:
+            return "🟢", f"{settings.TRIAL_DURATION_DAYS} дней пробного периода"
+        return "⚪", "Триал отключен"
+
+    if key == "referral":
+        active = (
+            settings.REFERRAL_COMMISSION_PERCENT
+            or settings.REFERRAL_FIRST_TOPUP_BONUS_KOPEKS
+            or settings.REFERRAL_INVITER_BONUS_KOPEKS
+            or settings.REFERRED_USER_REWARD
+        )
+        return ("🟢", "Программа активна") if active else ("⚪", "Бонусы не заданы")
+
+    if key == "core":
+        token_ok = bool(getattr(settings, "BOT_TOKEN", ""))
+        channel_ok = bool(settings.CHANNEL_LINK or not settings.CHANNEL_IS_REQUIRED_SUB)
+        if token_ok and channel_ok:
+            return "🟢", "Бот готов к работе"
+        return "🟡", "Проверьте токен и обязательную подписку"
+
+    if key == "subscriptions":
+        price_ready = settings.PRICE_30_DAYS > 0 and settings.AVAILABLE_SUBSCRIPTION_PERIODS
+        return ("🟢", "Тарифы настроены") if price_ready else ("⚪", "Нужно задать цены")
+
+    if key == "database":
+        mode = (settings.DATABASE_MODE or "auto").lower()
+        if mode == "postgresql":
+            return "🟢", "PostgreSQL"
+        if mode == "sqlite":
+            return "🟡", "SQLite режим"
+        return "🟢", "Авто режим"
+
+    if key == "interface":
+        branding = bool(settings.ENABLE_LOGO_MODE or settings.MINIAPP_CUSTOM_URL)
+        return ("🟢", "Брендинг настроен") if branding else ("⚪", "Настройки по умолчанию")
+
+    return "🟢", "Готово к работе"
+
+
+def _get_setting_icon(definition, current_value: object) -> str:
+    key_upper = definition.key.upper()
+
+    if definition.python_type is bool:
+        return "✅" if bool(current_value) else "❌"
+
+    if bot_configuration_service.has_choices(definition.key):
+        return "📋"
+
+    if isinstance(current_value, (int, float)):
+        return "🔢"
+
+    if isinstance(current_value, str):
+        if not current_value.strip():
+            return "⚪"
+        if "URL" in key_upper:
+            return "🔗"
+        if any(keyword in key_upper for keyword in ("TOKEN", "SECRET", "PASSWORD", "KEY")):
+            return "🔒"
+
+    if any(keyword in key_upper for keyword in ("TIME", "HOUR", "MINUTE")):
+        return "⏱"
+    if "DAYS" in key_upper:
+        return "📆"
+    if "GB" in key_upper or "TRAFFIC" in key_upper:
+        return "📊"
+
+    return "⚙️"
+
+
+def _render_dashboard_overview() -> str:
+    grouped = _get_grouped_categories()
+    total_settings = 0
+    total_overrides = 0
+
+    for group_key, _title, items in grouped:
+        for category_key, _label, count in items:
+            total_settings += count
+            definitions = bot_configuration_service.get_settings_for_category(category_key)
+            total_overrides += sum(
+                1 for definition in definitions if bot_configuration_service.has_override(definition.key)
+            )
+
+    lines: List[str] = [
+        "⚙️ <b>Панель управления ботом</b>",
+        "",
+        f"Всего параметров: <b>{total_settings}</b> • Переопределено: <b>{total_overrides}</b>",
+        "",
+        "Выберите категорию ниже или используйте быстрые действия:",
+        "",
+    ]
+
+    for group_key, title, items in grouped:
+        status_icon, status_text = _get_group_status(group_key)
+        description = _get_group_description(group_key) if group_key != CATEGORY_FALLBACK_KEY else "Настройки без категории."
+        total = sum(count for _, _, count in items)
+        lines.append(f"{status_icon} <b>{title}</b> — {status_text}")
+        if description:
+            lines.append(f"   {description}")
+        lines.append(f"   Настроек: {total}")
+        lines.append("")
+
+    lines.append("🔍 Кнопка поиска поможет найти параметр по названию, описанию или ключу.")
+    return "\n".join(lines).strip()
+
+
+def _build_group_category_index() -> Dict[str, List[str]]:
+    mapping: Dict[str, List[str]] = {}
+    for group_key, _title, items in _get_grouped_categories():
+        mapping[group_key] = [category_key for category_key, _label, _count in items]
+    return mapping
+
+
+def _perform_settings_search(query: str) -> List[Dict[str, object]]:
+    normalized = query.strip().lower()
+    if not normalized:
+        return []
+
+    categories = bot_configuration_service.get_categories()
+    group_category_index = _build_group_category_index()
+    results: List[Dict[str, object]] = []
+
+    for category_key, _label, _count in categories:
+        definitions = bot_configuration_service.get_settings_for_category(category_key)
+        group_key = CATEGORY_TO_GROUP.get(category_key, CATEGORY_FALLBACK_KEY)
+        available_categories = group_category_index.get(group_key, [])
+        if category_key in available_categories:
+            category_index = available_categories.index(category_key)
+            category_page = category_index // CATEGORY_PAGE_SIZE + 1
+        else:
+            category_page = 1
+
+        for definition_index, definition in enumerate(definitions):
+            fields = [definition.key.lower(), definition.display_name.lower()]
+            guidance = bot_configuration_service.get_setting_guidance(definition.key)
+            fields.extend(
+                [
+                    guidance.get("description", "").lower(),
+                    guidance.get("format", "").lower(),
+                    str(guidance.get("dependencies", "")).lower(),
+                ]
+            )
+
+            if not any(normalized in field for field in fields if field):
+                continue
+
+            settings_page = definition_index // SETTINGS_PAGE_SIZE + 1
+            results.append(
+                {
+                    "key": definition.key,
+                    "name": definition.display_name,
+                    "category_key": category_key,
+                    "category_label": definition.category_label,
+                    "group_key": group_key,
+                    "category_page": category_page,
+                    "settings_page": settings_page,
+                    "token": bot_configuration_service.get_callback_token(definition.key),
+                    "value": bot_configuration_service.format_value_human(
+                        definition.key,
+                        bot_configuration_service.get_current_value(definition.key),
+                    ),
+                }
+            )
+
+    results.sort(key=lambda item: item["name"].lower())
+    return results[:20]
+
+
+def _build_search_results_keyboard(results: List[Dict[str, object]]) -> types.InlineKeyboardMarkup:
+    rows: List[List[types.InlineKeyboardButton]] = []
+    for result in results:
+        group_key = str(result["group_key"])
+        category_page = int(result["category_page"])
+        settings_page = int(result["settings_page"])
+        token = str(result["token"])
+        text = f"{result['name']}"
+        if len(text) > 60:
+            text = text[:59] + "…"
+        rows.append(
+            [
+                types.InlineKeyboardButton(
+                    text=text,
+                    callback_data=(
+                        f"botcfg_setting:{group_key}:{category_page}:{settings_page}:{token}"
+                    ),
+                )
+            ]
+        )
+
+    rows.append(
+        [
+            types.InlineKeyboardButton(
+                text="⬅️ В главное меню",
+                callback_data="admin_bot_config",
+            )
+        ]
+    )
+    return types.InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def _parse_env_content(content: str) -> Dict[str, Optional[str]]:
+    parsed: Dict[str, Optional[str]] = {}
+    for raw_line in content.splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        parsed[key.strip()] = value.strip()
+    return parsed
+
+
+@admin_required
+@error_handler
+async def start_settings_search(
+    callback: types.CallbackQuery,
+    db_user: User,
+    db: AsyncSession,
+    state: FSMContext,
+):
+    await state.set_state(BotConfigStates.waiting_for_search_query)
+    await state.update_data(botcfg_origin="bot_config")
+
+    keyboard = types.InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                types.InlineKeyboardButton(
+                    text="⬅️ В главное меню", callback_data="admin_bot_config"
+                )
+            ]
+        ]
+    )
+
+    await callback.message.edit_text(
+        "🔍 <b>Поиск по настройкам</b>\n\n"
+        "Отправьте часть ключа или названия настройки. \n"
+        "Например: <code>yookassa</code> или <code>уведомления</code>.",
+        reply_markup=keyboard,
+        parse_mode="HTML",
+    )
+    await callback.answer("Введите запрос", show_alert=False)
+
+
+@admin_required
+@error_handler
+async def handle_search_query(
+    message: types.Message,
+    db_user: User,
+    db: AsyncSession,
+    state: FSMContext,
+):
+    if message.chat.type != "private":
+        return
+
+    data = await state.get_data()
+    if data.get("botcfg_origin") != "bot_config":
+        return
+
+    query = (message.text or "").strip()
+    results = _perform_settings_search(query)
+
+    if results:
+        keyboard = _build_search_results_keyboard(results)
+        lines = [
+            "🔍 <b>Результаты поиска</b>",
+            f"Запрос: <code>{html.escape(query)}</code>",
+            "",
+        ]
+        for index, item in enumerate(results, start=1):
+            lines.append(
+                f"{index}. {item['name']} — {item['value']} ({item['category_label']})"
+            )
+        text = "\n".join(lines)
+    else:
+        keyboard = types.InlineKeyboardMarkup(
+            inline_keyboard=[
+                [
+                    types.InlineKeyboardButton(
+                        text="⬅️ Попробовать снова",
+                        callback_data="botcfg_action:search",
+                    )
+                ],
+                [
+                    types.InlineKeyboardButton(
+                        text="🏠 Главное меню", callback_data="admin_bot_config"
+                    )
+                ],
+            ]
+        )
+        text = (
+            "🔍 <b>Результаты поиска</b>\n\n"
+            f"Запрос: <code>{html.escape(query)}</code>\n\n"
+            "Ничего не найдено. Попробуйте изменить формулировку."
+        )
+
+    await message.answer(text, parse_mode="HTML", reply_markup=keyboard)
+    await state.clear()
+
+
+@admin_required
+@error_handler
+async def show_presets(
+    callback: types.CallbackQuery,
+    db_user: User,
+    db: AsyncSession,
+    state: FSMContext,
+):
+    lines = [
+        "🎯 <b>Готовые пресеты</b>",
+        "",
+        "Выберите набор параметров, чтобы быстро применить его к боту.",
+        "",
+    ]
+    for key, meta in PRESET_METADATA.items():
+        lines.append(f"• <b>{meta['title']}</b> — {meta['description']}")
+    text = "\n".join(lines)
+
+    buttons: List[types.InlineKeyboardButton] = []
+    for key, meta in PRESET_METADATA.items():
+        buttons.append(
+            types.InlineKeyboardButton(
+                text=meta["title"], callback_data=f"botcfg_preset:{key}"
+            )
+        )
+
+    rows: List[List[types.InlineKeyboardButton]] = []
+    for chunk in _chunk(buttons, 2):
+        rows.append(list(chunk))
+    rows.append(
+        [
+            types.InlineKeyboardButton(
+                text="⬅️ Главное меню", callback_data="admin_bot_config"
+            )
+        ]
+    )
+
+    await callback.message.edit_text(
+        text,
+        parse_mode="HTML",
+        reply_markup=types.InlineKeyboardMarkup(inline_keyboard=rows),
+    )
+    await callback.answer()
+
+
+def _format_preset_preview(preset_key: str) -> Tuple[str, List[str]]:
+    config = PRESET_CONFIGS.get(preset_key, {})
+    meta = PRESET_METADATA.get(preset_key, {"title": preset_key, "description": ""})
+    title = meta["title"]
+    description = meta.get("description", "")
+
+    lines = [f"🎯 <b>{title}</b>"]
+    if description:
+        lines.append(description)
+    lines.append("")
+    lines.append("Будут установлены следующие значения:")
+
+    for index, (setting_key, new_value) in enumerate(config.items(), start=1):
+        current_value = bot_configuration_service.get_current_value(setting_key)
+        current_pretty = bot_configuration_service.format_value_human(setting_key, current_value)
+        new_pretty = bot_configuration_service.format_value_human(setting_key, new_value)
+        lines.append(
+            f"{index}. <code>{setting_key}</code>\n"
+            f"   Текущее: {current_pretty}\n"
+            f"   Новое: {new_pretty}"
+        )
+
+    return title, lines
+
+
+@admin_required
+@error_handler
+async def preview_preset(
+    callback: types.CallbackQuery,
+    db_user: User,
+    db: AsyncSession,
+    state: FSMContext,
+):
+    parts = callback.data.split(":", 1)
+    preset_key = parts[1] if len(parts) > 1 else ""
+    if preset_key not in PRESET_CONFIGS:
+        await callback.answer("Этот пресет недоступен", show_alert=True)
+        return
+
+    title, lines = _format_preset_preview(preset_key)
+    keyboard = types.InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                types.InlineKeyboardButton(
+                    text="✅ Применить", callback_data=f"botcfg_preset_apply:{preset_key}"
+                )
+            ],
+            [
+                types.InlineKeyboardButton(
+                    text="⬅️ Назад", callback_data="botcfg_action:presets"
+                )
+            ],
+        ]
+    )
+
+    await callback.message.edit_text(
+        "\n".join(lines),
+        parse_mode="HTML",
+        reply_markup=keyboard,
+    )
+    await callback.answer()
+
+
+@admin_required
+@error_handler
+async def apply_preset(
+    callback: types.CallbackQuery,
+    db_user: User,
+    db: AsyncSession,
+    state: FSMContext,
+):
+    parts = callback.data.split(":", 1)
+    preset_key = parts[1] if len(parts) > 1 else ""
+    config = PRESET_CONFIGS.get(preset_key)
+    if not config:
+        await callback.answer("Этот пресет недоступен", show_alert=True)
+        return
+
+    applied: List[str] = []
+    for setting_key, value in config.items():
+        try:
+            await bot_configuration_service.set_value(db, setting_key, value)
+            applied.append(setting_key)
+        except ReadOnlySettingError:
+            logging.getLogger(__name__).info(
+                "Пропускаем настройку %s из пресета %s: только для чтения",
+                setting_key,
+                preset_key,
+            )
+        except Exception as error:
+            logging.getLogger(__name__).warning(
+                "Не удалось применить пресет %s для %s: %s",
+                preset_key,
+                setting_key,
+                error,
+            )
+    await db.commit()
+
+    title = PRESET_METADATA.get(preset_key, {}).get("title", preset_key)
+    summary_lines = [
+        f"✅ Пресет <b>{title}</b> применен",
+        "",
+        f"Изменено параметров: <b>{len(applied)}</b>",
+    ]
+    if applied:
+        summary_lines.append("\n".join(f"• <code>{key}</code>" for key in applied))
+
+    keyboard = types.InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                types.InlineKeyboardButton(
+                    text="⬅️ К пресетам", callback_data="botcfg_action:presets"
+                )
+            ],
+            [
+                types.InlineKeyboardButton(
+                    text="🏠 Главное меню", callback_data="admin_bot_config"
+                )
+            ],
+        ]
+    )
+
+    await callback.message.edit_text(
+        "\n".join(summary_lines),
+        parse_mode="HTML",
+        reply_markup=keyboard,
+    )
+    await callback.answer("Настройки обновлены", show_alert=False)
+
+
+@admin_required
+@error_handler
+async def export_settings(
+    callback: types.CallbackQuery,
+    db_user: User,
+    db: AsyncSession,
+    state: FSMContext,
+):
+    categories = bot_configuration_service.get_categories()
+    keys: List[str] = []
+    for category_key, _label, _count in categories:
+        for definition in bot_configuration_service.get_settings_for_category(category_key):
+            keys.append(definition.key)
+
+    keys = sorted(set(keys))
+    lines = [
+        "# RemnaWave bot configuration export",
+        f"# Generated at {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')}",
+    ]
+
+    for setting_key in keys:
+        current_value = bot_configuration_service.get_current_value(setting_key)
+        raw_value = bot_configuration_service.serialize_value(setting_key, current_value)
+        if raw_value is None:
+            raw_value = ""
+        lines.append(f"{setting_key}={raw_value}")
+
+    content = "\n".join(lines)
+    filename = f"bot-settings-{datetime.utcnow().strftime('%Y%m%d-%H%M%S')}.env"
+    file = types.BufferedInputFile(content.encode("utf-8"), filename=filename)
+
+    await callback.message.answer_document(
+        document=file,
+        caption="📤 Экспорт текущих настроек",
+        parse_mode="HTML",
+    )
+    await callback.answer("Файл готов", show_alert=False)
+
+
+@admin_required
+@error_handler
+async def start_import_settings(
+    callback: types.CallbackQuery,
+    db_user: User,
+    db: AsyncSession,
+    state: FSMContext,
+):
+    await state.set_state(BotConfigStates.waiting_for_import_file)
+    await state.update_data(botcfg_origin="bot_config")
+
+    keyboard = types.InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                types.InlineKeyboardButton(
+                    text="⬅️ Главное меню", callback_data="admin_bot_config"
+                )
+            ]
+        ]
+    )
+
+    await callback.message.edit_text(
+        "📥 <b>Импорт настроек</b>\n\n"
+        "Прикрепите .env файл или отправьте текстом пары <code>KEY=value</code>.\n"
+        "Неизвестные параметры будут проигнорированы.",
+        parse_mode="HTML",
+        reply_markup=keyboard,
+    )
+    await callback.answer("Загрузите файл .env", show_alert=False)
+
+
+@admin_required
+@error_handler
+async def handle_import_message(
+    message: types.Message,
+    db_user: User,
+    db: AsyncSession,
+    state: FSMContext,
+):
+    if message.chat.type != "private":
+        return
+
+    data = await state.get_data()
+    if data.get("botcfg_origin") != "bot_config":
+        return
+
+    content = ""
+    if message.document:
+        buffer = io.BytesIO()
+        await message.document.download(destination=buffer)
+        buffer.seek(0)
+        content = buffer.read().decode("utf-8", errors="ignore")
+    else:
+        content = message.text or ""
+
+    parsed = _parse_env_content(content)
+    if not parsed:
+        await message.answer(
+            "❌ Не удалось найти параметры в файле. Убедитесь, что используется формат KEY=value.",
+            parse_mode="HTML",
+        )
+        await state.clear()
+        return
+
+    applied: List[str] = []
+    skipped: List[str] = []
+    errors: List[str] = []
+
+    for setting_key, raw_value in parsed.items():
+        try:
+            bot_configuration_service.get_definition(setting_key)
+        except KeyError:
+            skipped.append(setting_key)
+            continue
+
+        value_to_apply: Optional[object]
+        try:
+            if raw_value in {"", '""'}:
+                value_to_apply = None
+            else:
+                value_to_apply = bot_configuration_service.deserialize_value(
+                    setting_key, raw_value
+                )
+        except Exception as error:
+            errors.append(f"{setting_key}: {error}")
+            continue
+
+        if bot_configuration_service.is_read_only(setting_key):
+            skipped.append(setting_key)
+            continue
+        try:
+            await bot_configuration_service.set_value(db, setting_key, value_to_apply)
+            applied.append(setting_key)
+        except ReadOnlySettingError:
+            skipped.append(setting_key)
+
+    await db.commit()
+
+    summary_lines = [
+        "📥 <b>Импорт завершен</b>",
+        f"Обновлено параметров: <b>{len(applied)}</b>",
+    ]
+    if applied:
+        summary_lines.append("\n".join(f"• <code>{key}</code>" for key in applied))
+
+    if skipped:
+        summary_lines.append("\nПропущено (неизвестные ключи):")
+        summary_lines.append("\n".join(f"• <code>{key}</code>" for key in skipped))
+
+    if errors:
+        summary_lines.append("\nОшибки разбора:")
+        summary_lines.append("\n".join(f"• {html.escape(err)}" for err in errors))
+
+    keyboard = types.InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                types.InlineKeyboardButton(
+                    text="🏠 Главное меню", callback_data="admin_bot_config"
+                )
+            ]
+        ]
+    )
+
+    await message.answer(
+        "\n".join(summary_lines), parse_mode="HTML", reply_markup=keyboard
+    )
+    await state.clear()
+
+
+@admin_required
+@error_handler
+async def show_settings_history(
+    callback: types.CallbackQuery,
+    db_user: User,
+    db: AsyncSession,
+    state: FSMContext,
+):
+    result = await db.execute(
+        select(SystemSetting).order_by(SystemSetting.updated_at.desc()).limit(10)
+    )
+    rows = result.scalars().all()
+
+    lines = ["🕘 <b>История изменений</b>", ""]
+    if rows:
+        for row in rows:
+            timestamp = row.updated_at or row.created_at
+            ts_text = timestamp.strftime("%d.%m %H:%M") if timestamp else "—"
+            try:
+                parsed_value = bot_configuration_service.deserialize_value(row.key, row.value)
+                formatted_value = bot_configuration_service.format_value_human(
+                    row.key, parsed_value
+                )
+            except Exception:
+                formatted_value = row.value or "—"
+            lines.append(f"{ts_text} • <code>{row.key}</code> = {formatted_value}")
+    else:
+        lines.append("История изменений пуста.")
+
+    keyboard = types.InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                types.InlineKeyboardButton(
+                    text="⬅️ Главное меню", callback_data="admin_bot_config"
+                )
+            ]
+        ]
+    )
+
+    await callback.message.edit_text(
+        "\n".join(lines), parse_mode="HTML", reply_markup=keyboard
+    )
+    await callback.answer()
+
+
+@admin_required
+@error_handler
+async def show_help(
+    callback: types.CallbackQuery,
+    db_user: User,
+    db: AsyncSession,
+    state: FSMContext,
+):
+    text = (
+        "❓ <b>Как работать с панелью</b>\n\n"
+        "• Навигируйте по категориям, чтобы увидеть связанные настройки.\n"
+        "• Значок ✳️ рядом с параметром означает, что значение переопределено.\n"
+        "• Используйте 🔍 поиск для быстрого доступа к нужной настройке.\n"
+        "• Экспортируйте .env перед крупными изменениями, чтобы иметь резервную копию.\n"
+        "• Импорт позволяет восстановить конфигурацию или применить шаблон.\n"
+        "• Все секретные ключи скрываются в интерфейсе автоматически."
+    )
+
+    keyboard = types.InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                types.InlineKeyboardButton(
+                    text="🏠 Главное меню", callback_data="admin_bot_config"
+                )
+            ]
+        ]
+    )
+
+    await callback.message.edit_text(
+        text, parse_mode="HTML", reply_markup=keyboard
+    )
+    await callback.answer()
 
 
 async def _store_setting_context(
@@ -220,14 +1109,55 @@ def _build_groups_keyboard() -> types.InlineKeyboardMarkup:
 
     for group_key, title, items in grouped:
         total = sum(count for _, _, count in items)
+        status_icon, _ = _get_group_status(group_key)
+        button_text = f"{status_icon} {title} ({total})"
         rows.append(
             [
                 types.InlineKeyboardButton(
-                    text=f"{title} ({total})",
+                    text=button_text,
                     callback_data=f"botcfg_group:{group_key}:1",
                 )
             ]
         )
+
+    rows.append(
+        [
+            types.InlineKeyboardButton(
+                text="🔍 Найти настройку",
+                callback_data="botcfg_action:search",
+            ),
+            types.InlineKeyboardButton(
+                text="🎯 Пресеты",
+                callback_data="botcfg_action:presets",
+            ),
+        ]
+    )
+
+    rows.append(
+        [
+            types.InlineKeyboardButton(
+                text="📤 Экспорт .env",
+                callback_data="botcfg_action:export",
+            ),
+            types.InlineKeyboardButton(
+                text="📥 Импорт .env",
+                callback_data="botcfg_action:import",
+            ),
+        ]
+    )
+
+    rows.append(
+        [
+            types.InlineKeyboardButton(
+                text="🕘 История",
+                callback_data="botcfg_action:history",
+            ),
+            types.InlineKeyboardButton(
+                text="❓ Помощь",
+                callback_data="botcfg_action:help",
+            ),
+        ]
+    )
 
     rows.append(
         [
@@ -255,10 +1185,15 @@ def _build_categories_keyboard(
     sliced = categories[start:end]
 
     rows: list[list[types.InlineKeyboardButton]] = []
+    status_icon, _status_text = (
+        _get_group_status(group_key)
+        if group_key != CATEGORY_FALLBACK_KEY
+        else ("⚪", "Прочие настройки")
+    )
     rows.append(
         [
             types.InlineKeyboardButton(
-                text=f"— {group_title} —",
+                text=f"{status_icon} {group_title}",
                 callback_data="botcfg_group:noop",
             )
         ]
@@ -266,7 +1201,12 @@ def _build_categories_keyboard(
 
     buttons: List[types.InlineKeyboardButton] = []
     for category_key, label, count in sliced:
-        button_text = f"{label} ({count})"
+        overrides = 0
+        for definition in bot_configuration_service.get_settings_for_category(category_key):
+            if bot_configuration_service.has_override(definition.key):
+                overrides += 1
+        badge = "✳️" if overrides else "•"
+        button_text = f"{badge} {label} ({count})"
         buttons.append(
             types.InlineKeyboardButton(
                 text=button_text,
@@ -376,8 +1316,13 @@ def _build_settings_keyboard(
         rows.extend(test_payment_buttons)
 
     for definition in sliced:
+        current_value = bot_configuration_service.get_current_value(definition.key)
         value_preview = bot_configuration_service.format_value_for_list(definition.key)
-        button_text = f"{definition.display_name} · {value_preview}"
+        icon = _get_setting_icon(definition, current_value)
+        override_badge = "✳️" if bot_configuration_service.has_override(definition.key) else "•"
+        button_text = f"{override_badge} {icon} {definition.display_name}"
+        if value_preview != "—":
+            button_text += f" · {value_preview}"
         if len(button_text) > 64:
             button_text = button_text[:63] + "…"
         callback_token = bot_configuration_service.get_callback_token(definition.key)
@@ -438,9 +1383,10 @@ def _build_setting_keyboard(
     definition = bot_configuration_service.get_definition(key)
     rows: list[list[types.InlineKeyboardButton]] = []
     callback_token = bot_configuration_service.get_callback_token(key)
+    is_read_only = bot_configuration_service.is_read_only(key)
 
     choice_options = bot_configuration_service.get_choice_options(key)
-    if choice_options:
+    if choice_options and not is_read_only:
         current_value = bot_configuration_service.get_current_value(key)
         choice_buttons: list[types.InlineKeyboardButton] = []
         for option in choice_options:
@@ -462,7 +1408,7 @@ def _build_setting_keyboard(
         for chunk in _chunk(choice_buttons, 2):
             rows.append(list(chunk))
 
-    if definition.python_type is bool:
+    if definition.python_type is bool and not is_read_only:
         rows.append([
             types.InlineKeyboardButton(
                 text="🔁 Переключить",
@@ -472,22 +1418,31 @@ def _build_setting_keyboard(
             )
         ])
 
-    rows.append([
-        types.InlineKeyboardButton(
-            text="✏️ Изменить",
-            callback_data=(
-                f"botcfg_edit:{group_key}:{category_page}:{settings_page}:{callback_token}"
-            ),
-        )
-    ])
+    if not is_read_only:
+        rows.append([
+            types.InlineKeyboardButton(
+                text="✏️ Изменить",
+                callback_data=(
+                    f"botcfg_edit:{group_key}:{category_page}:{settings_page}:{callback_token}"
+                ),
+            )
+        ])
 
-    if bot_configuration_service.has_override(key):
+    if bot_configuration_service.has_override(key) and not is_read_only:
         rows.append([
             types.InlineKeyboardButton(
                 text="♻️ Сбросить",
                 callback_data=(
                     f"botcfg_reset:{group_key}:{category_page}:{settings_page}:{callback_token}"
                 ),
+            )
+        ])
+
+    if is_read_only:
+        rows.append([
+            types.InlineKeyboardButton(
+                text="🔒 Только для чтения",
+                callback_data="botcfg_group:noop",
             )
         ])
 
@@ -505,26 +1460,37 @@ def _build_setting_keyboard(
 
 def _render_setting_text(key: str) -> str:
     summary = bot_configuration_service.get_setting_summary(key)
+    guidance = bot_configuration_service.get_setting_guidance(key)
 
     lines = [
-        "🧩 <b>Настройка</b>",
-        f"<b>Название:</b> {summary['name']}",
-        f"<b>Ключ:</b> <code>{summary['key']}</code>",
-        f"<b>Категория:</b> {summary['category_label']}",
-        f"<b>Тип:</b> {summary['type']}",
-        f"<b>Текущее значение:</b> {summary['current']}",
-        f"<b>Значение по умолчанию:</b> {summary['original']}",
-        f"<b>Переопределено в БД:</b> {'✅ Да' if summary['has_override'] else '❌ Нет'}",
+        f"🧩 <b>{summary['name']}</b>",
+        f"🔑 <b>Ключ:</b> <code>{summary['key']}</code>",
+        f"📁 <b>Категория:</b> {summary['category_label']}",
+        f"📝 <b>Тип:</b> {guidance['type']}",
+        f"📌 <b>Текущее:</b> {summary['current']}",
+        f"📦 <b>По умолчанию:</b> {summary['original']}",
+        f"✳️ <b>Переопределено:</b> {'Да' if summary['has_override'] else 'Нет'}",
+        *(
+            ["🔒 <b>Режим:</b> Только для чтения (управляется автоматически)"]
+            if summary.get("is_read_only")
+            else []
+        ),
+        "",
+        f"📘 <b>Описание:</b> {guidance['description']}",
+        f"📐 <b>Формат:</b> {guidance['format']}",
+        f"💡 <b>Пример:</b> {guidance['example']}",
+        f"⚠️ <b>Важно:</b> {guidance['warning']}",
+        f"🔗 <b>Связанные настройки:</b> {guidance['dependencies']}",
     ]
 
     choices = bot_configuration_service.get_choice_options(key)
     if choices:
         current_raw = bot_configuration_service.get_current_value(key)
         lines.append("")
-        lines.append("<b>Доступные значения:</b>")
+        lines.append("📋 <b>Доступные значения:</b>")
         for option in choices:
             marker = "✅" if current_raw == option.value else "•"
-            value_display = bot_configuration_service.format_value(option.value)
+            value_display = bot_configuration_service.format_value_human(key, option.value)
             description = option.description or ""
             if description:
                 lines.append(
@@ -542,11 +1508,15 @@ async def show_bot_config_menu(
     callback: types.CallbackQuery,
     db_user: User,
     db: AsyncSession,
+    state: FSMContext,
 ):
+    await state.clear()
     keyboard = _build_groups_keyboard()
+    overview = _render_dashboard_overview()
     await callback.message.edit_text(
-        "🧩 <b>Конфигурация бота</b>\n\nВыберите раздел настроек:",
+        overview,
         reply_markup=keyboard,
+        parse_mode="HTML",
     )
     await callback.answer()
 
@@ -568,9 +1538,19 @@ async def show_bot_config_group(
 
     group_title, items = group_lookup[group_key]
     keyboard = _build_categories_keyboard(group_key, group_title, items, page)
+    status_icon, status_text = _get_group_status(group_key)
+    description = _get_group_description(group_key)
+    lines = [f"{status_icon} <b>{group_title}</b>"]
+    if description:
+        lines.append(description)
+    if status_text:
+        lines.append(f"Статус: {status_text}")
+    lines.append("")
+    lines.append("📂 Выберите категорию настроек:")
     await callback.message.edit_text(
-        f"🧩 <b>{group_title}</b>\n\nВыберите категорию настроек:",
+        "\n".join(lines),
         reply_markup=keyboard,
+        parse_mode="HTML",
     )
     await callback.answer()
 
@@ -592,6 +1572,9 @@ async def show_bot_config_category(
         return
 
     category_label = definitions[0].category_label
+    category_description = bot_configuration_service.get_category_description(category_key)
+    group_meta = _get_group_meta(group_key)
+    group_title = str(group_meta.get("title", group_key))
     keyboard = _build_settings_keyboard(
         category_key,
         group_key,
@@ -599,9 +1582,18 @@ async def show_bot_config_category(
         db_user.language,
         settings_page,
     )
+    text_lines = [
+        f"🗂 <b>{category_label}</b>",
+        f"Навигация: 🏠 Главное → {group_title} → {category_label}",
+    ]
+    if category_description:
+        text_lines.append(category_description)
+    text_lines.append("")
+    text_lines.append("📋 Выберите настройку для просмотра или редактирования:")
     await callback.message.edit_text(
-        f"🧩 <b>{category_label}</b>\n\nВыберите настройку для просмотра:",
+        "\n".join(text_lines),
         reply_markup=keyboard,
+        parse_mode="HTML",
     )
     await callback.answer()
 
@@ -857,33 +1849,79 @@ async def test_payment_provider(
             language=language or "ru",
         )
 
-        if not payment_result or not payment_result.get("link_url") and not payment_result.get("link_page_url"):
+        if not payment_result:
             await callback.answer("❌ Не удалось создать платеж PayPalych", show_alert=True)
             await _refresh_markup()
             return
 
-        payment_url = payment_result.get("link_page_url") or payment_result.get("link_url")
+        sbp_url = (
+            payment_result.get("sbp_url")
+            or payment_result.get("transfer_url")
+            or payment_result.get("link_url")
+        )
+        card_url = payment_result.get("card_url")
+        fallback_url = payment_result.get("link_page_url") or payment_result.get("link_url")
+
+        if not (sbp_url or card_url or fallback_url):
+            await callback.answer("❌ Не удалось создать платеж PayPalych", show_alert=True)
+            await _refresh_markup()
+            return
+
+        if not sbp_url:
+            sbp_url = fallback_url
+
+        default_sbp_text = texts.t(
+            "PAL24_SBP_PAY_BUTTON",
+            "🏦 Оплатить через PayPalych (СБП)",
+        )
+        sbp_button_text = settings.get_pal24_sbp_button_text(default_sbp_text)
+
+        default_card_text = texts.t(
+            "PAL24_CARD_PAY_BUTTON",
+            "💳 Оплатить банковской картой (PayPalych)",
+        )
+        card_button_text = settings.get_pal24_card_button_text(default_card_text)
+
+        pay_rows: list[list[types.InlineKeyboardButton]] = []
+        if sbp_url:
+            pay_rows.append([
+                types.InlineKeyboardButton(
+                    text=sbp_button_text,
+                    url=sbp_url,
+                )
+            ])
+
+        if card_url and card_url != sbp_url:
+            pay_rows.append([
+                types.InlineKeyboardButton(
+                    text=card_button_text,
+                    url=card_url,
+                )
+            ])
+
+        if not pay_rows and fallback_url:
+            pay_rows.append([
+                types.InlineKeyboardButton(
+                    text=sbp_button_text,
+                    url=fallback_url,
+                )
+            ])
+
         message_text = (
             "🧪 <b>Тестовый платеж PayPalych</b>\n\n"
             f"💰 Сумма: {texts.format_price(amount_kopeks)}\n"
             f"🆔 Bill ID: {payment_result['bill_id']}"
         )
-        reply_markup = types.InlineKeyboardMarkup(
-            inline_keyboard=[
-                [
-                    types.InlineKeyboardButton(
-                        text="🏦 Перейти к оплате (СБП)",
-                        url=payment_url,
-                    )
-                ],
-                [
-                    types.InlineKeyboardButton(
-                        text="📊 Проверить статус",
-                        callback_data=f"check_pal24_{payment_result['local_payment_id']}",
-                    )
-                ],
-            ]
-        )
+        keyboard_rows = pay_rows + [
+            [
+                types.InlineKeyboardButton(
+                    text="📊 Проверить статус",
+                    callback_data=f"check_pal24_{payment_result['local_payment_id']}",
+                )
+            ],
+        ]
+
+        reply_markup = types.InlineKeyboardMarkup(inline_keyboard=keyboard_rows)
         await callback.message.answer(message_text, reply_markup=reply_markup, parse_mode="HTML")
         await callback.answer("✅ Ссылка на платеж PayPalych отправлена", show_alert=True)
         await _refresh_markup()
@@ -1065,6 +2103,9 @@ async def start_edit_setting(
     except KeyError:
         await callback.answer("Эта настройка больше недоступна", show_alert=True)
         return
+    if bot_configuration_service.is_read_only(key):
+        await callback.answer("Эта настройка доступна только для чтения", show_alert=True)
+        return
     definition = bot_configuration_service.get_definition(key)
 
     summary = bot_configuration_service.get_setting_summary(key)
@@ -1130,13 +2171,23 @@ async def handle_edit_setting(
         await state.clear()
         return
 
+    if bot_configuration_service.is_read_only(key):
+        await message.answer("⚠️ Эта настройка доступна только для чтения.")
+        await state.clear()
+        return
+
     try:
         value = bot_configuration_service.parse_user_value(key, message.text or "")
     except ValueError as error:
         await message.answer(f"⚠️ {error}")
         return
 
-    await bot_configuration_service.set_value(db, key, value)
+    try:
+        await bot_configuration_service.set_value(db, key, value)
+    except ReadOnlySettingError:
+        await message.answer("⚠️ Эта настройка доступна только для чтения.")
+        await state.clear()
+        return
     await db.commit()
 
     text = _render_setting_text(key)
@@ -1171,13 +2222,23 @@ async def handle_direct_setting_input(
     if not key:
         return
 
+    if bot_configuration_service.is_read_only(key):
+        await message.answer("⚠️ Эта настройка доступна только для чтения.")
+        await state.clear()
+        return
+
     try:
         value = bot_configuration_service.parse_user_value(key, message.text or "")
     except ValueError as error:
         await message.answer(f"⚠️ {error}")
         return
 
-    await bot_configuration_service.set_value(db, key, value)
+    try:
+        await bot_configuration_service.set_value(db, key, value)
+    except ReadOnlySettingError:
+        await message.answer("⚠️ Эта настройка доступна только для чтения.")
+        await state.clear()
+        return
     await db.commit()
 
     text = _render_setting_text(key)
@@ -1219,7 +2280,14 @@ async def reset_setting(
     except KeyError:
         await callback.answer("Эта настройка больше недоступна", show_alert=True)
         return
-    await bot_configuration_service.reset_value(db, key)
+    if bot_configuration_service.is_read_only(key):
+        await callback.answer("Эта настройка доступна только для чтения", show_alert=True)
+        return
+    try:
+        await bot_configuration_service.reset_value(db, key)
+    except ReadOnlySettingError:
+        await callback.answer("Эта настройка доступна только для чтения", show_alert=True)
+        return
     await db.commit()
 
     text = _render_setting_text(key)
@@ -1259,9 +2327,16 @@ async def toggle_setting(
     except KeyError:
         await callback.answer("Эта настройка больше недоступна", show_alert=True)
         return
+    if bot_configuration_service.is_read_only(key):
+        await callback.answer("Эта настройка доступна только для чтения", show_alert=True)
+        return
     current = bot_configuration_service.get_current_value(key)
     new_value = not bool(current)
-    await bot_configuration_service.set_value(db, key, new_value)
+    try:
+        await bot_configuration_service.set_value(db, key, new_value)
+    except ReadOnlySettingError:
+        await callback.answer("Эта настройка доступна только для чтения", show_alert=True)
+        return
     await db.commit()
 
     text = _render_setting_text(key)
@@ -1303,6 +2378,9 @@ async def apply_setting_choice(
     except KeyError:
         await callback.answer("Эта настройка больше недоступна", show_alert=True)
         return
+    if bot_configuration_service.is_read_only(key):
+        await callback.answer("Эта настройка доступна только для чтения", show_alert=True)
+        return
 
     try:
         value = bot_configuration_service.resolve_choice_token(key, choice_token)
@@ -1310,7 +2388,11 @@ async def apply_setting_choice(
         await callback.answer("Это значение больше недоступно", show_alert=True)
         return
 
-    await bot_configuration_service.set_value(db, key, value)
+    try:
+        await bot_configuration_service.set_value(db, key, value)
+    except ReadOnlySettingError:
+        await callback.answer("Эта настройка доступна только для чтения", show_alert=True)
+        return
     await db.commit()
 
     text = _render_setting_text(key)
@@ -1330,6 +2412,38 @@ def register_handlers(dp: Dispatcher) -> None:
     dp.callback_query.register(
         show_bot_config_menu,
         F.data == "admin_bot_config",
+    )
+    dp.callback_query.register(
+        start_settings_search,
+        F.data == "botcfg_action:search",
+    )
+    dp.callback_query.register(
+        show_presets,
+        F.data == "botcfg_action:presets",
+    )
+    dp.callback_query.register(
+        apply_preset,
+        F.data.startswith("botcfg_preset_apply:"),
+    )
+    dp.callback_query.register(
+        preview_preset,
+        F.data.startswith("botcfg_preset:") & (~F.data.startswith("botcfg_preset_apply:")),
+    )
+    dp.callback_query.register(
+        export_settings,
+        F.data == "botcfg_action:export",
+    )
+    dp.callback_query.register(
+        start_import_settings,
+        F.data == "botcfg_action:import",
+    )
+    dp.callback_query.register(
+        show_settings_history,
+        F.data == "botcfg_action:history",
+    )
+    dp.callback_query.register(
+        show_help,
+        F.data == "botcfg_action:help",
     )
     dp.callback_query.register(
         show_bot_config_group,
@@ -1376,5 +2490,13 @@ def register_handlers(dp: Dispatcher) -> None:
     dp.message.register(
         handle_edit_setting,
         BotConfigStates.waiting_for_value,
+    )
+    dp.message.register(
+        handle_search_query,
+        BotConfigStates.waiting_for_search_query,
+    )
+    dp.message.register(
+        handle_import_message,
+        BotConfigStates.waiting_for_import_file,
     )
 

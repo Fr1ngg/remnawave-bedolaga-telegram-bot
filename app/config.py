@@ -1,3 +1,5 @@
+import hashlib
+import hmac
 import logging
 import os
 import re
@@ -38,7 +40,7 @@ class Settings(BaseSettings):
     CHANNEL_LINK: Optional[str] = None
     CHANNEL_IS_REQUIRED_SUB: bool = False
     
-    DATABASE_URL: str = ""
+    DATABASE_URL: Optional[str] = None
     
     POSTGRES_HOST: str = "postgres"
     POSTGRES_PORT: int = 5432
@@ -53,8 +55,8 @@ class Settings(BaseSettings):
     
     REDIS_URL: str = "redis://localhost:6379/0"
     
-    REMNAWAVE_API_URL: str = ""
-    REMNAWAVE_API_KEY: str = ""
+    REMNAWAVE_API_URL: Optional[str] = None
+    REMNAWAVE_API_KEY: Optional[str] = None
     REMNAWAVE_SECRET_KEY: Optional[str] = None
 
     REMNAWAVE_USERNAME: Optional[str] = None
@@ -66,10 +68,12 @@ class Settings(BaseSettings):
     TRIAL_DURATION_DAYS: int = 3
     TRIAL_TRAFFIC_LIMIT_GB: int = 10
     TRIAL_DEVICE_LIMIT: int = 2
+    TRIAL_ADD_REMAINING_DAYS_TO_PAID: bool = False
     DEFAULT_TRAFFIC_LIMIT_GB: int = 100
     DEFAULT_DEVICE_LIMIT: int = 1
-    TRIAL_SQUAD_UUID: str = ""
+    TRIAL_SQUAD_UUID: Optional[str] = None
     DEFAULT_TRAFFIC_RESET_STRATEGY: str = "MONTH"
+    RESET_TRAFFIC_ON_PAYMENT: bool = False
     MAX_DEVICES_LIMIT: int = 20
     
     TRIAL_WARNING_HOURS: int = 2 
@@ -128,8 +132,9 @@ class Settings(BaseSettings):
     REFERRED_USER_REWARD: int = 0 
     
     AUTOPAY_WARNING_DAYS: str = "3,1"
-    
-    DEFAULT_AUTOPAY_DAYS_BEFORE: int = 3 
+
+    DEFAULT_AUTOPAY_ENABLED: bool = False
+    DEFAULT_AUTOPAY_DAYS_BEFORE: int = 3
     MIN_BALANCE_FOR_AUTOPAY_KOPEKS: int = 10000  
     
     MONITORING_INTERVAL: int = 60
@@ -147,6 +152,7 @@ class Settings(BaseSettings):
     TRIBUTE_API_KEY: Optional[str] = None
     TRIBUTE_DONATE_LINK: Optional[str] = None
     TRIBUTE_WEBHOOK_PATH: str = "/tribute-webhook"
+    TRIBUTE_WEBHOOK_HOST: str = "0.0.0.0"
     TRIBUTE_WEBHOOK_PORT: int = 8081
 
     YOOKASSA_ENABLED: bool = False
@@ -156,9 +162,10 @@ class Settings(BaseSettings):
     YOOKASSA_DEFAULT_RECEIPT_EMAIL: Optional[str] = None
     YOOKASSA_VAT_CODE: int = 1
     YOOKASSA_SBP_ENABLED: bool = False 
-    YOOKASSA_PAYMENT_MODE: str = "full_payment" 
+    YOOKASSA_PAYMENT_MODE: str = "full_payment"
     YOOKASSA_PAYMENT_SUBJECT: str = "service"
     YOOKASSA_WEBHOOK_PATH: str = "/yookassa-webhook"
+    YOOKASSA_WEBHOOK_HOST: str = "0.0.0.0"
     YOOKASSA_WEBHOOK_PORT: int = 8082
     YOOKASSA_WEBHOOK_SECRET: Optional[str] = None
     YOOKASSA_MIN_AMOUNT_KOPEKS: int = 5000
@@ -206,9 +213,16 @@ class Settings(BaseSettings):
     PAL24_MIN_AMOUNT_KOPEKS: int = 10000
     PAL24_MAX_AMOUNT_KOPEKS: int = 100000000
     PAL24_REQUEST_TIMEOUT: int = 30
+    PAL24_SBP_BUTTON_TEXT: Optional[str] = None
+    PAL24_CARD_BUTTON_TEXT: Optional[str] = None
 
     CONNECT_BUTTON_MODE: str = "guide"
     MINIAPP_CUSTOM_URL: str = ""
+    MINIAPP_PURCHASE_URL: str = ""
+    MINIAPP_SERVICE_NAME_EN: str = "Bedolaga VPN"
+    MINIAPP_SERVICE_NAME_RU: str = "Bedolaga VPN"
+    MINIAPP_SERVICE_DESCRIPTION_EN: str = "Secure & Fast Connection"
+    MINIAPP_SERVICE_DESCRIPTION_RU: str = "Безопасное и быстрое подключение"
     CONNECT_BUTTON_HAPP_DOWNLOAD_ENABLED: bool = False
     HAPP_CRYPTOLINK_REDIRECT_TEMPLATE: Optional[str] = None
     HAPP_DOWNLOAD_LINK_IOS: Optional[str] = None
@@ -224,6 +238,7 @@ class Settings(BaseSettings):
 
     DEFAULT_LANGUAGE: str = "ru"
     AVAILABLE_LANGUAGES: str = "ru,en"
+    LANGUAGE_SELECTION_ENABLED: bool = True
     
     LOG_LEVEL: str = "INFO"
     LOG_FILE: str = "logs/bot.log"
@@ -231,6 +246,19 @@ class Settings(BaseSettings):
     DEBUG: bool = False
     WEBHOOK_URL: Optional[str] = None
     WEBHOOK_PATH: str = "/webhook"
+
+    WEB_API_ENABLED: bool = False
+    WEB_API_HOST: str = "0.0.0.0"
+    WEB_API_PORT: int = 8080
+    WEB_API_WORKERS: int = 1
+    WEB_API_ALLOWED_ORIGINS: str = "*"
+    WEB_API_DOCS_ENABLED: bool = False
+    WEB_API_TITLE: str = "Remnawave Bot Admin API"
+    WEB_API_VERSION: str = "1.0.0"
+    WEB_API_DEFAULT_TOKEN: Optional[str] = None
+    WEB_API_DEFAULT_TOKEN_NAME: str = "Bootstrap Token"
+    WEB_API_TOKEN_HASH_ALGORITHM: str = "sha256"
+    WEB_API_REQUEST_LOGGING: bool = True
     
     APP_CONFIG_PATH: str = "app-config.json"
     ENABLE_DEEP_LINKS: bool = True
@@ -250,6 +278,9 @@ class Settings(BaseSettings):
     BACKUP_SEND_ENABLED: bool = False
     BACKUP_SEND_CHAT_ID: Optional[str] = None
     BACKUP_SEND_TOPIC_ID: Optional[int] = None
+
+    EXTERNAL_ADMIN_TOKEN: Optional[str] = None
+    EXTERNAL_ADMIN_TOKEN_BOT_ID: Optional[int] = None
 
     @field_validator('SERVER_STATUS_MODE', mode='before')
     @classmethod
@@ -383,6 +414,14 @@ class Settings(BaseSettings):
             "password": self.REMNAWAVE_PASSWORD,
             "auth_type": self.REMNAWAVE_AUTH_TYPE
         }
+
+    def get_pal24_sbp_button_text(self, fallback: str) -> str:
+        value = (self.PAL24_SBP_BUTTON_TEXT or "").strip()
+        return value or fallback
+
+    def get_pal24_card_button_text(self, fallback: str) -> str:
+        value = (self.PAL24_CARD_BUTTON_TEXT or "").strip()
+        return value or fallback
     
     def get_remnawave_user_delete_mode(self) -> str:
         """Возвращает режим удаления пользователей: 'delete' или 'disable'"""
@@ -426,6 +465,15 @@ class Settings(BaseSettings):
             return [3, 1]
         except (ValueError, AttributeError):
             return [3, 1]
+
+    def is_autopay_enabled_by_default(self) -> bool:
+        value = getattr(self, "DEFAULT_AUTOPAY_ENABLED", True)
+
+        if isinstance(value, str):
+            normalized = value.strip().lower()
+            return normalized in {"1", "true", "yes", "on"}
+
+        return bool(value)
     
     def get_available_languages(self) -> List[str]:
         try:
@@ -437,7 +485,10 @@ class Settings(BaseSettings):
             return ["ru", "en"]
         except AttributeError:
             return ["ru", "en"]
-    
+
+    def is_language_selection_enabled(self) -> bool:
+        return bool(getattr(self, "LANGUAGE_SELECTION_ENABLED", True))
+
     def format_price(self, price_kopeks: int) -> str:
         rubles = price_kopeks // 100
         return f"{rubles} ₽"
@@ -489,9 +540,68 @@ class Settings(BaseSettings):
     
     def is_deep_links_enabled(self) -> bool:
         return self.ENABLE_DEEP_LINKS
+
+    def get_miniapp_branding(self) -> Dict[str, Dict[str, Optional[str]]]:
+        def _clean(value: Optional[str]) -> Optional[str]:
+            if value is None:
+                return None
+            value_str = str(value).strip()
+            return value_str or None
+
+        name_en = _clean(self.MINIAPP_SERVICE_NAME_EN)
+        name_ru = _clean(self.MINIAPP_SERVICE_NAME_RU)
+        desc_en = _clean(self.MINIAPP_SERVICE_DESCRIPTION_EN)
+        desc_ru = _clean(self.MINIAPP_SERVICE_DESCRIPTION_RU)
+
+        default_name = name_en or name_ru or "RemnaWave VPN"
+        default_description = desc_en or desc_ru or "Secure & Fast Connection"
+
+        return {
+            "service_name": {
+                "default": default_name,
+                "en": name_en,
+                "ru": name_ru,
+            },
+            "service_description": {
+                "default": default_description,
+                "en": desc_en,
+                "ru": desc_ru,
+            },
+        }
     
     def get_app_config_cache_ttl(self) -> int:
         return self.APP_CONFIG_CACHE_TTL
+
+    def build_external_admin_token(self, bot_username: str) -> str:
+        """Генерирует детерминированный и криптографически стойкий токен внешней админки."""
+        normalized = (bot_username or "").strip().lstrip("@").lower()
+        if not normalized:
+            raise ValueError("Bot username is required to build external admin token")
+
+        secret = (self.BOT_TOKEN or "").strip()
+        if not secret:
+            raise ValueError("Bot token is required to build external admin token")
+
+        digest = hmac.new(
+            key=secret.encode("utf-8"),
+            msg=f"remnawave.external_admin::{normalized}".encode("utf-8"),
+            digestmod=hashlib.sha256,
+        ).hexdigest()
+        return digest[:48]
+
+    def get_external_admin_token(self) -> Optional[str]:
+        token = (self.EXTERNAL_ADMIN_TOKEN or "").strip()
+        return token or None
+
+    def get_external_admin_bot_id(self) -> Optional[int]:
+        try:
+            return int(self.EXTERNAL_ADMIN_TOKEN_BOT_ID) if self.EXTERNAL_ADMIN_TOKEN_BOT_ID else None
+        except (TypeError, ValueError):  # pragma: no cover - защитная ветка для некорректных значений
+            logging.getLogger(__name__).warning(
+                "Некорректный идентификатор бота для внешней админки: %s",
+                self.EXTERNAL_ADMIN_TOKEN_BOT_ID,
+            )
+            return None
     
     def is_traffic_selectable(self) -> bool:
         return self.TRAFFIC_SELECTION_MODE.lower() == "selectable"
@@ -555,6 +665,13 @@ class Settings(BaseSettings):
 
     def is_happ_download_button_enabled(self) -> bool:
         return self.is_happ_cryptolink_mode() and self.CONNECT_BUTTON_HAPP_DOWNLOAD_ENABLED
+
+    def should_hide_subscription_link(self) -> bool:
+        """Returns True when subscription links must be hidden from the interface."""
+
+        if self.is_happ_cryptolink_mode():
+            return False
+        return self.HIDE_SUBSCRIPTION_LINK
 
     def get_happ_cryptolink_redirect_template(self) -> Optional[str]:
         template = (self.HAPP_CRYPTOLINK_REDIRECT_TEMPLATE or "").strip()
@@ -954,7 +1071,25 @@ class Settings(BaseSettings):
 
     def get_server_status_request_timeout(self) -> int:
         return max(1, self.SERVER_STATUS_REQUEST_TIMEOUT)
-    
+
+    def is_web_api_enabled(self) -> bool:
+        return bool(self.WEB_API_ENABLED)
+
+    def get_web_api_allowed_origins(self) -> list[str]:
+        raw = (self.WEB_API_ALLOWED_ORIGINS or "").split(",")
+        origins = [origin.strip() for origin in raw if origin.strip()]
+        return origins or ["*"]
+
+    def get_web_api_docs_config(self) -> Dict[str, Optional[str]]:
+        if self.WEB_API_DOCS_ENABLED:
+            return {
+                "docs_url": "/docs",
+                "redoc_url": "/redoc",
+                "openapi_url": "/openapi.json",
+            }
+
+        return {"docs_url": None, "redoc_url": None, "openapi_url": None}
+
     def get_support_system_mode(self) -> str:
         mode = (self.SUPPORT_SYSTEM_MODE or "both").strip().lower()
         return mode if mode in {"tickets", "contact", "both"} else "both"
@@ -974,14 +1109,30 @@ class Settings(BaseSettings):
 
 settings = Settings()
 
-PERIOD_PRICES = {
-    14: settings.PRICE_14_DAYS,
-    30: settings.PRICE_30_DAYS,
-    60: settings.PRICE_60_DAYS,
-    90: settings.PRICE_90_DAYS,
-    180: settings.PRICE_180_DAYS,
-    360: settings.PRICE_360_DAYS,
+_PERIOD_PRICE_FIELDS: Dict[int, str] = {
+    14: "PRICE_14_DAYS",
+    30: "PRICE_30_DAYS",
+    60: "PRICE_60_DAYS",
+    90: "PRICE_90_DAYS",
+    180: "PRICE_180_DAYS",
+    360: "PRICE_360_DAYS",
 }
+
+
+def refresh_period_prices() -> None:
+    """Rebuild cached period price mapping using the latest settings."""
+
+    PERIOD_PRICES.clear()
+    PERIOD_PRICES.update(
+        {
+            days: getattr(settings, field_name, 0)
+            for days, field_name in _PERIOD_PRICE_FIELDS.items()
+        }
+    )
+
+
+PERIOD_PRICES: Dict[int, int] = {}
+refresh_period_prices()
 
 def get_traffic_prices() -> Dict[int, int]:
     packages = settings.get_traffic_packages()

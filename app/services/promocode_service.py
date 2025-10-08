@@ -49,23 +49,34 @@ class PromoCodeService:
                 return {"success": False, "error": "already_used_by_user"}
             
             result_description = await self._apply_promocode_effects(db, user, promocode)
-            
+
             if promocode.type == PromoCodeType.SUBSCRIPTION_DAYS.value and promocode.subscription_days > 0:
                 from app.utils.user_utils import mark_user_as_had_paid_subscription
                 await mark_user_as_had_paid_subscription(db, user)
-                
+
                 logger.info(f"🎯 Пользователь {user.telegram_id} получил платную подписку через промокод {code}")
-            
+
             await create_promocode_use(db, promocode.id, user_id)
-            
+
             promocode.current_uses += 1
             await db.commit()
-            
+
             logger.info(f"✅ Пользователь {user.telegram_id} активировал промокод {code}")
-            
+
+            promocode_data = {
+                "code": promocode.code,
+                "type": promocode.type,
+                "balance_bonus_kopeks": promocode.balance_bonus_kopeks,
+                "subscription_days": promocode.subscription_days,
+                "max_uses": promocode.max_uses,
+                "current_uses": promocode.current_uses,
+                "valid_until": promocode.valid_until,
+            }
+
             return {
                 "success": True,
-                "description": result_description
+                "description": result_description,
+                "promocode": promocode_data,
             }
             
         except Exception as e:
@@ -102,16 +113,32 @@ class PromoCodeService:
                 from app.database.crud.subscription import create_paid_subscription
                 
                 trial_squads = []
-                if hasattr(settings, 'TRIAL_SQUAD_UUID') and settings.TRIAL_SQUAD_UUID:
-                    trial_squads = [settings.TRIAL_SQUAD_UUID]
+                try:
+                    from app.database.crud.server_squad import get_random_trial_squad_uuid
+
+                    trial_uuid = await get_random_trial_squad_uuid(
+                        db,
+                        settings.TRIAL_SQUAD_UUID,
+                    )
+                    if trial_uuid:
+                        trial_squads = [trial_uuid]
+                except Exception as error:
+                    logger.error(
+                        "Не удалось подобрать сквад для подписки по промокоду %s: %s",
+                        promocode.code,
+                        error,
+                    )
+                    if getattr(settings, 'TRIAL_SQUAD_UUID', None):
+                        trial_squads = [settings.TRIAL_SQUAD_UUID]
                 
                 new_subscription = await create_paid_subscription(
                     db=db,
                     user_id=user.id,
                     duration_days=promocode.subscription_days,
-                    traffic_limit_gb=0, 
+                    traffic_limit_gb=0,
                     device_limit=1,
-                    connected_squads=trial_squads 
+                    connected_squads=trial_squads,
+                    update_server_counters=True,
                 )
                 
                 await self.subscription_service.create_remnawave_user(db, new_subscription)
@@ -129,9 +156,9 @@ class PromoCodeService:
                 trial_days = promocode.subscription_days if promocode.subscription_days > 0 else settings.TRIAL_DURATION_DAYS
                 
                 trial_subscription = await create_trial_subscription(
-                    db, 
-                    user.id, 
-                    duration_days=trial_days 
+                    db,
+                    user.id,
+                    duration_days=trial_days
                 )
                 
                 await self.subscription_service.create_remnawave_user(db, trial_subscription)

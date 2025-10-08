@@ -189,7 +189,7 @@ async def get_detailed_referral_list(db: AsyncSession, user_id: int, limit: int 
                     and_(
                         Transaction.user_id == referral.id,
                         Transaction.type == TransactionType.DEPOSIT.value,
-                        Transaction.is_completed == True
+                        Transaction.is_completed.is_(True)
                     )
                 )
             )

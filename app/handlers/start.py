@@ -19,15 +19,26 @@ from app.database.crud.campaign import (
 )
 from app.database.models import UserStatus, SubscriptionStatus
 from app.keyboards.inline import (
-    get_rules_keyboard, get_main_menu_keyboard, get_post_registration_keyboard
+    get_rules_keyboard,
+    get_main_menu_keyboard,
+    get_post_registration_keyboard,
+    get_language_selection_keyboard,
 )
 from app.localization.loader import DEFAULT_LANGUAGE
 from app.localization.texts import get_texts, get_rules
 from app.services.referral_service import process_referral_registration
 from app.services.campaign_service import AdvertisingCampaignService
+from app.services.admin_notification_service import AdminNotificationService
 from app.services.subscription_service import SubscriptionService
+from app.services.support_settings_service import SupportSettingsService
+from app.services.main_menu_button_service import MainMenuButtonService
 from app.utils.user_utils import generate_unique_referral_code
+from app.utils.promo_offer import (
+    build_promo_offer_hint,
+    build_test_access_hint,
+)
 from app.database.crud.user_message import get_random_active_message
+from app.database.crud.subscription import decrement_subscription_server_counts
 
 
 logger = logging.getLogger(__name__)
@@ -72,8 +83,8 @@ async def _apply_campaign_bonus_if_needed(
 
 
 async def handle_potential_referral_code(
-    message: types.Message, 
-    state: FSMContext, 
+    message: types.Message,
+    state: FSMContext,
     db: AsyncSession
 ):
     current_state = await state.get_state()
@@ -133,7 +144,80 @@ async def handle_potential_referral_code(
     else:
         await complete_registration(message, state, db)
     
-    return True 
+    return True
+
+
+def _get_language_prompt_text() -> str:
+    return "🌐 Выберите язык / Choose your language:"
+
+
+async def _prompt_language_selection(message: types.Message, state: FSMContext) -> None:
+    logger.info(f"🌐 LANGUAGE: Запрос выбора языка для пользователя {message.from_user.id}")
+
+    await state.set_state(RegistrationStates.waiting_for_language)
+    await message.answer(
+        _get_language_prompt_text(),
+        reply_markup=get_language_selection_keyboard(),
+    )
+
+
+async def _continue_registration_after_language(
+    *,
+    message: types.Message | None,
+    callback: types.CallbackQuery | None,
+    state: FSMContext,
+    db: AsyncSession,
+) -> None:
+    data = await state.get_data() or {}
+    language = data.get('language', DEFAULT_LANGUAGE)
+    texts = get_texts(language)
+
+    target_message = callback.message if callback else message
+    if not target_message:
+        logger.warning("⚠️ LANGUAGE: Нет доступного сообщения для продолжения регистрации")
+        return
+
+    async def _complete_registration_wrapper():
+        if callback:
+            await complete_registration_from_callback(callback, state, db)
+        else:
+            await complete_registration(message, state, db)
+
+    if settings.SKIP_RULES_ACCEPT:
+        logger.info("⚙️ LANGUAGE: SKIP_RULES_ACCEPT включен - пропускаем правила")
+
+        if data.get('referral_code'):
+            referrer = await get_user_by_referral_code(db, data['referral_code'])
+            if referrer:
+                data['referrer_id'] = referrer.id
+                await state.set_data(data)
+                logger.info(f"✅ LANGUAGE: Реферер найден: {referrer.id}")
+
+        if settings.SKIP_REFERRAL_CODE or data.get('referral_code'):
+            await _complete_registration_wrapper()
+        else:
+            try:
+                await target_message.answer(
+                    texts.t(
+                        "REFERRAL_CODE_QUESTION",
+                        "У вас есть реферальный код? Введите его или нажмите 'Пропустить'",
+                    ),
+                    reply_markup=get_referral_code_keyboard(language)
+                )
+                await state.set_state(RegistrationStates.waiting_for_referral_code)
+                logger.info("🔍 LANGUAGE: Ожидание ввода реферального кода")
+            except Exception as error:
+                logger.error(f"Ошибка при показе вопроса о реферальном коде после выбора языка: {error}")
+                await _complete_registration_wrapper()
+        return
+
+    rules_text = await get_rules(language)
+    await target_message.answer(
+        rules_text,
+        reply_markup=get_rules_keyboard(language)
+    )
+    await state.set_state(RegistrationStates.waiting_for_rules_accept)
+    logger.info("📋 LANGUAGE: Правила отправлены после выбора языка")
 
 
 async def cmd_start(message: types.Message, state: FSMContext, db: AsyncSession, db_user=None):
@@ -165,6 +249,22 @@ async def cmd_start(message: types.Message, state: FSMContext, db: AsyncSession,
         await state.update_data(referral_code=referral_code)
     
     user = db_user if db_user else await get_user_by_telegram_id(db, message.from_user.id)
+
+    if campaign:
+        try:
+            notification_service = AdminNotificationService(message.bot)
+            await notification_service.send_campaign_link_visit_notification(
+                db,
+                message.from_user,
+                campaign,
+                user,
+            )
+        except Exception as notify_error:
+            logger.error(
+                "Ошибка отправки админ уведомления о переходе по кампании %s: %s",
+                campaign.id,
+                notify_error,
+            )
     
     if user and user.status != UserStatus.DELETED.value:
         logger.info(f"✅ Активный пользователь найден: {user.telegram_id}")
@@ -229,17 +329,31 @@ async def cmd_start(message: types.Message, state: FSMContext, db: AsyncSession,
             subscription_is_active = user.subscription.is_active
         
         menu_text = await get_main_menu_text(user, texts, db)
-        
+
+        is_admin = settings.is_admin(user.telegram_id)
+        is_moderator = (not is_admin) and SupportSettingsService.is_moderator(
+            user.telegram_id
+        )
+
+        custom_buttons = await MainMenuButtonService.get_buttons_for_user(
+            db,
+            is_admin=is_admin,
+            has_active_subscription=has_active_subscription,
+            subscription_is_active=subscription_is_active,
+        )
+
         await message.answer(
             menu_text,
             reply_markup=get_main_menu_keyboard(
                 language=user.language,
-                is_admin=settings.is_admin(user.telegram_id),
+                is_admin=is_admin,
                 has_had_paid_subscription=user.has_had_paid_subscription,
                 has_active_subscription=has_active_subscription,
                 subscription_is_active=subscription_is_active,
                 balance_kopeks=user.balance_kopeks,
-                subscription=user.subscription
+                subscription=user.subscription,
+                is_moderator=is_moderator,
+                custom_buttons=custom_buttons,
             ),
             parse_mode="HTML"
         )
@@ -258,6 +372,7 @@ async def cmd_start(message: types.Message, state: FSMContext, db: AsyncSession,
             from sqlalchemy import delete
             
             if user.subscription:
+                await decrement_subscription_server_counts(db, user.subscription)
                 await db.execute(
                     delete(SubscriptionServer).where(
                         SubscriptionServer.subscription_id == user.subscription.id
@@ -309,55 +424,128 @@ async def cmd_start(message: types.Message, state: FSMContext, db: AsyncSession,
     else:
         logger.info(f"🆕 Новый пользователь, начинаем регистрацию")
     
-    language = DEFAULT_LANGUAGE
-    texts = get_texts(language)
-    
     data = await state.get_data() or {}
-    data['language'] = language
-    await state.set_data(data)
-    logger.info(f"💾 Установлен язык по умолчанию: {language}")
-    if settings.SKIP_RULES_ACCEPT:
-        logger.info("⚙️ SKIP_RULES_ACCEPT включен - пропускаем принятие правил")
-        if data.get('referral_code'):
-            referrer = await get_user_by_referral_code(db, data['referral_code'])
-            if referrer:
-                data['referrer_id'] = referrer.id
-                await state.set_data(data)
-                logger.info(f"✅ Реферер найден: {referrer.id}")
+    if not data.get('language'):
+        if settings.is_language_selection_enabled():
+            await _prompt_language_selection(message, state)
+            return
 
-        if settings.SKIP_REFERRAL_CODE or data.get('referral_code'):
-            await complete_registration(message, state, db)
-        else:
-            try:
-                await message.answer(
-                    texts.t(
-                        "REFERRAL_CODE_QUESTION",
-                        "У вас есть реферальный код? Введите его или нажмите 'Пропустить'",
-                    ),
-                    reply_markup=get_referral_code_keyboard(language)
+        default_language = (
+            (settings.DEFAULT_LANGUAGE or DEFAULT_LANGUAGE)
+            if isinstance(settings.DEFAULT_LANGUAGE, str)
+            else DEFAULT_LANGUAGE
+        )
+        normalized_default = default_language.split("-")[0].lower()
+        data['language'] = normalized_default
+        await state.set_data(data)
+        logger.info(
+            "🌐 LANGUAGE: выбор языка отключен, устанавливаем язык по умолчанию '%s'",
+            normalized_default,
+        )
+
+    await _continue_registration_after_language(
+        message=message,
+        callback=None,
+        state=state,
+        db=db,
+    )
+
+
+async def process_language_selection(
+    callback: types.CallbackQuery,
+    state: FSMContext,
+    db: AsyncSession,
+):
+    logger.info(
+        f"🌐 LANGUAGE: Пользователь {callback.from_user.id} выбрал язык ({callback.data})"
+    )
+
+    if not settings.is_language_selection_enabled():
+        data = await state.get_data() or {}
+        default_language = (
+            (settings.DEFAULT_LANGUAGE or DEFAULT_LANGUAGE)
+            if isinstance(settings.DEFAULT_LANGUAGE, str)
+            else DEFAULT_LANGUAGE
+        )
+        normalized_default = default_language.split("-")[0].lower()
+        data['language'] = normalized_default
+        await state.set_data(data)
+
+        texts = get_texts(normalized_default)
+
+        try:
+            await callback.message.edit_text(
+                texts.t(
+                    "LANGUAGE_SELECTION_DISABLED",
+                    "⚙️ Выбор языка временно недоступен. Используем язык по умолчанию.",
                 )
-                await state.set_state(RegistrationStates.waiting_for_referral_code)
-                logger.info("🔍 Ожидание ввода реферального кода")
-            except Exception as e:
-                logger.error(f"Ошибка при показе вопроса о реферальном коде: {e}")
-                await complete_registration(message, state, db)
+            )
+        except Exception:
+            await callback.message.answer(
+                texts.t(
+                    "LANGUAGE_SELECTION_DISABLED",
+                    "⚙️ Выбор языка временно недоступен. Используем язык по умолчанию.",
+                )
+            )
+
+        await callback.answer()
+
+        await _continue_registration_after_language(
+            message=None,
+            callback=callback,
+            state=state,
+            db=db,
+        )
         return
 
-    rules_text = await get_rules(language)
-    await message.answer(
-        rules_text,
-        reply_markup=get_rules_keyboard(language)
-    )
-    logger.info(f"📋 Правила отправлены")
+    selected_raw = (callback.data or "").split(":", 1)[-1]
+    normalized_selected = selected_raw.strip().lower()
 
-    await state.set_state(RegistrationStates.waiting_for_rules_accept)
-    current_state = await state.get_state()
-    logger.info(f"📊 Установлено состояние: {current_state}")
+    available_map = {
+        lang.strip().lower(): lang.strip()
+        for lang in settings.get_available_languages()
+        if isinstance(lang, str) and lang.strip()
+    }
+
+    if normalized_selected not in available_map:
+        logger.warning(
+            f"⚠️ LANGUAGE: Выбран недоступный язык '{normalized_selected}' пользователем {callback.from_user.id}"
+        )
+        await callback.answer("❌ Unsupported language", show_alert=True)
+        return
+
+    resolved_language = available_map[normalized_selected].lower()
+
+    data = await state.get_data() or {}
+    data['language'] = resolved_language
+    await state.set_data(data)
+
+    texts = get_texts(resolved_language)
+
+    try:
+        await callback.message.edit_text(
+            texts.t("LANGUAGE_SELECTED", "🌐 Язык интерфейса обновлен."),
+        )
+    except Exception as error:
+        logger.warning(
+            f"⚠️ LANGUAGE: Не удалось обновить сообщение выбора языка: {error}")
+        await callback.message.answer(
+            texts.t("LANGUAGE_SELECTED", "🌐 Язык интерфейса обновлен."),
+        )
+
+    await callback.answer()
+
+    await _continue_registration_after_language(
+        message=None,
+        callback=callback,
+        state=state,
+        db=db,
+    )
 
 
 async def process_rules_accept(
-    callback: types.CallbackQuery, 
-    state: FSMContext, 
+    callback: types.CallbackQuery,
+    state: FSMContext,
     db: AsyncSession
 ):
     
@@ -562,18 +750,33 @@ async def complete_registration_from_callback(
             subscription_is_active = existing_user.subscription.is_active
         
         menu_text = await get_main_menu_text(existing_user, texts, db)
-        
+
+        is_admin = settings.is_admin(existing_user.telegram_id)
+        is_moderator = (
+            (not is_admin)
+            and SupportSettingsService.is_moderator(existing_user.telegram_id)
+        )
+
+        custom_buttons = await MainMenuButtonService.get_buttons_for_user(
+            db,
+            is_admin=is_admin,
+            has_active_subscription=has_active_subscription,
+            subscription_is_active=subscription_is_active,
+        )
+
         try:
             await callback.message.answer(
                 menu_text,
                 reply_markup=get_main_menu_keyboard(
                     language=existing_user.language,
-                    is_admin=settings.is_admin(existing_user.telegram_id),
+                    is_admin=is_admin,
                     has_had_paid_subscription=existing_user.has_had_paid_subscription,
                     has_active_subscription=has_active_subscription,
                     subscription_is_active=subscription_is_active,
                     balance_kopeks=existing_user.balance_kopeks,
-                    subscription=existing_user.subscription
+                    subscription=existing_user.subscription,
+                    is_moderator=is_moderator,
+                    custom_buttons=custom_buttons,
                 ),
                 parse_mode="HTML"
             )
@@ -727,18 +930,33 @@ async def complete_registration_from_callback(
             subscription_is_active = user.subscription.is_active
         
         menu_text = await get_main_menu_text(user, texts, db)
-        
+
+        is_admin = settings.is_admin(user.telegram_id)
+        is_moderator = (
+            (not is_admin)
+            and SupportSettingsService.is_moderator(user.telegram_id)
+        )
+
+        custom_buttons = await MainMenuButtonService.get_buttons_for_user(
+            db,
+            is_admin=is_admin,
+            has_active_subscription=has_active_subscription,
+            subscription_is_active=subscription_is_active,
+        )
+
         try:
             await callback.message.answer(
                 menu_text,
                 reply_markup=get_main_menu_keyboard(
                     language=user.language,
-                    is_admin=settings.is_admin(user.telegram_id),
+                    is_admin=is_admin,
                     has_had_paid_subscription=user.has_had_paid_subscription,
                     has_active_subscription=has_active_subscription,
                     subscription_is_active=subscription_is_active,
                     balance_kopeks=user.balance_kopeks,
-                    subscription=user.subscription
+                    subscription=user.subscription,
+                    is_moderator=is_moderator,
+                    custom_buttons=custom_buttons,
                 ),
                 parse_mode="HTML"
             )
@@ -786,18 +1004,33 @@ async def complete_registration(
             subscription_is_active = existing_user.subscription.is_active
         
         menu_text = await get_main_menu_text(existing_user, texts, db)
-        
+
+        is_admin = settings.is_admin(existing_user.telegram_id)
+        is_moderator = (
+            (not is_admin)
+            and SupportSettingsService.is_moderator(existing_user.telegram_id)
+        )
+
+        custom_buttons = await MainMenuButtonService.get_buttons_for_user(
+            db,
+            is_admin=is_admin,
+            has_active_subscription=has_active_subscription,
+            subscription_is_active=subscription_is_active,
+        )
+
         try:
             await message.answer(
                 menu_text,
                 reply_markup=get_main_menu_keyboard(
                     language=existing_user.language,
-                    is_admin=settings.is_admin(existing_user.telegram_id),
+                    is_admin=is_admin,
                     has_had_paid_subscription=existing_user.has_had_paid_subscription,
                     has_active_subscription=has_active_subscription,
                     subscription_is_active=subscription_is_active,
                     balance_kopeks=existing_user.balance_kopeks,
-                    subscription=existing_user.subscription
+                    subscription=existing_user.subscription,
+                    is_moderator=is_moderator,
+                    custom_buttons=custom_buttons,
                 ),
                 parse_mode="HTML"
             )
@@ -951,18 +1184,33 @@ async def complete_registration(
             subscription_is_active = user.subscription.is_active
         
         menu_text = await get_main_menu_text(user, texts, db)
-        
+
+        is_admin = settings.is_admin(user.telegram_id)
+        is_moderator = (
+            (not is_admin)
+            and SupportSettingsService.is_moderator(user.telegram_id)
+        )
+
+        custom_buttons = await MainMenuButtonService.get_buttons_for_user(
+            db,
+            is_admin=is_admin,
+            has_active_subscription=has_active_subscription,
+            subscription_is_active=subscription_is_active,
+        )
+
         try:
             await message.answer(
                 menu_text,
                 reply_markup=get_main_menu_keyboard(
                     language=user.language,
-                    is_admin=settings.is_admin(user.telegram_id),
+                    is_admin=is_admin,
                     has_had_paid_subscription=user.has_had_paid_subscription,
                     has_active_subscription=has_active_subscription,
                     subscription_is_active=subscription_is_active,
                     balance_kopeks=user.balance_kopeks,
-                    subscription=user.subscription
+                    subscription=user.subscription,
+                    is_moderator=is_moderator,
+                    custom_buttons=custom_buttons,
                 ),
                 parse_mode="HTML"
             )
@@ -1070,12 +1318,42 @@ def get_referral_code_keyboard(language: str):
 
 async def get_main_menu_text(user, texts, db: AsyncSession):
 
+    import html
     base_text = texts.MAIN_MENU.format(
-        user_name=user.full_name,
+        user_name=html.escape(user.full_name or ""),
         subscription_status=_get_subscription_status(user, texts)
     )
 
     action_prompt = texts.t("MAIN_MENU_ACTION_PROMPT", "Выберите действие:")
+
+    info_sections: list[str] = []
+
+    try:
+        promo_hint = await build_promo_offer_hint(db, user, texts)
+        if promo_hint:
+            info_sections.append(promo_hint.strip())
+    except Exception as hint_error:
+        logger.debug(
+            "Не удалось построить подсказку промо-предложения для пользователя %s: %s",
+            getattr(user, "id", None),
+            hint_error,
+        )
+
+    try:
+        test_access_hint = await build_test_access_hint(db, user, texts)
+        if test_access_hint:
+            info_sections.append(test_access_hint.strip())
+    except Exception as test_error:
+        logger.debug(
+            "Не удалось построить подсказку тестового доступа для пользователя %s: %s",
+            getattr(user, "id", None),
+            test_error,
+        )
+
+    if info_sections:
+        extra_block = "\n\n".join(section for section in info_sections if section)
+        if extra_block:
+            base_text = _insert_random_message(base_text, extra_block, action_prompt)
 
     try:
         random_message = await get_random_active_message(db)
@@ -1089,8 +1367,9 @@ async def get_main_menu_text(user, texts, db: AsyncSession):
 
 async def get_main_menu_text_simple(user_name, texts, db: AsyncSession):
 
+    import html
     base_text = texts.MAIN_MENU.format(
-        user_name=user_name,
+        user_name=html.escape(user_name or ""),
         subscription_status=_get_subscription_status_simple(texts)
     )
 
@@ -1189,14 +1468,29 @@ async def required_sub_channel_check(
             from app.utils.message_patch import LOGO_PATH
             from aiogram.types import FSInputFile
 
+            is_admin = settings.is_admin(user.telegram_id)
+            is_moderator = (
+                (not is_admin)
+                and SupportSettingsService.is_moderator(user.telegram_id)
+            )
+
+            custom_buttons = await MainMenuButtonService.get_buttons_for_user(
+                db,
+                is_admin=is_admin,
+                has_active_subscription=has_active_subscription,
+                subscription_is_active=subscription_is_active,
+            )
+
             keyboard = get_main_menu_keyboard(
                 language=user.language,
-                is_admin=settings.is_admin(user.telegram_id),
+                is_admin=is_admin,
                 has_had_paid_subscription=user.has_had_paid_subscription,
                 has_active_subscription=has_active_subscription,
                 subscription_is_active=subscription_is_active,
                 balance_kopeks=user.balance_kopeks,
                 subscription=user.subscription,
+                is_moderator=is_moderator,
+                custom_buttons=custom_buttons,
             )
 
             if settings.ENABLE_LOGO_MODE:
@@ -1291,7 +1585,14 @@ def register_handlers(dp: Dispatcher):
         StateFilter(RegistrationStates.waiting_for_rules_accept)
     )
     logger.info("✅ Зарегистрирован process_rules_accept")
-    
+
+    dp.callback_query.register(
+        process_language_selection,
+        F.data.startswith("language_select:"),
+        StateFilter(RegistrationStates.waiting_for_language)
+    )
+    logger.info("✅ Зарегистрирован process_language_selection")
+
     dp.callback_query.register(
         process_referral_code_skip,
         F.data == "referral_skip",

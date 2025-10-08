@@ -1,0 +1,2997 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#2481cc">
+    <title>VPN Subscription</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        :root {
+            --tg-theme-bg-color: #ffffff;
+            --tg-theme-text-color: #000000;
+            --tg-theme-hint-color: #999999;
+            --tg-theme-link-color: #2481cc;
+            --tg-theme-button-color: #2481cc;
+            --tg-theme-button-text-color: #ffffff;
+            --tg-theme-secondary-bg-color: #f0f0f0;
+            
+            --primary: var(--tg-theme-button-color);
+            --primary-rgb: 36, 129, 204;
+            --text-primary: var(--tg-theme-text-color);
+            --text-secondary: var(--tg-theme-hint-color);
+            --bg-primary: var(--tg-theme-bg-color);
+            --bg-secondary: var(--tg-theme-secondary-bg-color);
+            --border-color: rgba(0, 0, 0, 0.08);
+            --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.06);
+            --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.1);
+            --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.12);
+            --radius-sm: 8px;
+            --radius: 12px;
+            --radius-lg: 16px;
+            --radius-xl: 20px;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+            --info: #3b82f6;
+        }
+
+        :root[data-theme="dark"] {
+            color-scheme: dark;
+            --bg-primary: #0f172a;
+            --bg-secondary: rgba(30, 41, 59, 0.85);
+            --text-primary: #f8fafc;
+            --text-secondary: #94a3b8;
+            --border-color: rgba(148, 163, 184, 0.25);
+            --shadow-sm: 0 2px 8px rgba(2, 6, 23, 0.3);
+            --shadow-md: 0 4px 16px rgba(2, 6, 23, 0.45);
+            --shadow-lg: 0 8px 32px rgba(2, 6, 23, 0.55);
+        }
+
+        :root[data-theme="light"] {
+            color-scheme: light;
+        }
+
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --border-color: rgba(255, 255, 255, 0.1);
+                --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.2);
+                --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.3);
+                --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.4);
+            }
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            overflow-x: hidden;
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 480px;
+            margin: 0 auto;
+            padding: 16px;
+            padding-bottom: 32px;
+        }
+
+        /* Animations */
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @keyframes slideDown {
+            from {
+                opacity: 0;
+                max-height: 0;
+            }
+            to {
+                opacity: 1;
+                max-height: 2000px;
+            }
+        }
+
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        @keyframes shimmer {
+            to { transform: translateX(100%); }
+        }
+
+        .animate-in {
+            animation: fadeIn 0.5s ease-out forwards;
+        }
+
+        /* Language Switcher */
+        .top-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            gap: 12px;
+        }
+
+        .language-switcher {
+            position: relative;
+        }
+
+        .language-select {
+            padding: 8px 32px 8px 12px;
+            border-radius: var(--radius);
+            border: 2px solid var(--border-color);
+            background: var(--bg-secondary);
+            color: var(--text-primary);
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            appearance: none;
+            transition: all 0.3s ease;
+            position: relative;
+            min-width: 120px;
+        }
+
+        .language-select:hover {
+            border-color: var(--primary);
+            transform: translateY(-1px);
+            box-shadow: var(--shadow-sm);
+        }
+
+        .language-select:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(var(--primary-rgb), 0.1);
+        }
+
+        .language-switcher::after {
+            content: '▼';
+            position: absolute;
+            right: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            pointer-events: none;
+            font-size: 10px;
+            color: var(--text-secondary);
+        }
+
+        /* Theme Toggle */
+        .theme-toggle {
+            width: 44px;
+            height: 44px;
+            border-radius: var(--radius);
+            border: 2px solid var(--border-color);
+            background: var(--bg-secondary);
+            color: var(--text-primary);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s ease;
+        }
+
+        .theme-toggle:hover {
+            border-color: var(--primary);
+            transform: translateY(-1px);
+            box-shadow: var(--shadow-sm);
+        }
+
+        /* Header */
+        .header {
+            text-align: center;
+            margin-bottom: 32px;
+            position: relative;
+        }
+
+        .header::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 200px;
+            height: 200px;
+            background: radial-gradient(circle, rgba(var(--primary-rgb), 0.1) 0%, transparent 70%);
+            pointer-events: none;
+            z-index: -1;
+        }
+
+        .logo-container {
+            width: 80px;
+            height: 80px;
+            margin: 0 auto 16px;
+            background: linear-gradient(135deg, var(--primary), rgba(var(--primary-rgb), 0.7));
+            border-radius: var(--radius-xl);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: var(--shadow-md);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .logo-container::after {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: linear-gradient(45deg, transparent, rgba(255, 255, 255, 0.3), transparent);
+            transform: rotate(45deg);
+            animation: shimmer 3s infinite;
+        }
+
+        .logo-icon {
+            font-size: 40px;
+            color: white;
+            z-index: 1;
+        }
+
+        .logo {
+            font-size: 28px;
+            font-weight: 800;
+            background: linear-gradient(135deg, var(--primary), rgba(var(--primary-rgb), 0.7));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 8px;
+        }
+
+        .subtitle {
+            font-size: 15px;
+            color: var(--text-secondary);
+            font-weight: 500;
+        }
+
+        /* Loading State */
+        .loading {
+            text-align: center;
+            padding: 80px 20px;
+        }
+
+        .spinner {
+            width: 48px;
+            height: 48px;
+            border: 4px solid var(--bg-secondary);
+            border-top-color: var(--primary);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            margin: 0 auto 20px;
+        }
+
+        .loading-text {
+            font-size: 16px;
+            color: var(--text-secondary);
+            font-weight: 500;
+        }
+
+        /* Error State */
+        .error {
+            text-align: center;
+            padding: 60px 20px;
+            background: var(--bg-secondary);
+            border-radius: var(--radius-xl);
+            margin: 20px 0;
+        }
+
+        .error-icon {
+            font-size: 64px;
+            margin-bottom: 16px;
+            animation: pulse 2s infinite;
+        }
+
+        .error-title {
+            font-size: 20px;
+            font-weight: 700;
+            margin-bottom: 12px;
+            color: var(--text-primary);
+        }
+
+        .error-text {
+            font-size: 15px;
+            color: var(--text-secondary);
+            line-height: 1.6;
+        }
+
+        .error-actions {
+            margin-top: 24px;
+            display: flex;
+            justify-content: center;
+        }
+
+        .error-actions .btn {
+            width: auto;
+            min-width: 220px;
+        }
+
+        /* Cards */
+        .card {
+            background: var(--bg-secondary);
+            border-radius: var(--radius-lg);
+            margin-bottom: 16px;
+            box-shadow: var(--shadow-sm);
+            transition: all 0.3s ease;
+            overflow: hidden;
+        }
+
+        .card:hover {
+            box-shadow: var(--shadow-md);
+            transform: translateY(-2px);
+        }
+
+        .card-header {
+            padding: 16px;
+            cursor: pointer;
+            user-select: none;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            transition: all 0.3s ease;
+        }
+
+        .card.expandable .card-header:hover {
+            background: rgba(var(--primary-rgb), 0.05);
+        }
+
+        .card-title {
+            font-size: 14px;
+            font-weight: 700;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .card-icon {
+            width: 20px;
+            height: 20px;
+            color: var(--primary);
+        }
+
+        .expand-icon {
+            width: 24px;
+            height: 24px;
+            color: var(--text-secondary);
+            transition: transform 0.3s ease;
+        }
+
+        .card.expanded .expand-icon {
+            transform: rotate(180deg);
+        }
+
+        .card-content {
+            padding: 0 16px;
+            max-height: 0;
+            opacity: 0;
+            overflow: hidden;
+            transition: all 0.3s ease;
+        }
+
+        .card.expanded .card-content,
+        .card:not(.expandable) .card-content {
+            max-height: 2000px;
+            opacity: 1;
+            padding: 0 16px 16px;
+        }
+
+        /* User Card Specific */
+        .user-card {
+            background: linear-gradient(135deg, var(--bg-secondary), rgba(var(--primary-rgb), 0.05));
+            border: 2px solid rgba(var(--primary-rgb), 0.1);
+        }
+
+        .user-header {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            padding: 20px;
+        }
+
+        .user-avatar {
+            width: 64px;
+            height: 64px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--primary), rgba(var(--primary-rgb), 0.6));
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 26px;
+            font-weight: 700;
+            flex-shrink: 0;
+            box-shadow: var(--shadow-md);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .user-avatar::after {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: linear-gradient(45deg, transparent, rgba(255, 255, 255, 0.3), transparent);
+            animation: shimmer 3s infinite;
+        }
+
+        .user-info {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .user-name {
+            font-size: 20px;
+            font-weight: 700;
+            margin-bottom: 6px;
+            color: var(--text-primary);
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 13px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+
+        .status-badge::before {
+            content: '';
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: currentColor;
+            animation: pulse 2s infinite;
+        }
+
+        .status-active {
+            background: linear-gradient(135deg, #d4f4dd, #e6f7ed);
+            color: #0f5132;
+        }
+
+        .status-expired {
+            background: linear-gradient(135deg, #f8d7da, #fce4e6);
+            color: #842029;
+        }
+
+        .status-trial {
+            background: linear-gradient(135deg, #fff3cd, #fff8e1);
+            color: #664d03;
+        }
+
+        .status-disabled {
+            background: linear-gradient(135deg, #e2e3e5, #eeeff1);
+            color: #41464b;
+        }
+
+        /* Stats Grid */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+            gap: 12px;
+            padding: 0 20px 20px;
+        }
+
+        .stat-item {
+            text-align: center;
+            padding: 16px 8px;
+            background: var(--bg-primary);
+            border-radius: var(--radius);
+            border: 2px solid var(--border-color);
+            transition: all 0.3s ease;
+        }
+
+        .stat-item:hover {
+            border-color: var(--primary);
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-sm);
+        }
+
+        .stat-value {
+            font-size: 28px;
+            font-weight: 800;
+            background: linear-gradient(135deg, var(--primary), rgba(var(--primary-rgb), 0.7));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 4px;
+        }
+
+        .stat-label {
+            font-size: 12px;
+            color: var(--text-secondary);
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        /* Info Items */
+        .info-list {
+            padding: 0 20px 20px;
+        }
+
+        .info-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 14px 0;
+            border-bottom: 1px solid var(--border-color);
+            transition: all 0.3s ease;
+        }
+
+        .info-item:last-child {
+            border-bottom: none;
+        }
+
+        .info-item:hover {
+            padding-left: 8px;
+            background: rgba(var(--primary-rgb), 0.02);
+            margin: 0 -8px;
+            padding-right: 8px;
+            border-radius: var(--radius-sm);
+        }
+
+        .info-label {
+            font-size: 14px;
+            color: var(--text-secondary);
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .info-value {
+            font-size: 14px;
+            font-weight: 700;
+            color: var(--text-primary);
+            text-align: right;
+        }
+
+        /* Balance Card */
+        .balance-card {
+            background: linear-gradient(135deg, rgba(var(--primary-rgb), 0.1), rgba(var(--primary-rgb), 0.05));
+            border: 2px solid rgba(var(--primary-rgb), 0.2);
+        }
+
+        .balance-content {
+            padding: 20px;
+            text-align: center;
+        }
+
+        .balance-amount {
+            font-size: 36px;
+            font-weight: 800;
+            background: linear-gradient(135deg, var(--primary), rgba(var(--primary-rgb), 0.7));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 8px;
+        }
+
+        .balance-label {
+            font-size: 13px;
+            color: var(--text-secondary);
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        /* Transaction History */
+        .history-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+
+        .history-item {
+            padding: 16px;
+            border-bottom: 1px solid var(--border-color);
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+
+        .history-item:last-child {
+            border-bottom: none;
+        }
+
+        .history-item:hover {
+            background: rgba(var(--primary-rgb), 0.03);
+            padding-left: 20px;
+        }
+
+        .history-item-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 8px;
+        }
+
+        .history-amount {
+            font-size: 18px;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .history-amount.positive {
+            color: var(--success);
+        }
+
+        .history-amount.negative {
+            color: var(--danger);
+        }
+
+        .history-amount-icon {
+            width: 20px;
+            height: 20px;
+        }
+
+        .history-type {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text-primary);
+            padding: 4px 10px;
+            background: var(--bg-primary);
+            border-radius: var(--radius-sm);
+        }
+
+        .history-meta {
+            font-size: 13px;
+            color: var(--text-secondary);
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        .history-description {
+            font-size: 13px;
+            color: var(--text-secondary);
+            margin-top: 8px;
+            padding: 8px;
+            background: var(--bg-primary);
+            border-radius: var(--radius-sm);
+            line-height: 1.5;
+        }
+
+        /* Servers & Devices */
+        .server-list,
+        .device-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+            display: grid;
+            gap: 12px;
+        }
+
+        .server-item {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            padding: 16px;
+            background: linear-gradient(135deg, var(--bg-primary), rgba(var(--primary-rgb), 0.02));
+            border-radius: var(--radius-lg);
+            border: 2px solid var(--border-color);
+            transition: all 0.3s ease;
+            cursor: pointer;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .server-item::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            right: 0;
+            width: 60px;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(var(--primary-rgb), 0.05));
+            transform: translateX(100%);
+            transition: transform 0.5s ease;
+        }
+
+        .server-item:hover {
+            border-color: var(--primary);
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-md);
+            background: linear-gradient(135deg, var(--bg-primary), rgba(var(--primary-rgb), 0.05));
+        }
+
+        .server-item:hover::after {
+            transform: translateX(0);
+        }
+
+        .server-flag {
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, rgba(var(--primary-rgb), 0.15), rgba(var(--primary-rgb), 0.05));
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 28px;
+            flex-shrink: 0;
+            box-shadow: var(--shadow-sm);
+        }
+
+        .server-info {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .server-name {
+            font-size: 16px;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 4px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .server-status {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 13px;
+            color: var(--text-secondary);
+        }
+
+        .server-status::before {
+            content: '';
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: var(--success);
+            animation: pulse 2s infinite;
+        }
+
+        .device-item {
+            padding: 18px;
+            background: linear-gradient(135deg, var(--bg-primary), rgba(var(--primary-rgb), 0.02));
+            border-radius: var(--radius-lg);
+            border: 2px solid var(--border-color);
+            transition: all 0.3s ease;
+            cursor: pointer;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .device-item::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 4px;
+            height: 100%;
+            background: linear-gradient(180deg, var(--primary), rgba(var(--primary-rgb), 0.3));
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        .device-item:hover {
+            border-color: var(--primary);
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-md);
+            background: linear-gradient(135deg, var(--bg-primary), rgba(var(--primary-rgb), 0.05));
+        }
+
+        .device-item:hover::before {
+            opacity: 1;
+        }
+
+        .device-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 12px;
+        }
+
+        .device-title {
+            font-size: 16px;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .device-type-badge {
+            padding: 4px 10px;
+            background: rgba(var(--primary-rgb), 0.1);
+            color: var(--primary);
+            border-radius: var(--radius-sm);
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .device-meta {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            gap: 12px;
+        }
+
+        .device-meta-item {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+
+        .device-meta-label {
+            font-size: 11px;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            opacity: 0.7;
+        }
+
+        .device-meta-value {
+            font-size: 13px;
+            color: var(--text-primary);
+            font-weight: 500;
+        }
+
+        /* Empty States */
+        .empty-state {
+            text-align: center;
+            padding: 32px 20px;
+            color: var(--text-secondary);
+            font-size: 14px;
+        }
+
+        .empty-state::before {
+            content: '📭';
+            display: block;
+            font-size: 48px;
+            margin-bottom: 12px;
+            opacity: 0.5;
+        }
+
+        /* Buttons */
+        .btn {
+            width: 100%;
+            padding: 16px 24px;
+            border: none;
+            border-radius: var(--radius);
+            font-size: 15px;
+            font-weight: 700;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .btn::before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 0;
+            height: 0;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.3);
+            transform: translate(-50%, -50%);
+            transition: width 0.6s, height 0.6s;
+        }
+
+        .btn:active::before {
+            width: 300px;
+            height: 300px;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, var(--primary), rgba(var(--primary-rgb), 0.8));
+            color: white;
+            box-shadow: var(--shadow-md);
+        }
+
+        .btn-primary:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-lg);
+        }
+
+        .btn-primary:active {
+            transform: scale(0.98);
+        }
+
+        .btn-secondary {
+            background: var(--bg-primary);
+            color: var(--primary);
+            border: 2px solid var(--primary);
+        }
+
+        .btn-secondary:hover:not(:disabled) {
+            background: rgba(var(--primary-rgb), 0.1);
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-sm);
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none !important;
+        }
+
+        .btn-icon {
+            width: 20px;
+            height: 20px;
+            stroke-width: 2.5;
+        }
+
+        .btn-group {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            margin: 20px 0;
+        }
+
+        /* App Installation */
+        .platform-selector {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .platform-btn {
+            padding: 14px 8px;
+            background: var(--bg-primary);
+            border: 2px solid var(--border-color);
+            border-radius: var(--radius);
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-align: center;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .platform-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-sm);
+        }
+
+        .platform-btn.active {
+            border-color: var(--primary);
+            background: linear-gradient(135deg, rgba(var(--primary-rgb), 0.1), rgba(var(--primary-rgb), 0.05));
+            color: var(--primary);
+        }
+
+        .platform-icon {
+            font-size: 20px;
+        }
+
+        .app-card {
+            background: var(--bg-primary);
+            border-radius: var(--radius);
+            padding: 16px;
+            margin-bottom: 12px;
+            border: 2px solid var(--border-color);
+            transition: all 0.3s ease;
+        }
+
+        .app-card:hover {
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-sm);
+        }
+
+        .app-card.featured {
+            border-color: var(--primary);
+            background: linear-gradient(135deg, rgba(var(--primary-rgb), 0.05), rgba(var(--primary-rgb), 0.02));
+        }
+
+        .app-header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+
+        .app-icon {
+            width: 48px;
+            height: 48px;
+            border-radius: var(--radius);
+            background: linear-gradient(135deg, var(--primary), rgba(var(--primary-rgb), 0.7));
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            font-weight: 700;
+            box-shadow: var(--shadow-sm);
+        }
+
+        .app-info {
+            flex: 1;
+        }
+
+        .app-name {
+            font-size: 16px;
+            font-weight: 700;
+            color: var(--text-primary);
+            margin-bottom: 4px;
+        }
+
+        .featured-badge {
+            display: inline-block;
+            background: linear-gradient(135deg, var(--primary), rgba(var(--primary-rgb), 0.8));
+            color: white;
+            font-size: 11px;
+            font-weight: 700;
+            padding: 4px 10px;
+            border-radius: 20px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .app-steps {
+            margin-top: 16px;
+        }
+
+        .step {
+            margin-bottom: 16px;
+            padding-left: 32px;
+            position: relative;
+        }
+
+        .step-number {
+            position: absolute;
+            left: 0;
+            top: 2px;
+            width: 24px;
+            height: 24px;
+            background: linear-gradient(135deg, var(--primary), rgba(var(--primary-rgb), 0.7));
+            color: white;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            font-weight: 700;
+        }
+
+        .step-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 6px;
+        }
+
+        .step-description {
+            font-size: 13px;
+            color: var(--text-secondary);
+            line-height: 1.6;
+            margin-bottom: 10px;
+        }
+
+        .step-buttons {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .step-btn {
+            padding: 10px 16px;
+            background: linear-gradient(135deg, var(--primary), rgba(var(--primary-rgb), 0.8));
+            color: white;
+            border: none;
+            border-radius: var(--radius-sm);
+            font-size: 13px;
+            font-weight: 600;
+            text-decoration: none;
+            display: inline-block;
+            transition: all 0.3s ease;
+        }
+
+        .step-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-sm);
+        }
+
+        /* Hidden */
+        .hidden {
+            display: none !important;
+        }
+
+        /* Mobile Optimizations */
+        @media (max-width: 480px) {
+            .container {
+                padding: 12px;
+            }
+
+            .stats-grid {
+                grid-template-columns: repeat(3, 1fr);
+                gap: 8px;
+            }
+
+            .stat-value {
+                font-size: 24px;
+            }
+
+            .platform-selector {
+                grid-template-columns: repeat(2, 1fr);
+            }
+
+            .user-header {
+                padding: 16px;
+            }
+
+            .user-avatar {
+                width: 56px;
+                height: 56px;
+                font-size: 24px;
+            }
+
+            .user-name {
+                font-size: 18px;
+            }
+
+            .balance-amount {
+                font-size: 32px;
+            }
+        }
+
+        /* Dark Mode Adjustments */
+        @media (prefers-color-scheme: dark) {
+            .stat-item {
+                background: var(--bg-secondary);
+            }
+
+            .history-type {
+                background: var(--bg-secondary);
+            }
+
+            .history-description {
+                background: var(--bg-secondary);
+            }
+
+            .server-item,
+            .device-item {
+                background: var(--bg-secondary);
+            }
+
+            .app-card {
+                background: var(--bg-secondary);
+            }
+
+            .platform-btn {
+                background: var(--bg-secondary);
+            }
+
+            .theme-toggle .icon-sun {
+                display: none;
+            }
+
+            .theme-toggle .icon-moon {
+                display: block;
+            }
+        }
+
+        :root[data-theme="dark"] .stat-item,
+        :root[data-theme="dark"] .history-type,
+        :root[data-theme="dark"] .history-description,
+        :root[data-theme="dark"] .server-item,
+        :root[data-theme="dark"] .device-item,
+        :root[data-theme="dark"] .app-card,
+        :root[data-theme="dark"] .platform-btn {
+            background: var(--bg-secondary);
+        }
+
+        :root[data-theme="dark"] .theme-toggle .icon-sun {
+            display: none;
+        }
+
+        :root[data-theme="dark"] .theme-toggle .icon-moon {
+            display: block;
+        }
+
+        :root[data-theme="light"] .theme-toggle .icon-moon {
+            display: none;
+        }
+
+        :root[data-theme="light"] .theme-toggle .icon-sun {
+            display: block;
+        }
+
+        :root[data-theme="dark"] .history-meta,
+        :root[data-theme="dark"] .history-description,
+        :root[data-theme="dark"] .platform-btn,
+        :root[data-theme="dark"] .info-label,
+        :root[data-theme="dark"] .info-value,
+        :root[data-theme="dark"] .card-title,
+        :root[data-theme="dark"] .stat-label,
+        :root[data-theme="dark"] .subtitle,
+        :root[data-theme="dark"] .loading-text {
+            color: var(--text-secondary);
+        }
+
+        :root[data-theme="dark"] body,
+        :root[data-theme="dark"] .card,
+        :root[data-theme="dark"] .user-card,
+        :root[data-theme="dark"] .balance-card,
+        :root[data-theme="dark"] .card.expandable,
+        :root[data-theme="dark"] .language-select,
+        :root[data-theme="dark"] .theme-toggle {
+            background: var(--bg-primary);
+        }
+
+        :root[data-theme="dark"] .language-select,
+        :root[data-theme="dark"] .theme-toggle,
+        :root[data-theme="dark"] .stat-item,
+        :root[data-theme="dark"] .server-item,
+        :root[data-theme="dark"] .device-item,
+        :root[data-theme="dark"] .app-card {
+            border-color: rgba(148, 163, 184, 0.25);
+        }
+
+        :root[data-theme="dark"] .btn-primary {
+            box-shadow: 0 10px 30px rgba(37, 99, 235, 0.45);
+        }
+
+        /* Responsive Design */
+        @media (max-width: 360px) {
+            .logo {
+                font-size: 24px;
+            }
+            
+            .balance-amount {
+                font-size: 28px;
+            }
+            
+            .stats-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Top Bar -->
+        <div class="top-bar">
+            <div class="language-switcher">
+                <select id="languageSelect" class="language-select">
+                    <option value="en">🇬🇧 English</option>
+                    <option value="ru">🇷🇺 Русский</option>
+                </select>
+            </div>
+            <button class="theme-toggle" id="themeToggle" aria-label="Toggle theme" aria-pressed="false">
+                <svg class="icon-sun" width="20" height="20" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M12 18a6 6 0 100-12 6 6 0 000 12zM12 2v2M12 20v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M2 12h2M20 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
+                </svg>
+                <svg class="icon-moon" width="20" height="20" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/>
+                </svg>
+            </button>
+        </div>
+
+        <!-- Header -->
+        <div class="header animate-in">
+            <div class="logo-container">
+                <div class="logo-icon">⚡</div>
+            </div>
+            <div class="logo" data-i18n="app.name">VPN</div>
+            <div class="subtitle" data-i18n="app.subtitle">Secure & Fast Connection</div>
+        </div>
+
+        <!-- Loading State -->
+        <div id="loadingState" class="loading">
+            <div class="spinner"></div>
+            <div class="loading-text" id="loadingText" data-i18n="app.loading">Loading your subscription...</div>
+        </div>
+
+        <!-- Error State -->
+        <div id="errorState" class="error hidden">
+            <div class="error-icon">⚠️</div>
+            <div class="error-title" id="errorTitle" data-i18n="error.default.title">Subscription Not Found</div>
+            <div class="error-text" id="errorText" data-i18n="error.default.message">Please contact support to activate your subscription</div>
+            <div class="error-actions">
+                <button
+                    id="purchaseBtn"
+                    class="btn btn-primary hidden"
+                    type="button"
+                    data-i18n="button.buy_subscription"
+                >Buy subscription</button>
+            </div>
+        </div>
+
+        <!-- Main Content -->
+        <div id="mainContent" class="hidden">
+            <!-- User Card -->
+            <div class="card user-card animate-in">
+                <div class="user-header">
+                    <div class="user-avatar" id="userAvatar">U</div>
+                    <div class="user-info">
+                        <div class="user-name" id="userName">Loading...</div>
+                        <span class="status-badge status-active" id="statusBadge">Active</span>
+                    </div>
+                </div>
+
+                <div class="stats-grid">
+                    <div class="stat-item">
+                        <div class="stat-value" id="daysLeft">-</div>
+                        <div class="stat-label" data-i18n="stats.days_left">Days Left</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value" id="serversCount">-</div>
+                        <div class="stat-label" data-i18n="stats.servers">Servers</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value" id="devicesCount">-</div>
+                        <div class="stat-label" data-i18n="stats.devices">Devices</div>
+                    </div>
+                </div>
+
+                <div class="info-list">
+                    <div class="info-item">
+                        <span class="info-label" data-i18n="info.expires">
+                            <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+                            </svg>
+                            <span>Expires</span>
+                        </span>
+                        <span class="info-value" id="expiresAt">-</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label" data-i18n="info.traffic_used">Traffic Used</span>
+                        <span class="info-value" id="trafficUsed">-</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label" data-i18n="info.traffic_limit">Traffic Limit</span>
+                        <span class="info-value" id="trafficLimit">-</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label" data-i18n="info.subscription_type">Type</span>
+                        <span class="info-value" id="subscriptionType">-</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label" data-i18n="info.device_limit">Device Limit</span>
+                        <span class="info-value" id="deviceLimit">-</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label" data-i18n="info.autopay">Auto-Pay</span>
+                        <span class="info-value" id="autopayStatus">-</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Action Buttons -->
+            <div class="btn-group">
+                <button class="btn btn-primary" id="connectBtn">
+                    <svg class="btn-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+                    </svg>
+                    <span id="connectBtnText" data-i18n="button.connect.default">Connect to VPN</span>
+                </button>
+
+                <button class="btn btn-secondary" id="copyBtn">
+                    <svg class="btn-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/>
+                    </svg>
+                    <span data-i18n="button.copy">Copy Subscription Link</span>
+                </button>
+            </div>
+
+            <!-- Balance Card -->
+            <div class="card balance-card" id="balanceCard">
+                <div class="balance-content">
+                    <div class="balance-amount" id="balanceAmount">—</div>
+                    <div class="balance-label" data-i18n="card.balance.title">Balance</div>
+                </div>
+            </div>
+
+            <!-- History Card (Expandable) -->
+            <div class="card expandable" id="historyCard">
+                <div class="card-header">
+                    <div class="card-title">
+                        <svg class="card-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                        </svg>
+                        <span data-i18n="card.history.title">Transaction History</span>
+                    </div>
+                    <svg class="expand-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                    </svg>
+                </div>
+                <div class="card-content">
+                    <ul class="history-list" id="historyList"></ul>
+                    <div class="empty-state hidden" id="historyEmpty" data-i18n="history.empty">No transactions yet</div>
+                </div>
+            </div>
+
+            <!-- Servers Card (Expandable) -->
+            <div class="card expandable" id="serversCard">
+                <div class="card-header">
+                    <div class="card-title">
+                        <svg class="card-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01"/>
+                        </svg>
+                        <span data-i18n="card.servers.title">Connected Servers</span>
+                    </div>
+                    <svg class="expand-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                    </svg>
+                </div>
+                <div class="card-content">
+                    <ul class="server-list" id="serversList"></ul>
+                    <div class="empty-state hidden" id="serversEmpty" data-i18n="servers.empty">No servers connected yet</div>
+                </div>
+            </div>
+
+            <!-- Devices Card (Expandable) -->
+            <div class="card expandable" id="devicesCard">
+                <div class="card-header">
+                    <div class="card-title">
+                        <svg class="card-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z"/>
+                        </svg>
+                        <span data-i18n="card.devices.title">Connected Devices</span>
+                    </div>
+                    <svg class="expand-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                    </svg>
+                </div>
+                <div class="card-content">
+                    <ul class="device-list" id="devicesList"></ul>
+                    <div class="empty-state hidden" id="devicesEmpty" data-i18n="devices.empty">No devices connected yet</div>
+                </div>
+            </div>
+
+            <!-- App Installation Section -->
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-title" data-i18n="apps.title">Installation Guide</div>
+                </div>
+                <div class="card-content" style="opacity: 1; max-height: 2000px; padding-bottom: 16px;">
+                    <div class="platform-selector">
+                        <button class="platform-btn" data-platform="ios">
+                            <span class="platform-icon">🍎</span>
+                            <span data-i18n="platform.ios">iOS</span>
+                        </button>
+                        <button class="platform-btn active" data-platform="android">
+                            <span class="platform-icon">🤖</span>
+                            <span data-i18n="platform.android">Android</span>
+                        </button>
+                        <button class="platform-btn" data-platform="pc">
+                            <span class="platform-icon">💻</span>
+                            <span data-i18n="platform.pc">PC</span>
+                        </button>
+                        <button class="platform-btn" data-platform="tv">
+                            <span class="platform-icon">📺</span>
+                            <span data-i18n="platform.tv">TV</span>
+                        </button>
+                    </div>
+
+                    <div id="appsContainer">
+                        <!-- Apps will be rendered here -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Copy all the original JavaScript code here
+        const tg = window.Telegram?.WebApp || {
+            initData: '',
+            initDataUnsafe: {},
+            expand: () => {},
+            ready: () => {},
+            themeParams: {},
+            showPopup: null,
+        };
+
+        if (typeof tg.expand === 'function') {
+            tg.expand();
+        }
+        if (typeof tg.ready === 'function') {
+            tg.ready();
+        }
+
+        if (tg.themeParams) {
+            Object.keys(tg.themeParams).forEach(key => {
+                document.documentElement.style.setProperty(`--tg-theme-${key.replace(/_/g, '-')}`, tg.themeParams[key]);
+            });
+        }
+
+        // Add expandable card functionality
+        document.querySelectorAll('.card.expandable .card-header').forEach(header => {
+            header.addEventListener('click', () => {
+                const card = header.parentElement;
+                card.classList.toggle('expanded');
+            });
+        });
+
+        const themeToggle = document.getElementById('themeToggle');
+        const THEME_STORAGE_KEY = 'remnawave-miniapp-theme';
+        let currentTheme = 'light';
+        let themeLockedByUser = false;
+
+        function resolveTheme(theme) {
+            if (!theme) {
+                return null;
+            }
+            const normalized = String(theme).toLowerCase();
+            if (normalized === 'dark') {
+                return 'dark';
+            }
+            if (normalized === 'light') {
+                return 'light';
+            }
+            return null;
+        }
+
+        function safeGetStoredTheme() {
+            try {
+                return localStorage.getItem(THEME_STORAGE_KEY);
+            } catch (error) {
+                console.warn('Unable to access theme preference:', error);
+                return null;
+            }
+        }
+
+        function safeSetStoredTheme(theme) {
+            try {
+                localStorage.setItem(THEME_STORAGE_KEY, theme);
+            } catch (error) {
+                console.warn('Unable to persist theme preference:', error);
+            }
+        }
+
+        function updateThemeToggleState() {
+            if (!themeToggle) {
+                return;
+            }
+            themeToggle.setAttribute('aria-pressed', currentTheme === 'dark' ? 'true' : 'false');
+        }
+
+        function applyTheme(theme, options = {}) {
+            const resolved = resolveTheme(theme) || 'light';
+            currentTheme = resolved;
+            if (options.persist) {
+                themeLockedByUser = true;
+                safeSetStoredTheme(resolved);
+            }
+            document.documentElement.setAttribute('data-theme', resolved);
+            document.documentElement.style.setProperty('color-scheme', resolved);
+            updateThemeToggleState();
+        }
+
+        function initializeTheme() {
+            const storedTheme = resolveTheme(safeGetStoredTheme());
+            if (storedTheme) {
+                themeLockedByUser = true;
+                applyTheme(storedTheme);
+                return;
+            }
+
+            const telegramTheme = resolveTheme(tg.colorScheme);
+            if (telegramTheme) {
+                applyTheme(telegramTheme);
+            } else if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+                applyTheme('dark');
+            } else {
+                applyTheme('light');
+            }
+        }
+
+        initializeTheme();
+
+        if (typeof tg.onEvent === 'function') {
+            tg.onEvent('themeChanged', () => {
+                if (!themeLockedByUser) {
+                    applyTheme(tg.colorScheme);
+                }
+            });
+        }
+
+        if (window.matchMedia) {
+            const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+            const handleMediaChange = event => {
+                if (!themeLockedByUser) {
+                    applyTheme(event.matches ? 'dark' : 'light');
+                }
+            };
+            if (typeof mediaQuery.addEventListener === 'function') {
+                mediaQuery.addEventListener('change', handleMediaChange);
+            } else if (typeof mediaQuery.addListener === 'function') {
+                mediaQuery.addListener(handleMediaChange);
+            }
+        }
+
+        themeToggle?.addEventListener('click', () => {
+            const nextTheme = currentTheme === 'dark' ? 'light' : 'dark';
+            applyTheme(nextTheme, { persist: true });
+        });
+
+        // All original constants and functions
+        const LANG_STORAGE_KEY = 'remnawave-miniapp-language';
+        const SUPPORTED_LANGUAGES = ['en', 'ru'];
+
+        const translations = {
+            en: {
+                'app.title': 'VPN Subscription',
+                'app.name': 'VPN',
+                'values.not_available': 'Not available',
+                'app.subtitle': 'Secure & Fast Connection',
+                'app.loading': 'Loading your subscription...',
+                'error.default.title': 'Subscription Not Found',
+                'error.default.message': 'Please contact support to activate your subscription.',
+                'stats.days_left': 'Days left',
+                'stats.servers': 'Servers',
+                'stats.devices': 'Devices',
+                'info.expires': 'Expires',
+                'info.traffic_used': 'Traffic used',
+                'info.traffic_limit': 'Traffic limit',
+                'info.subscription_type': 'Subscription type',
+                'info.promo_group': 'Promo group',
+                'info.device_limit': 'Device limit',
+                'info.autopay': 'Auto-pay',
+                'button.connect.default': 'Connect to VPN',
+                'button.connect.happ': 'Connect',
+                'button.copy': 'Copy subscription link',
+                'button.buy_subscription': 'Buy Subscription',
+                'card.balance.title': 'Balance',
+                'card.history.title': 'Transaction History',
+                'card.servers.title': 'Connected Servers',
+                'card.devices.title': 'Connected Devices',
+                'apps.title': 'Installation guide',
+                'apps.no_data': 'No installation guide available for this platform yet.',
+                'apps.featured': 'Recommended',
+                'apps.step.download': 'Download & install',
+                'apps.step.add': 'Add subscription',
+                'apps.step.connect': 'Connect & use',
+                'history.empty': 'No transactions yet',
+                'history.status.completed': 'Completed',
+                'history.status.pending': 'Processing',
+                'history.type.deposit': 'Top-up',
+                'history.type.withdrawal': 'Withdrawal',
+                'history.type.subscription_payment': 'Subscription payment',
+                'history.type.refund': 'Refund',
+                'history.type.referral_reward': 'Referral reward',
+                'servers.empty': 'No servers connected yet',
+                'devices.empty': 'No devices connected yet',
+                'language.ariaLabel': 'Select interface language',
+                'notifications.copy.success': 'Subscription link copied to clipboard.',
+                'notifications.copy.failure': 'Unable to copy the subscription link automatically. Please copy it manually.',
+                'notifications.copy.title.success': 'Copied',
+                'notifications.copy.title.failure': 'Copy failed',
+                'status.active': 'Active',
+                'status.trial': 'Trial',
+                'status.expired': 'Expired',
+                'status.disabled': 'Disabled',
+                'status.unknown': 'Unknown',
+                'subscription.type.trial': 'Trial',
+                'subscription.type.paid': 'Paid',
+                'autopay.enabled': 'Enabled',
+                'autopay.disabled': 'Disabled',
+                'platform.ios': 'iOS',
+                'platform.android': 'Android',
+                'platform.pc': 'PC',
+                'platform.tv': 'TV',
+                'units.gb': 'GB',
+                'values.unlimited': 'Unlimited',
+                'values.not_available': 'Not available'
+            },
+            ru: {
+                'app.title': 'Подписка VPN',
+                'app.name': 'VPN',
+                'values.not_available': 'Недоступно',
+                'app.subtitle': 'Безопасное и быстрое подключение',
+                'app.loading': 'Загружаем вашу подписку...',
+                'error.default.title': 'Подписка не найдена',
+                'error.default.message': 'Свяжитесь с поддержкой, чтобы активировать подписку.',
+                'stats.days_left': 'Осталось дней',
+                'stats.servers': 'Серверы',
+                'stats.devices': 'Устройства',
+                'info.expires': 'Действует до',
+                'info.traffic_used': 'Использовано трафика',
+                'info.traffic_limit': 'Лимит трафика',
+                'info.subscription_type': 'Тип подписки',
+                'info.promo_group': 'Промогруппа',
+                'info.device_limit': 'Лимит устройств',
+                'info.autopay': 'Автоплатеж',
+                'button.connect.default': 'Подключиться к VPN',
+                'button.connect.happ': 'Подключиться',
+                'button.copy': 'Скопировать ссылку подписки',
+                'button.buy_subscription': 'Купить подписку',
+                'card.balance.title': 'Баланс',
+                'card.history.title': 'История операций',
+                'card.servers.title': 'Подключённые серверы',
+                'card.devices.title': 'Подключенные устройства',
+                'apps.title': 'Инструкция по установке',
+                'apps.no_data': 'Для этой платформы инструкция пока недоступна.',
+                'apps.featured': 'Рекомендуем',
+                'apps.step.download': 'Скачать и установить',
+                'apps.step.add': 'Добавить подписку',
+                'apps.step.connect': 'Подключиться и пользоваться',
+                'history.empty': 'Операции ещё не проводились',
+                'history.status.completed': 'Выполнено',
+                'history.status.pending': 'Обрабатывается',
+                'history.type.deposit': 'Пополнение',
+                'history.type.withdrawal': 'Списание',
+                'history.type.subscription_payment': 'Оплата подписки',
+                'history.type.refund': 'Возврат',
+                'history.type.referral_reward': 'Реферальное вознаграждение',
+                'servers.empty': 'Подключённых серверов пока нет',
+                'devices.empty': 'Подключённых устройств пока нет',
+                'language.ariaLabel': 'Выберите язык интерфейса',
+                'notifications.copy.success': 'Ссылка подписки скопирована.',
+                'notifications.copy.failure': 'Не удалось автоматически скопировать ссылку. Пожалуйста, сделайте это вручную.',
+                'notifications.copy.title.success': 'Готово',
+                'notifications.copy.title.failure': 'Ошибка копирования',
+                'status.active': 'Активна',
+                'status.trial': 'Пробная',
+                'status.expired': 'Истекла',
+                'status.disabled': 'Отключена',
+                'status.unknown': 'Неизвестно',
+                'subscription.type.trial': 'Триал',
+                'subscription.type.paid': 'Платная',
+                'autopay.enabled': 'Включен',
+                'autopay.disabled': 'Выключен',
+                'platform.ios': 'iOS',
+                'platform.android': 'Android',
+                'platform.pc': 'ПК',
+                'platform.tv': 'ТВ',
+                'units.gb': 'ГБ',
+                'values.unlimited': 'Безлимит',
+                'values.not_available': 'Недоступно'
+            }
+        };
+
+        const pcTranslations = {
+            en: {
+                'pc.happ.title': 'Open Subscription',
+                'pc.happ.message': 'The Happ application doesn\'t appear to be installed on your PC. How would you like to proceed?',
+                'pc.happ.copy': 'Copy subscription link',
+                'pc.happ.redirect': 'Open in browser',
+            },
+            ru: {
+                'pc.happ.title': 'Открыть подписку',
+                'pc.happ.message': 'Приложение Happ не установлено на вашем ПК. Как вы хотите продолжить?',
+                'pc.happ.copy': 'Скопировать ссылку подписки',
+                'pc.happ.redirect': 'Открыть в браузере',
+            }
+        };
+
+        Object.keys(pcTranslations).forEach(lang => {
+            Object.assign(translations[lang], pcTranslations[lang]);
+        });
+
+        // Include all the original JavaScript functions
+        function applyBrandingOverrides(branding) {
+            if (!branding || typeof branding !== 'object') {
+                return;
+            }
+
+            const {
+                service_name: rawServiceName = {},
+                service_description: rawServiceDescription = {}
+            } = branding;
+
+            function normalizeMap(map) {
+                const normalized = {};
+                Object.entries(map || {}).forEach(([lang, value]) => {
+                    if (typeof value !== 'string') {
+                        return;
+                    }
+                    const trimmed = value.trim();
+                    if (!trimmed) {
+                        return;
+                    }
+                    normalized[lang.toLowerCase()] = trimmed;
+                });
+                return normalized;
+            }
+
+            function applyKey(key, map) {
+                const normalized = normalizeMap(map);
+                if (!Object.keys(normalized).length) {
+                    return;
+                }
+
+                const defaultValue = normalized.default
+                    || normalized.en
+                    || normalized.ru
+                    || null;
+
+                const languages = new Set(
+                    Object.keys(translations).map(lang => lang.toLowerCase())
+                );
+
+                Object.keys(normalized).forEach(lang => {
+                    if (lang !== 'default') {
+                        languages.add(lang);
+                    }
+                });
+
+                languages.forEach(lang => {
+                    const value = Object.prototype.hasOwnProperty.call(normalized, lang)
+                        ? normalized[lang]
+                        : defaultValue;
+                    if (!value) {
+                        return;
+                    }
+                    const targetLang = lang.toLowerCase();
+                    if (!translations[targetLang]) {
+                        translations[targetLang] = {};
+                    }
+                    translations[targetLang][key] = value;
+                });
+            }
+
+            applyKey('app.name', rawServiceName);
+            applyKey('app.title', rawServiceName);
+            applyKey('app.subtitle', rawServiceDescription);
+        }
+
+        let userData = null;
+        let appsConfig = {};
+        let currentPlatform = 'android';
+        let configPurchaseUrl = null;
+        let subscriptionPurchaseUrl = null;
+        let preferredLanguage = 'en';
+        let languageLockedByUser = false;
+        let currentErrorState = null;
+
+        function resolveLanguage(lang) {
+            if (!lang) {
+                return null;
+            }
+            const normalized = String(lang).toLowerCase();
+            if (SUPPORTED_LANGUAGES.includes(normalized)) {
+                return normalized;
+            }
+            const short = normalized.split('-')[0];
+            if (SUPPORTED_LANGUAGES.includes(short)) {
+                return short;
+            }
+            return null;
+        }
+
+        function safeGetStoredLanguage() {
+            try {
+                return localStorage.getItem(LANG_STORAGE_KEY);
+            } catch (error) {
+                console.warn('Unable to access localStorage:', error);
+                return null;
+            }
+        }
+
+        function safeSetStoredLanguage(lang) {
+            try {
+                localStorage.setItem(LANG_STORAGE_KEY, lang);
+            } catch (error) {
+                console.warn('Unable to persist language preference:', error);
+            }
+        }
+
+        function t(key) {
+            const language = preferredLanguage || 'en';
+            const chain = [];
+            if (translations[language]) {
+                chain.push(translations[language]);
+            }
+            const base = language.split('-')[0];
+            if (translations[base] && !chain.includes(translations[base])) {
+                chain.push(translations[base]);
+            }
+            if (translations.en && !chain.includes(translations.en)) {
+                chain.push(translations.en);
+            }
+            for (const dict of chain) {
+                if (dict && Object.prototype.hasOwnProperty.call(dict, key)) {
+                    return dict[key];
+                }
+            }
+            return key;
+        }
+
+        function escapeHtml(value) {
+            const div = document.createElement('div');
+            div.textContent = value ?? '';
+            return div.innerHTML;
+        }
+
+        function normalizeUrl(value) {
+            if (typeof value !== 'string') {
+                return null;
+            }
+            const trimmed = value.trim();
+            return trimmed.length ? trimmed : null;
+        }
+
+        function getEffectivePurchaseUrl() {
+            const candidates = [
+                currentErrorState?.purchaseUrl,
+                subscriptionPurchaseUrl,
+                configPurchaseUrl,
+            ];
+
+            for (const candidate of candidates) {
+                const normalized = normalizeUrl(candidate);
+                if (normalized) {
+                    return normalized;
+                }
+            }
+
+            return null;
+        }
+
+        function updateErrorTexts() {
+            const titleElement = document.getElementById('errorTitle');
+            const textElement = document.getElementById('errorText');
+            if (!titleElement || !textElement) {
+                return;
+            }
+            const title = currentErrorState?.title || t('error.default.title');
+            const message = currentErrorState?.message || t('error.default.message');
+            titleElement.textContent = title;
+            textElement.textContent = message;
+
+            const purchaseButton = document.getElementById('purchaseBtn');
+            if (purchaseButton) {
+                const link = getEffectivePurchaseUrl();
+                purchaseButton.classList.toggle('hidden', !link);
+                purchaseButton.disabled = !link;
+            }
+        }
+
+        function applyTranslations() {
+            document.title = t('app.title');
+            document.documentElement.setAttribute('lang', preferredLanguage);
+            document.querySelectorAll('[data-i18n]').forEach(element => {
+                const key = element.getAttribute('data-i18n');
+                if (!key) {
+                    return;
+                }
+                element.textContent = t(key);
+            });
+            const languageSelect = document.getElementById('languageSelect');
+            if (languageSelect) {
+                languageSelect.value = preferredLanguage;
+                languageSelect.setAttribute('aria-label', t('language.ariaLabel'));
+            }
+            updateErrorTexts();
+        }
+
+        function updateConnectButtonLabel() {
+            const label = document.getElementById('connectBtnText');
+            if (!label) {
+                return;
+            }
+            const useHappLabel = Boolean(getHappCryptoLink() || userData?.happ_cryptolink_redirect_link);
+            const key = useHappLabel ? 'button.connect.happ' : 'button.connect.default';
+            label.textContent = t(key);
+        }
+
+        function refreshAfterLanguageChange() {
+            applyTranslations();
+            if (userData) {
+                renderUserData();
+            } else {
+                updateConnectButtonLabel();
+            }
+            renderApps();
+            updateActionButtons();
+        }
+
+        function setLanguage(language, options = {}) {
+            const persist = Boolean(options.persist);
+            const resolved = resolveLanguage(language) || preferredLanguage;
+            if (!persist && languageLockedByUser && resolved !== preferredLanguage) {
+                return;
+            }
+            preferredLanguage = resolved;
+            if (persist) {
+                languageLockedByUser = true;
+                safeSetStoredLanguage(preferredLanguage);
+            }
+            refreshAfterLanguageChange();
+        }
+
+        const storedLanguage = resolveLanguage(safeGetStoredLanguage());
+        if (storedLanguage) {
+            preferredLanguage = storedLanguage;
+            languageLockedByUser = true;
+        } else {
+            const telegramLanguage = resolveLanguage(tg.initDataUnsafe?.user?.language_code);
+            if (telegramLanguage) {
+                preferredLanguage = telegramLanguage;
+            }
+        }
+
+        applyTranslations();
+        updateConnectButtonLabel();
+
+        document.getElementById('languageSelect')?.addEventListener('change', event => {
+            setLanguage(event.target.value, { persist: true });
+        });
+
+        function createError(title, message, status) {
+            const error = new Error(message || title);
+            if (title) {
+                error.title = title;
+            }
+            if (status) {
+                error.status = status;
+            }
+            return error;
+        }
+
+        async function init() {
+            try {
+                const telegramUser = tg.initDataUnsafe?.user;
+                if (telegramUser?.language_code && !languageLockedByUser) {
+                    const resolved = resolveLanguage(telegramUser.language_code);
+                    if (resolved) {
+                        preferredLanguage = resolved;
+                        applyTranslations();
+                        updateConnectButtonLabel();
+                    }
+                }
+
+                await loadAppsConfig();
+
+                const initData = tg.initData || '';
+                if (!initData) {
+                    throw createError('Authorization Error', 'Missing Telegram ID');
+                }
+
+                const response = await fetch('/miniapp/subscription', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ initData })
+                });
+
+                if (!response.ok) {
+                    let detail = response.status === 401
+                        ? 'Authorization failed. Please open the mini app from Telegram.'
+                        : 'Subscription not found';
+                    let title = response.status === 401 ? 'Authorization Error' : 'Subscription Not Found';
+                    let purchaseUrl = null;
+
+                    try {
+                        const errorPayload = await response.json();
+                        if (errorPayload?.detail) {
+                            if (typeof errorPayload.detail === 'string') {
+                                detail = errorPayload.detail;
+                            } else if (typeof errorPayload.detail === 'object') {
+                                if (typeof errorPayload.detail.message === 'string') {
+                                    detail = errorPayload.detail.message;
+                                }
+                                purchaseUrl = errorPayload.detail.purchase_url
+                                    || errorPayload.detail.purchaseUrl
+                                    || purchaseUrl;
+                            }
+                        } else if (typeof errorPayload?.message === 'string') {
+                            detail = errorPayload.message;
+                        }
+
+                        if (typeof errorPayload?.title === 'string') {
+                            title = errorPayload.title;
+                        }
+
+                        purchaseUrl = purchaseUrl
+                            || errorPayload?.purchase_url
+                            || errorPayload?.purchaseUrl
+                            || null;
+                    } catch (parseError) {
+                        // ignore
+                    }
+
+                    const errorObject = createError(title, detail, response.status);
+                    const normalizedPurchaseUrl = normalizeUrl(purchaseUrl);
+                    if (normalizedPurchaseUrl) {
+                        errorObject.purchaseUrl = normalizedPurchaseUrl;
+                    }
+                    throw errorObject;
+                }
+
+                userData = await response.json();
+                userData.subscriptionUrl = userData.subscription_url || null;
+                userData.subscriptionCryptoLink = userData.subscription_crypto_link || null;
+                subscriptionPurchaseUrl = normalizeUrl(
+                    userData.subscription_purchase_url
+                    || userData.subscriptionPurchaseUrl
+                );
+                if (subscriptionPurchaseUrl) {
+                    userData.subscriptionPurchaseUrl = subscriptionPurchaseUrl;
+                }
+                if (userData.branding) {
+                    applyBrandingOverrides(userData.branding);
+                }
+
+                const responseLanguage = resolveLanguage(userData?.user?.language);
+                if (responseLanguage && !languageLockedByUser) {
+                    preferredLanguage = responseLanguage;
+                }
+
+                detectPlatform();
+                setActivePlatformButton();
+                refreshAfterLanguageChange();
+
+                document.getElementById('loadingState').classList.add('hidden');
+                document.getElementById('mainContent').classList.remove('hidden');
+                
+                // Add animation to cards
+                document.querySelectorAll('.card').forEach((card, index) => {
+                    setTimeout(() => {
+                        card.classList.add('animate-in');
+                    }, index * 100);
+                });
+            } catch (error) {
+                console.error('Initialization error:', error);
+                showError(error);
+            }
+        }
+
+        async function loadAppsConfig() {
+            try {
+                const response = await fetch('/app-config.json', { cache: 'no-cache' });
+                if (!response.ok) {
+                    throw new Error('Failed to load app config');
+                }
+
+                const data = await response.json();
+                appsConfig = data?.platforms || {};
+
+                const configData = data?.config || {};
+                const configUrl = normalizeUrl(
+                    configData.subscriptionPurchaseUrl
+                    || configData.subscription_purchase_url
+                    || configData.purchaseUrl
+                    || configData.purchase_url
+                    || configData.miniappPurchaseUrl
+                    || configData.miniapp_purchase_url
+                    || data?.subscriptionPurchaseUrl
+                    || data?.subscription_purchase_url
+                );
+                if (configUrl) {
+                    configPurchaseUrl = configUrl;
+                }
+            } catch (error) {
+                console.warn('Unable to load apps configuration:', error);
+                appsConfig = {};
+            }
+        }
+
+        function renderUserData() {
+            if (!userData?.user) {
+                return;
+            }
+
+            const user = userData.user;
+            const rawName = user.display_name || user.username || '';
+            const fallbackName = rawName
+                || [user.first_name, user.last_name].filter(Boolean).join(' ')
+                || `User ${user.telegram_id || ''}`.trim();
+            const avatarChar = (fallbackName.replace(/^@/, '')[0] || 'U').toUpperCase();
+
+            document.getElementById('userAvatar').textContent = avatarChar;
+            document.getElementById('userName').textContent = fallbackName;
+
+            const knownStatuses = ['active', 'trial', 'expired', 'disabled'];
+            const statusValueRaw = (user.subscription_actual_status || user.subscription_status || 'active').toLowerCase();
+            const statusClass = knownStatuses.includes(statusValueRaw) ? statusValueRaw : 'unknown';
+            const statusBadge = document.getElementById('statusBadge');
+            const statusKey = `status.${statusClass}`;
+            const statusLabel = t(statusKey);
+            statusBadge.textContent = statusLabel === statusKey
+                ? (user.status_label || statusClass.charAt(0).toUpperCase() + statusClass.slice(1))
+                : statusLabel;
+            statusBadge.className = `status-badge status-${statusClass}`;
+
+            const expiresAt = user.expires_at ? new Date(user.expires_at) : null;
+            let daysLeft = '—';
+            if (expiresAt && !Number.isNaN(expiresAt.getTime())) {
+                const diffDays = Math.ceil((expiresAt - new Date()) / (1000 * 60 * 60 * 24));
+                daysLeft = diffDays > 0 ? diffDays : '0';
+            }
+            document.getElementById('daysLeft').textContent = daysLeft;
+            document.getElementById('expiresAt').textContent = formatDate(user.expires_at);
+
+            const serversCount = Array.isArray(userData.connected_squads)
+                ? userData.connected_squads.length
+                : Array.isArray(userData.connected_servers)
+                    ? userData.connected_servers.length
+                    : Array.isArray(userData.links)
+                        ? userData.links.length
+                        : 0;
+            document.getElementById('serversCount').textContent = serversCount;
+
+            const devicesCountRaw = Number(userData?.connected_devices_count);
+            const devicesCount = Number.isFinite(devicesCountRaw)
+                ? devicesCountRaw
+                : Array.isArray(userData?.connected_devices)
+                    ? userData.connected_devices.length
+                    : 0;
+            const devicesCountElement = document.getElementById('devicesCount');
+            if (devicesCountElement) {
+                devicesCountElement.textContent = devicesCount;
+            }
+
+            document.getElementById('trafficUsed').textContent =
+                user.traffic_used_label || formatTraffic(user.traffic_used_gb);
+            document.getElementById('trafficLimit').textContent =
+                user.traffic_limit_label || formatTrafficLimit(user.traffic_limit_gb);
+
+            const deviceLimitElement = document.getElementById('deviceLimit');
+            if (deviceLimitElement) {
+                const limitValue = typeof user.device_limit === 'number'
+                    ? user.device_limit
+                    : Number.parseInt(user.device_limit ?? '', 10);
+                deviceLimitElement.textContent = Number.isFinite(limitValue)
+                    ? String(limitValue)
+                    : t('values.not_available');
+            }
+
+            const subscriptionTypeElement = document.getElementById('subscriptionType');
+            if (subscriptionTypeElement) {
+                const fallbackSubscriptionType = (user?.subscription_status || '').toLowerCase() === 'trial'
+                    ? 'trial'
+                    : 'paid';
+                const subscriptionTypeRaw = String(
+                    userData?.subscription_type
+                    || fallbackSubscriptionType
+                ).toLowerCase();
+                const subscriptionTypeKey = `subscription.type.${subscriptionTypeRaw}`;
+                const subscriptionTypeLabel = t(subscriptionTypeKey);
+                subscriptionTypeElement.textContent = subscriptionTypeLabel === subscriptionTypeKey
+                    ? subscriptionTypeRaw
+                    : subscriptionTypeLabel;
+            }
+
+            const autopayElement = document.getElementById('autopayStatus');
+            if (autopayElement) {
+                const autopayKey = userData?.autopay_enabled ? 'autopay.enabled' : 'autopay.disabled';
+                const autopayLabel = t(autopayKey);
+                autopayElement.textContent = autopayLabel === autopayKey
+                    ? (userData?.autopay_enabled ? 'On' : 'Off')
+                    : autopayLabel;
+            }
+
+            renderBalanceSection();
+            renderTransactionHistory();
+            renderServersList();
+            renderDevicesList();
+            updateConnectButtonLabel();
+            updateActionButtons();
+        }
+
+        function detectPlatform() {
+            const userAgent = navigator.userAgent.toLowerCase();
+            if (userAgent.includes('iphone') || userAgent.includes('ipad')) {
+                currentPlatform = 'ios';
+            } else if (userAgent.includes('android')) {
+                currentPlatform = 'android';
+            } else {
+                currentPlatform = 'pc';
+            }
+        }
+
+        function setActivePlatformButton() {
+            document.querySelectorAll('.platform-btn').forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.platform === currentPlatform);
+            });
+        }
+
+        function getPlatformKey(platform) {
+            const mapping = {
+                ios: 'ios',
+                android: 'android',
+                pc: 'windows',
+                tv: 'androidTV',
+                mac: 'macos'
+            };
+            return mapping[platform] || platform;
+        }
+
+        function getAppsForCurrentPlatform() {
+            const platformKey = getPlatformKey(currentPlatform);
+            return appsConfig?.[platformKey] || [];
+        }
+
+        function renderApps() {
+            const container = document.getElementById('appsContainer');
+            if (!container) {
+                return;
+            }
+
+            const apps = getAppsForCurrentPlatform();
+
+            if (!apps.length) {
+                container.innerHTML = `<div class="step-description">${escapeHtml(t('apps.no_data'))}</div>`;
+                return;
+            }
+
+            container.innerHTML = apps.map(app => {
+                const iconChar = (app.name?.[0] || 'A').toUpperCase();
+                const appName = escapeHtml(app.name || 'App');
+                const featuredBadge = app.isFeatured
+                    ? `<span class="featured-badge">${escapeHtml(t('apps.featured'))}</span>`
+                    : '';
+                return `
+                    <div class="app-card ${app.isFeatured ? 'featured' : ''}">
+                        <div class="app-header">
+                            <div class="app-icon">${escapeHtml(iconChar)}</div>
+                            <div class="app-info">
+                                <div class="app-name">${appName}</div>
+                                ${featuredBadge}
+                            </div>
+                        </div>
+                        <div class="app-steps">
+                            ${renderAppSteps(app)}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function renderAppSteps(app) {
+            let html = '';
+            let stepNum = 1;
+
+            if (app.installationStep) {
+                const descriptionHtml = app.installationStep.description
+                    ? `<div class="step-description">${getLocalizedText(app.installationStep.description)}</div>`
+                    : '';
+                const buttonsHtml = Array.isArray(app.installationStep.buttons) && app.installationStep.buttons.length
+                    ? `
+                            <div class="step-buttons">
+                                ${app.installationStep.buttons.map(btn => {
+                                    const buttonText = escapeHtml(getLocalizedText(btn.buttonText));
+                                    return `<a href="${btn.buttonLink}" class="step-btn" target="_blank" rel="noopener">${buttonText}</a>`;
+                                }).join('')}
+                            </div>
+                        `
+                    : '';
+                html += `
+                    <div class="step">
+                        <span class="step-number">${stepNum++}</span>
+                        <div>
+                            <div class="step-title">${escapeHtml(t('apps.step.download'))}</div>
+                            ${descriptionHtml}
+                            ${buttonsHtml}
+                        </div>
+                    </div>
+                `;
+            }
+
+            if (app.addSubscriptionStep) {
+                html += `
+                    <div class="step">
+                        <span class="step-number">${stepNum++}</span>
+                        <div>
+                            <div class="step-title">${escapeHtml(t('apps.step.add'))}</div>
+                            <div class="step-description">${getLocalizedText(app.addSubscriptionStep.description)}</div>
+                        </div>
+                    </div>
+                `;
+            }
+
+            if (app.connectAndUseStep) {
+                html += `
+                    <div class="step">
+                        <span class="step-number">${stepNum++}</span>
+                        <div>
+                            <div class="step-title">${escapeHtml(t('apps.step.connect'))}</div>
+                            <div class="step-description">${getLocalizedText(app.connectAndUseStep.description)}</div>
+                        </div>
+                    </div>
+                `;
+            }
+
+            return html;
+        }
+
+        function getLocalizedText(textObj) {
+            if (!textObj) {
+                return '';
+            }
+            if (typeof textObj === 'string') {
+                return textObj;
+            }
+
+            const telegramLang = tg.initDataUnsafe?.user?.language_code;
+            const preferenceOrder = [
+                preferredLanguage,
+                preferredLanguage?.split('-')[0],
+                userData?.user?.language,
+                telegramLang,
+                telegramLang?.split('-')[0],
+                'en',
+                'ru'
+            ].filter(Boolean).map(lang => lang.toLowerCase());
+
+            const seen = new Set();
+            for (const lang of preferenceOrder) {
+                if (seen.has(lang)) {
+                    continue;
+                }
+                seen.add(lang);
+                if (textObj[lang]) {
+                    return textObj[lang];
+                }
+            }
+
+            const fallback = Object.values(textObj).find(value => typeof value === 'string' && value.trim().length);
+            return fallback || '';
+        }
+
+        function formatTraffic(value) {
+            const numeric = typeof value === 'number' ? value : Number.parseFloat(value ?? '0');
+            if (!Number.isFinite(numeric)) {
+                return `0 ${t('units.gb')}`;
+            }
+            if (numeric >= 100) {
+                return `${numeric.toFixed(0)} ${t('units.gb')}`;
+            }
+            if (numeric >= 10) {
+                return `${numeric.toFixed(1)} ${t('units.gb')}`;
+            }
+            return `${numeric.toFixed(2)} ${t('units.gb')}`;
+        }
+
+        function formatTrafficLimit(limit) {
+            const numeric = typeof limit === 'number' ? limit : Number.parseFloat(limit ?? '0');
+            if (!Number.isFinite(numeric) || numeric <= 0) {
+                return t('values.unlimited');
+            }
+            return `${numeric.toFixed(0)} ${t('units.gb')}`;
+        }
+
+        function formatCurrency(value, currency = 'RUB') {
+            const numeric = typeof value === 'number' ? value : Number.parseFloat(value ?? '0');
+            if (!Number.isFinite(numeric)) {
+                return `0 ${currency}`;
+            }
+            try {
+                return new Intl.NumberFormat(preferredLanguage, {
+                    style: 'currency',
+                    currency,
+                    maximumFractionDigits: 2,
+                }).format(numeric);
+            } catch (error) {
+                return `${numeric.toFixed(2)} ${currency}`;
+            }
+        }
+
+        function formatDate(value) {
+            if (!value) {
+                return '—';
+            }
+            const date = new Date(value);
+            if (Number.isNaN(date.getTime())) {
+                return '—';
+            }
+            try {
+                return new Intl.DateTimeFormat(preferredLanguage, {
+                    year: 'numeric',
+                    month: 'short',
+                    day: 'numeric',
+                }).format(date);
+            } catch (error) {
+                return date.toLocaleDateString();
+            }
+        }
+
+        function formatDateTime(value) {
+            if (!value) {
+                return '';
+            }
+            const date = new Date(value);
+            if (Number.isNaN(date.getTime())) {
+                return '';
+            }
+            try {
+                return new Intl.DateTimeFormat(preferredLanguage, {
+                    year: 'numeric',
+                    month: 'short',
+                    day: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                }).format(date);
+            } catch (error) {
+                return date.toLocaleString();
+            }
+        }
+
+        function renderBalanceSection() {
+            const amountElement = document.getElementById('balanceAmount');
+            if (!amountElement) {
+                return;
+            }
+            const balanceRubles = typeof userData?.balance_rubles === 'number'
+                ? userData.balance_rubles
+                : Number.parseFloat(userData?.balance_rubles ?? '0');
+            const currency = (userData?.balance_currency || 'RUB').toUpperCase();
+            amountElement.textContent = formatCurrency(balanceRubles, currency);
+        }
+
+        function renderTransactionHistory() {
+            const list = document.getElementById('historyList');
+            const emptyState = document.getElementById('historyEmpty');
+            if (!list || !emptyState) {
+                return;
+            }
+
+            const transactions = Array.isArray(userData?.transactions) ? userData.transactions : [];
+            if (!transactions.length) {
+                list.innerHTML = '';
+                emptyState.textContent = t('history.empty');
+                emptyState.classList.remove('hidden');
+                return;
+            }
+
+            emptyState.classList.add('hidden');
+            const currency = (userData?.balance_currency || 'RUB').toUpperCase();
+            const negativeTypes = new Set(['withdrawal', 'subscription_payment']);
+
+            const itemsHtml = transactions.map(tx => {
+                const type = (tx.type || '').toLowerCase();
+                const typeKey = `history.type.${type}`;
+                const typeLabelRaw = t(typeKey);
+                const typeLabel = typeLabelRaw === typeKey ? (tx.type || type || '').replace(/_/g, ' ') : typeLabelRaw;
+                const amountRaw = typeof tx.amount_kopeks === 'number'
+                    ? tx.amount_kopeks
+                    : Number.parseInt(tx.amount_kopeks ?? '0', 10);
+                const amountValue = Number.isFinite(amountRaw) ? amountRaw / 100 : 0;
+                const isNegative = amountValue < 0 || negativeTypes.has(type);
+                const amountFormatted = `${isNegative ? '−' : '+'}${formatCurrency(Math.abs(amountValue), currency)}`;
+                const statusKey = tx.is_completed ? 'history.status.completed' : 'history.status.pending';
+                const statusLabel = t(statusKey);
+                const metaParts = [];
+                const createdAt = formatDateTime(tx.created_at);
+                if (createdAt) {
+                    metaParts.push(escapeHtml(createdAt));
+                }
+                if (statusLabel) {
+                    metaParts.push(escapeHtml(statusLabel));
+                }
+                const metaHtml = metaParts.length ? `<div class="history-meta">${metaParts.join(' • ')}</div>` : '';
+                const descriptionHtml = tx.description
+                    ? `<div class="history-description">${escapeHtml(tx.description)}</div>`
+                    : '';
+                const amountClass = isNegative ? 'history-amount negative' : 'history-amount positive';
+                const iconHtml = isNegative
+                    ? '<svg class="history-amount-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 11l5-5m0 0l5 5m-5-5v12"/></svg>'
+                    : '<svg class="history-amount-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 13l5 5m0 0l5-5m-5 5V6"/></svg>';
+
+                return `
+                    <li class="history-item">
+                        <div class="history-item-header">
+                            <span class="${amountClass}">${iconHtml}${amountFormatted}</span>
+                            <span class="history-type">${escapeHtml(typeLabel)}</span>
+                        </div>
+                        ${metaHtml}
+                        ${descriptionHtml}
+                    </li>
+                `;
+            }).join('');
+
+            list.innerHTML = itemsHtml;
+        }
+
+        function renderServersList() {
+            const list = document.getElementById('serversList');
+            const emptyState = document.getElementById('serversEmpty');
+            if (!list || !emptyState) {
+                return;
+            }
+
+            let servers = [];
+            if (Array.isArray(userData?.connected_servers) && userData.connected_servers.length) {
+                servers = userData.connected_servers.map(server => ({
+                    uuid: server?.uuid || '',
+                    name: server?.name || server?.uuid || '',
+                }));
+            } else if (Array.isArray(userData?.connected_squads)) {
+                servers = userData.connected_squads.map(uuid => ({ uuid, name: uuid }));
+            }
+
+            if (!servers.length) {
+                list.innerHTML = '';
+                emptyState.textContent = t('servers.empty');
+                emptyState.classList.remove('hidden');
+                return;
+            }
+
+            emptyState.classList.add('hidden');
+            list.innerHTML = servers
+                .map(server => `<li class="server-item">${escapeHtml(server.name || server.uuid || '')}</li>`)
+                .join('');
+        }
+
+        function renderDevicesList() {
+            const list = document.getElementById('devicesList');
+            const emptyState = document.getElementById('devicesEmpty');
+            if (!list || !emptyState) {
+                return;
+            }
+
+            const devices = Array.isArray(userData?.connected_devices)
+                ? userData.connected_devices
+                : [];
+
+            if (!devices.length) {
+                list.innerHTML = '';
+                emptyState.textContent = t('devices.empty');
+                emptyState.classList.remove('hidden');
+                return;
+            }
+
+            emptyState.classList.add('hidden');
+            list.innerHTML = devices.map(device => {
+                const platform = device?.platform ? String(device.platform) : '';
+                const model = device?.device_model ? String(device.device_model) : '';
+                const titleParts = [platform, model].filter(Boolean);
+                const title = titleParts.length
+                    ? titleParts.join(' — ')
+                    : t('values.not_available');
+
+                const metaParts = [];
+                if (device?.app_version) {
+                    metaParts.push(String(device.app_version));
+                }
+                if (device?.last_seen) {
+                    const formatted = formatDateTime(device.last_seen);
+                    if (formatted) {
+                        metaParts.push(formatted);
+                    }
+                }
+                if (device?.last_ip) {
+                    metaParts.push(String(device.last_ip));
+                }
+
+                const metaHtml = metaParts.length
+                    ? `<div class="device-meta">${metaParts.map(part => `<span>${escapeHtml(part)}</span>`).join(' • ')}</div>`
+                    : '';
+
+                return `
+                    <li class="device-item">
+                        <div class="device-title">${escapeHtml(title)}</div>
+                        ${metaHtml}
+                    </li>
+                `;
+            }).join('');
+        }
+
+        function getCurrentSubscriptionUrl() {
+            return userData?.subscription_url || userData?.subscriptionUrl || '';
+        }
+
+        function getHappCryptoLink() {
+            if (!userData) {
+                return null;
+            }
+
+            return (
+                userData.happ_crypto_link ||
+                userData.subscriptionCryptoLink ||
+                userData.subscription_crypto_link ||
+                null
+            );
+        }
+
+        function getConnectLink() {
+            if (!userData) {
+                return null;
+            }
+
+            const happCryptoLink = getHappCryptoLink();
+            const isPC = currentPlatform === 'pc' || (!['ios', 'android', 'tv'].includes(currentPlatform));
+            
+            // For PC, prefer direct subscription URL if no Happ redirect link
+            if (isPC) {
+                if (userData.happ_cryptolink_redirect_link) {
+                    return userData.happ_cryptolink_redirect_link;
+                }
+                if (happCryptoLink) {
+                    return happCryptoLink;
+                }
+                // Return plain subscription URL for PC
+                return getCurrentSubscriptionUrl();
+            }
+            
+            // Original logic for mobile platforms
+            if (happCryptoLink) {
+                return happCryptoLink;
+            }
+
+            if (userData.happ_cryptolink_redirect_link) {
+                return userData.happ_cryptolink_redirect_link;
+            }
+
+            const subscriptionUrl = getCurrentSubscriptionUrl();
+            if (!subscriptionUrl) {
+                return null;
+            }
+
+            const apps = getAppsForCurrentPlatform();
+            const featuredApp = apps.find(app => app.isFeatured) || apps[0];
+
+            if (featuredApp?.urlScheme) {
+                return `${featuredApp.urlScheme}${subscriptionUrl}`;
+            }
+            if (userData?.happ_link && featuredApp?.id === 'happ') {
+                return userData.happ_link;
+            }
+            return subscriptionUrl;
+        }
+
+        function openExternalLink(link, options = {}) {
+            if (!link) {
+                return;
+            }
+
+            const { openInMiniApp = false } = options;
+
+            // Detect if we're on PC and trying to open a happ:// link
+            const isPC = currentPlatform === 'pc' || (!['ios', 'android', 'tv'].includes(currentPlatform));
+            const isHappLink = link.startsWith('happ://');
+            
+            if (isPC && isHappLink) {
+                // For PC users with happ:// links, provide fallback options
+                handlePCHappLink(link);
+                return;
+            }
+
+            if (openInMiniApp) {
+                window.location.href = link;
+                return;
+            }
+
+            if (typeof tg.openLink === 'function') {
+                try {
+                    tg.openLink(link, { try_instant_view: false });
+                    return;
+                } catch (error) {
+                    console.warn('tg.openLink failed:', error);
+                }
+            }
+
+            const newWindow = window.open(link, '_blank', 'noopener,noreferrer');
+            if (newWindow) {
+                newWindow.opener = null;
+                return;
+            }
+
+            window.location.href = link;
+        }
+
+        function handlePCHappLink(happLink) {
+            // Extract the subscription URL from the happ:// link
+            const subscriptionUrl = happLink.replace('happ://', '');
+            
+            // Try to open the happ:// link first (in case user has the app installed)
+            const testWindow = window.open(happLink, '_blank');
+            
+            // Set a timeout to check if the link opened successfully
+            setTimeout(() => {
+                // If the window is still open and accessible, the app likely isn't installed
+                if (testWindow && !testWindow.closed) {
+                    testWindow.close();
+                    
+                    // Show options to the user
+                    if (typeof tg.showPopup === 'function') {
+                        tg.showPopup({
+                            title: t('pc.happ.title') || 'Open Subscription',
+                            message: t('pc.happ.message') || 'The Happ application doesn\'t appear to be installed. Would you like to:',
+                            buttons: [
+                                {
+                                    id: 'copy',
+                                    type: 'default',
+                                    text: t('pc.happ.copy') || 'Copy subscription link'
+                                },
+                                {
+                                    id: 'redirect',
+                                    type: 'default', 
+                                    text: t('pc.happ.redirect') || 'Open in browser'
+                                },
+                                {
+                                    type: 'cancel'
+                                }
+                            ]
+                        }, (buttonId) => {
+                            if (buttonId === 'copy') {
+                                copySubscriptionUrl(subscriptionUrl);
+                            } else if (buttonId === 'redirect') {
+                                openWithRedirect(subscriptionUrl);
+                            }
+                        });
+                    } else {
+                        // Fallback for environments without showPopup
+                        const choice = confirm(
+                            'The Happ application doesn\'t appear to be installed.\n\n' +
+                            'Click OK to open the subscription in your browser, or Cancel to copy the link.'
+                        );
+                        if (choice) {
+                            openWithRedirect(subscriptionUrl);
+                        } else {
+                            copySubscriptionUrl(subscriptionUrl);
+                        }
+                    }
+                }
+            }, 1500); // Wait 1.5 seconds to see if the app opens
+        }
+
+        // Add function to open with redirect parameter
+        function openWithRedirect(subscriptionUrl) {
+            // Create the redirect URL
+            const currentOrigin = window.location.origin;
+            const redirectUrl = `${currentOrigin}/index.html?redirect_to=${encodeURIComponent(subscriptionUrl)}`;
+            
+            // Open in a new tab/window
+            const newWindow = window.open(redirectUrl, '_blank');
+            if (newWindow) {
+                newWindow.opener = null;
+            } else {
+                window.location.href = redirectUrl;
+            }
+        }
+
+        async function copySubscriptionUrl(url) {
+            if (!url) return;
+            
+            try {
+                if (navigator.clipboard && window.isSecureContext) {
+                    await navigator.clipboard.writeText(url);
+                    showPopup(
+                        t('notifications.copy.success') || 'Subscription link copied to clipboard.',
+                        t('notifications.copy.title.success') || 'Copied'
+                    );
+                } else {
+                    // Fallback for non-secure contexts
+                    const textArea = document.createElement('textarea');
+                    textArea.value = url;
+                    textArea.style.position = 'fixed';
+                    textArea.style.left = '-999999px';
+                    document.body.appendChild(textArea);
+                    textArea.focus();
+                    textArea.select();
+                    
+                    try {
+                        document.execCommand('copy');
+                        showPopup(
+                            t('notifications.copy.success') || 'Subscription link copied to clipboard.',
+                            t('notifications.copy.title.success') || 'Copied'
+                        );
+                    } catch (err) {
+                        throw err;
+                    } finally {
+                        document.body.removeChild(textArea);
+                    }
+                }
+            } catch (error) {
+                console.warn('Clipboard copy failed:', error);
+                showPopup(
+                    t('notifications.copy.failure') || 'Unable to copy. Please copy manually: ' + url,
+                    t('notifications.copy.title.failure') || 'Copy failed'
+                );
+            }
+        }
+
+        function updateActionButtons() {
+            const connectBtn = document.getElementById('connectBtn');
+            const copyBtn = document.getElementById('copyBtn');
+
+            const connectLink = getConnectLink();
+            if (connectBtn) {
+                const hasConnect = Boolean(connectLink);
+                connectBtn.disabled = !hasConnect;
+                connectBtn.classList.toggle('hidden', !hasConnect);
+            }
+
+            const subscriptionUrl = getCurrentSubscriptionUrl();
+            if (copyBtn) {
+                const hasUrl = Boolean(subscriptionUrl);
+                copyBtn.disabled = !hasUrl || !navigator.clipboard;
+            }
+        }
+
+        function showPopup(message, title = 'Info') {
+            if (typeof tg.showPopup === 'function') {
+                tg.showPopup({
+                    title,
+                    message,
+                    buttons: [{ type: 'ok' }]
+                });
+            } else {
+                alert(message);
+            }
+        }
+
+        function showError(error) {
+            document.getElementById('loadingState').classList.add('hidden');
+            document.getElementById('mainContent').classList.add('hidden');
+            currentErrorState = {
+                title: error?.title,
+                message: error?.message,
+                purchaseUrl: normalizeUrl(error?.purchaseUrl) || null,
+            };
+            updateErrorTexts();
+            document.getElementById('errorState').classList.remove('hidden');
+            updateActionButtons();
+        }
+
+        document.querySelectorAll('.platform-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                currentPlatform = btn.dataset.platform;
+                setActivePlatformButton();
+                renderApps();
+                updateActionButtons();
+            });
+        });
+
+        document.getElementById('connectBtn')?.addEventListener('click', () => {
+            const link = getConnectLink();
+            openExternalLink(link);
+        });
+
+        document.getElementById('copyBtn')?.addEventListener('click', async () => {
+            const subscriptionUrl = getCurrentSubscriptionUrl();
+            if (!subscriptionUrl || !navigator.clipboard) {
+                return;
+            }
+
+            try {
+                await navigator.clipboard.writeText(subscriptionUrl);
+                showPopup(t('notifications.copy.success'), t('notifications.copy.title.success'));
+            } catch (error) {
+                console.warn('Clipboard copy failed:', error);
+                showPopup(t('notifications.copy.failure'), t('notifications.copy.title.failure'));
+            }
+        });
+
+        document.getElementById('purchaseBtn')?.addEventListener('click', () => {
+            const link = getEffectivePurchaseUrl();
+            if (!link) {
+                return;
+            }
+            openExternalLink(link, { openInMiniApp: true });
+        });
+
+        init();
+
+    </script>
+</body>
+</html>

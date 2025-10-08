@@ -1,11 +1,23 @@
 import logging
+import random
+from datetime import datetime
 from typing import Iterable, List, Optional, Sequence, Tuple
 
-from sqlalchemy import select, and_, func, update, delete, text
+from sqlalchemy import (
+    select,
+    and_,
+    func,
+    update,
+    delete,
+    text,
+    or_,
+    cast,
+    String,
+)
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.database.models import PromoGroup, ServerSquad, SubscriptionServer, Subscription
+from app.database.models import PromoGroup, ServerSquad, SubscriptionServer, Subscription, User
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +39,7 @@ async def create_server_squad(
     description: str = None,
     max_users: int = None,
     is_available: bool = True,
+    is_trial_eligible: bool = False,
     promo_group_ids: Optional[Iterable[int]] = None,
 ) -> ServerSquad:
 
@@ -59,6 +72,7 @@ async def create_server_squad(
         description=description,
         max_users=max_users,
         is_available=is_available,
+        is_trial_eligible=is_trial_eligible,
         allowed_promo_groups=promo_groups,
     )
 
@@ -188,7 +202,7 @@ async def update_server_squad(
     
     valid_fields = {
         'display_name', 'country_code', 'price_kopeks', 'description',
-        'max_users', 'is_available', 'sort_order'
+        'max_users', 'is_available', 'sort_order', 'is_trial_eligible'
     }
     
     filtered_updates = {k: v for k, v in updates.items() if k in valid_fields}
@@ -232,10 +246,10 @@ async def sync_with_remnawave(
     db: AsyncSession,
     remnawave_squads: List[dict]
 ) -> Tuple[int, int, int]:
-    
+
     created = 0
     updated = 0
-    disabled = 0
+    removed = 0
     
     existing_servers = {}
     result = await db.execute(select(ServerSquad))
@@ -265,19 +279,187 @@ async def sync_with_remnawave(
             )
             created += 1
     
-    for uuid, server in existing_servers.items():
-        if uuid not in remnawave_uuids and server.is_available:
-            server.is_available = False
-            disabled += 1
-    
+    removed_servers = [
+        server for uuid, server in existing_servers.items()
+        if uuid not in remnawave_uuids
+    ]
+
+    if removed_servers:
+        removed_ids = [server.id for server in removed_servers]
+        removed_uuids = {server.squad_uuid for server in removed_servers}
+
+        subscription_ids_result = await db.execute(
+            select(SubscriptionServer.subscription_id)
+            .where(SubscriptionServer.server_squad_id.in_(removed_ids))
+        )
+        subscription_ids = {row[0] for row in subscription_ids_result.fetchall()}
+
+        for server in removed_servers:
+            logger.info(
+                "🗑️ Удаляется сервер %s (UUID: %s)",
+                server.display_name,
+                server.squad_uuid,
+            )
+
+        await db.execute(
+            delete(SubscriptionServer).where(SubscriptionServer.server_squad_id.in_(removed_ids))
+        )
+
+        subscriptions_to_update: dict[int, Subscription] = {}
+
+        if subscription_ids:
+            subscriptions_result = await db.execute(
+                select(Subscription).where(Subscription.id.in_(subscription_ids))
+            )
+            for subscription in subscriptions_result.scalars().unique().all():
+                subscriptions_to_update[subscription.id] = subscription
+
+        for squad_uuid in removed_uuids:
+            if not squad_uuid:
+                continue
+
+            extra_result = await db.execute(
+                select(Subscription).where(
+                    text("connected_squads::text LIKE :uuid_pattern")
+                ),
+                {"uuid_pattern": f'%"{squad_uuid}"%'}
+            )
+
+            for subscription in extra_result.scalars().unique().all():
+                subscriptions_to_update[subscription.id] = subscription
+
+        cleaned_subscriptions = 0
+
+        for subscription in subscriptions_to_update.values():
+            current_squads = list(subscription.connected_squads or [])
+            if not current_squads:
+                continue
+
+            filtered_squads = [
+                squad_uuid for squad_uuid in current_squads if squad_uuid not in removed_uuids
+            ]
+
+            if len(filtered_squads) != len(current_squads):
+                subscription.connected_squads = filtered_squads
+                subscription.updated_at = datetime.utcnow()
+                cleaned_subscriptions += 1
+
+        await db.execute(delete(ServerSquad).where(ServerSquad.id.in_(removed_ids)))
+        removed = len(removed_servers)
+
+        if cleaned_subscriptions:
+            logger.info(
+                "🧹 Обновлены подписки после удаления серверов: %s",
+                cleaned_subscriptions,
+            )
+
     await db.commit()
-    
-    logger.info(f"🔄 Синхронизация завершена: +{created} ~{updated} -{disabled}")
-    return created, updated, disabled
+
+    logger.info(f"🔄 Синхронизация завершена: +{created} ~{updated} -{removed}")
+    return created, updated, removed
+
+
+async def get_server_connected_users(
+    db: AsyncSession,
+    server_id: int
+) -> List[User]:
+
+    server_uuid_result = await db.execute(
+        select(ServerSquad.squad_uuid).where(ServerSquad.id == server_id)
+    )
+    server_uuid = server_uuid_result.scalar_one_or_none()
+
+    connection_filters = [SubscriptionServer.id.isnot(None)]
+
+    if server_uuid:
+        connection_filters.append(
+            cast(Subscription.connected_squads, String).like(
+                f'%"{server_uuid}"%'
+            )
+        )
+
+    result = await db.execute(
+        select(User)
+        .join(Subscription, Subscription.user_id == User.id)
+        .outerjoin(
+            SubscriptionServer,
+            and_(
+                SubscriptionServer.subscription_id == Subscription.id,
+                SubscriptionServer.server_squad_id == server_id,
+            ),
+        )
+        .where(or_(*connection_filters))
+        .options(selectinload(User.subscription))
+        .order_by(User.id)
+    )
+
+    return result.scalars().unique().all()
+
+
+async def get_trial_eligible_server_squads(
+    db: AsyncSession,
+    include_unavailable: bool = False,
+) -> List[ServerSquad]:
+
+    query = select(ServerSquad).where(ServerSquad.is_trial_eligible.is_(True))
+
+    result = await db.execute(query)
+    squads = result.scalars().unique().all()
+
+    if include_unavailable:
+        return squads
+
+    preferred_squads: List[ServerSquad] = []
+    fallback_squads: List[ServerSquad] = []
+
+    for squad in squads:
+        current_users = squad.current_users or 0
+        is_full = squad.max_users is not None and current_users >= squad.max_users
+
+        if is_full:
+            continue
+
+        if squad.is_available:
+            preferred_squads.append(squad)
+        else:
+            fallback_squads.append(squad)
+
+    if preferred_squads:
+        return preferred_squads
+
+    if fallback_squads:
+        return fallback_squads
+
+    return squads
+
+
+async def choose_random_trial_server_squad(
+    db: AsyncSession,
+) -> Optional[ServerSquad]:
+
+    squads = await get_trial_eligible_server_squads(db)
+
+    if not squads:
+        return None
+
+    return random.choice(squads)
+
+
+async def get_random_trial_squad_uuid(
+    db: AsyncSession,
+    fallback_uuid: Optional[str] = None,
+) -> Optional[str]:
+
+    squad = await choose_random_trial_server_squad(db)
+
+    if squad:
+        return squad.squad_uuid
+
+    return fallback_uuid
 
 
 def _generate_display_name(original_name: str) -> str:
-    
+
     country_names = {
         'NL': '🇳🇱 Нидерланды',
         'DE': '🇩🇪 Германия', 

@@ -22,6 +22,9 @@ from app.services.backup_service import backup_service
 from app.services.reporting_service import reporting_service
 from app.localization.loader import ensure_locale_templates
 from app.services.system_settings_service import bot_configuration_service
+from app.services.external_admin_service import ensure_external_admin_token
+from app.services.broadcast_service import broadcast_service
+from app.utils.startup_timeline import StartupTimeline
 
 
 class GracefulExit:
@@ -45,12 +48,22 @@ async def main():
     )
     
     logger = logging.getLogger(__name__)
-    logger.info("🚀 Запуск Bedolaga Remnawave Bot...")
-    
-    try:
-        ensure_locale_templates()
-    except Exception as error:
-        logger.warning("Failed to prepare locale templates: %s", error)
+    timeline = StartupTimeline(logger, "Bedolaga Remnawave Bot")
+    timeline.log_banner(
+        [
+            ("Уровень логирования", settings.LOG_LEVEL),
+            ("Режим БД", settings.DATABASE_MODE),
+        ]
+    )
+
+    async with timeline.stage(
+        "Подготовка локализаций", "🗂️", success_message="Шаблоны локализаций готовы"
+    ) as stage:
+        try:
+            ensure_locale_templates()
+        except Exception as error:
+            stage.warning(f"Не удалось подготовить шаблоны локализаций: {error}")
+            logger.warning("Failed to prepare locale templates: %s", error)
 
     killer = GracefulExit()
     signal.signal(signal.SIGINT, killer.exit_gracefully)
@@ -63,152 +76,292 @@ async def main():
     maintenance_task = None
     version_check_task = None
     polling_task = None
+    web_api_server = None
     
-    try:
-        logger.info("📊 Инициализация базы данных...")
-        await init_db()
-        
-        skip_migration = os.getenv('SKIP_MIGRATION', 'false').lower() == 'true'
-        
-        if not skip_migration:
-            logger.info("🔧 Выполняем проверку и миграцию базы данных...")
-            try:
-                migration_success = await run_universal_migration()
-                
-                if migration_success:
-                    logger.info("✅ Миграция базы данных завершена успешно")
-                else:
-                    logger.warning("⚠️ Миграция завершилась с предупреждениями, но продолжаем запуск")
-                    
-            except Exception as migration_error:
-                logger.error(f"❌ Ошибка выполнения миграции: {migration_error}")
-                logger.warning("⚠️ Продолжаем запуск без миграции")
-        else:
-            logger.info("ℹ️ Миграция пропущена (SKIP_MIGRATION=true)")
-        
-        logger.info("⚙️ Загрузка конфигурации из БД...")
-        try:
-            await bot_configuration_service.initialize()
-            logger.info("✅ Конфигурация загружена")
-        except Exception as error:
-            logger.error(f"❌ Не удалось загрузить конфигурацию: {error}")
+    summary_logged = False
 
-        logger.info("🤖 Настройка бота...")
-        bot, dp = await setup_bot()
-        
+    try:
+        async with timeline.stage(
+            "Инициализация базы данных", "🗄️", success_message="База данных готова"
+        ):
+            await init_db()
+
+        skip_migration = os.getenv('SKIP_MIGRATION', 'false').lower() == 'true'
+
+        if not skip_migration:
+            async with timeline.stage(
+                "Проверка и миграция базы данных",
+                "🧬",
+                success_message="Миграция завершена успешно",
+            ) as stage:
+                try:
+                    migration_success = await run_universal_migration()
+                    if migration_success:
+                        stage.success("Миграция завершена успешно")
+                    else:
+                        stage.warning(
+                            "Миграция завершилась с предупреждениями, запуск продолжится"
+                        )
+                        logger.warning(
+                            "⚠️ Миграция завершилась с предупреждениями, но продолжаем запуск"
+                        )
+                except Exception as migration_error:
+                    stage.warning(f"Ошибка выполнения миграции: {migration_error}")
+                    logger.error(f"❌ Ошибка выполнения миграции: {migration_error}")
+                    logger.warning("⚠️ Продолжаем запуск без миграции")
+        else:
+            timeline.add_manual_step(
+                "Проверка и миграция базы данных",
+                "⏭️",
+                "Пропущено",
+                "SKIP_MIGRATION=true",
+            )
+
+        async with timeline.stage(
+            "Загрузка конфигурации из БД",
+            "⚙️",
+            success_message="Конфигурация загружена",
+        ) as stage:
+            try:
+                await bot_configuration_service.initialize()
+            except Exception as error:
+                stage.warning(f"Не удалось загрузить конфигурацию: {error}")
+                logger.error(f"❌ Не удалось загрузить конфигурацию: {error}")
+
+        bot = None
+        dp = None
+        async with timeline.stage("Настройка бота", "🤖", success_message="Бот настроен") as stage:
+            bot, dp = await setup_bot()
+            stage.log("Кеш и FSM подготовлены")
+
         monitoring_service.bot = bot
         maintenance_service.set_bot(bot)
-        
+        broadcast_service.set_bot(bot)
+
         from app.services.admin_notification_service import AdminNotificationService
-        admin_notification_service = AdminNotificationService(bot)
-        version_service.bot = bot
-        version_service.set_notification_service(admin_notification_service)
-        logger.info(f"📄 Сервис версий настроен для репозитория: {version_service.repo}")
-        logger.info(f"📦 Текущая версия: {version_service.current_version}")
-        
-        logger.info("🔗 Бот подключен к сервисам мониторинга и техработ")
 
-        logger.info("🗄️ Инициализация сервиса бекапов...")
-        try:
-            backup_service.bot = bot
-            
-            settings_obj = await backup_service.get_backup_settings()
-            if settings_obj.auto_backup_enabled:
-                await backup_service.start_auto_backup()
-                logger.info("✅ Автобекапы запущены")
-            
-            logger.info("✅ Сервис бекапов инициализирован")
-        except Exception as e:
-            logger.error(f"❌ Ошибка инициализации сервиса бекапов: {e}")
+        async with timeline.stage(
+            "Интеграция сервисов",
+            "🔗",
+            success_message="Сервисы подключены",
+        ) as stage:
+            admin_notification_service = AdminNotificationService(bot)
+            version_service.bot = bot
+            version_service.set_notification_service(admin_notification_service)
+            stage.log(f"Репозиторий версий: {version_service.repo}")
+            stage.log(f"Текущая версия: {version_service.current_version}")
+            stage.success("Мониторинг, уведомления и рассылки подключены")
 
-        logger.info("📊 Инициализация сервиса отчетов...")
-        try:
-            reporting_service.set_bot(bot)
-            await reporting_service.start()
-        except Exception as e:
-            logger.error(f"❌ Ошибка запуска сервиса отчетов: {e}")
+        async with timeline.stage(
+            "Сервис бекапов",
+            "🗄️",
+            success_message="Сервис бекапов инициализирован",
+        ) as stage:
+            try:
+                backup_service.bot = bot
+                settings_obj = await backup_service.get_backup_settings()
+                if settings_obj.auto_backup_enabled:
+                    await backup_service.start_auto_backup()
+                    stage.log(
+                        "Автобекапы включены: интервал "
+                        f"{settings_obj.backup_interval_hours}ч, запуск {settings_obj.backup_time}"
+                    )
+                else:
+                    stage.log("Автобекапы отключены настройками")
+                stage.success("Сервис бекапов инициализирован")
+            except Exception as e:
+                stage.warning(f"Ошибка инициализации сервиса бекапов: {e}")
+                logger.error(f"❌ Ошибка инициализации сервиса бекапов: {e}")
+
+        async with timeline.stage(
+            "Сервис отчетов",
+            "📊",
+            success_message="Сервис отчетов готов",
+        ) as stage:
+            try:
+                reporting_service.set_bot(bot)
+                await reporting_service.start()
+            except Exception as e:
+                stage.warning(f"Ошибка запуска сервиса отчетов: {e}")
+                logger.error(f"❌ Ошибка запуска сервиса отчетов: {e}")
 
         payment_service = PaymentService(bot)
-        
+
+        async with timeline.stage(
+            "Внешняя админка",
+            "🛡️",
+            success_message="Токен внешней админки готов",
+        ) as stage:
+            try:
+                bot_user = await bot.get_me()
+                token = await ensure_external_admin_token(
+                    bot_user.username,
+                    bot_user.id,
+                )
+                if token:
+                    stage.log("Токен синхронизирован")
+                else:
+                    stage.warning("Не удалось получить токен внешней админки")
+            except Exception as error:  # pragma: no cover - защитный блок
+                stage.warning(f"Ошибка подготовки внешней админки: {error}")
+                logger.error("❌ Ошибка подготовки внешней админки: %s", error)
+
         webhook_needed = (
             settings.TRIBUTE_ENABLED
             or settings.is_cryptobot_enabled()
             or settings.is_mulenpay_enabled()
         )
-        
-        if webhook_needed:
-            enabled_services = []
-            if settings.TRIBUTE_ENABLED:
-                enabled_services.append("Tribute")
-            if settings.is_mulenpay_enabled():
-                enabled_services.append("Mulen Pay")
-            if settings.is_cryptobot_enabled():
-                enabled_services.append("CryptoBot")
-            
-            logger.info(f"🌐 Запуск webhook сервера для: {', '.join(enabled_services)}...")
-            webhook_server = WebhookServer(bot)
-            await webhook_server.start()
-        else:
-            logger.info("ℹ️ Tribute и CryptoBot отключены, webhook сервер не запускается")
-        
-        if settings.is_yookassa_enabled():
-            logger.info("💳 Запуск YooKassa webhook сервера...")
-            yookassa_server_task = asyncio.create_task(
-                start_yookassa_webhook_server(payment_service)
-            )
-        else:
-            logger.info("ℹ️ YooKassa отключена, webhook сервер не запускается")
 
-        if settings.is_pal24_enabled():
-            logger.info("💳 Запуск PayPalych webhook сервера...")
-            pal24_server = await start_pal24_webhook_server(payment_service)
-        else:
-            logger.info("ℹ️ PayPalych отключен, webhook сервер не запускается")
+        async with timeline.stage(
+            "Webhook сервисы",
+            "🌐",
+            success_message="Webhook сервера настроены",
+        ) as stage:
+            if webhook_needed:
+                enabled_services = []
+                if settings.TRIBUTE_ENABLED:
+                    enabled_services.append("Tribute")
+                if settings.is_mulenpay_enabled():
+                    enabled_services.append("Mulen Pay")
+                if settings.is_cryptobot_enabled():
+                    enabled_services.append("CryptoBot")
 
-        logger.info("📊 Запуск службы мониторинга...")
-        monitoring_task = asyncio.create_task(monitoring_service.start_monitoring())
-        
-        logger.info("🔧 Проверка службы техработ...")
-        if not maintenance_service._check_task or maintenance_service._check_task.done():
-            logger.info("🔧 Запуск службы техработ...")
-            maintenance_task = asyncio.create_task(maintenance_service.start_monitoring())
-        else:
-            logger.info("🔧 Служба техработ уже запущена")
-            maintenance_task = None
-        
-        if settings.is_version_check_enabled():
-            logger.info("📄 Запуск сервиса проверки версий...")
-            version_check_task = asyncio.create_task(version_service.start_periodic_check())
-        else:
-            logger.info("ℹ️ Проверка версий отключена")
-        
-        logger.info("📄 Запуск polling...")
-        polling_task = asyncio.create_task(dp.start_polling(bot, skip_updates=True))
-        
-        logger.info("=" * 50)
-        logger.info("🎯 Активные webhook endpoints:")
+                webhook_server = WebhookServer(bot)
+                await webhook_server.start()
+                stage.log(f"Активированы: {', '.join(enabled_services)}")
+                stage.success("Webhook сервера запущены")
+            else:
+                stage.skip("Tribute, Mulen Pay и CryptoBot отключены")
+
+        async with timeline.stage(
+            "YooKassa webhook",
+            "💳",
+            success_message="YooKassa webhook запущен",
+        ) as stage:
+            if settings.is_yookassa_enabled():
+                yookassa_server_task = asyncio.create_task(
+                    start_yookassa_webhook_server(payment_service)
+                )
+                stage.log(
+                    f"Endpoint: {settings.WEBHOOK_URL}:{settings.YOOKASSA_WEBHOOK_PORT}{settings.YOOKASSA_WEBHOOK_PATH}"
+                )
+            else:
+                stage.skip("YooKassa отключена настройками")
+
+        async with timeline.stage(
+            "PayPalych webhook",
+            "💳",
+            success_message="PayPalych webhook запущен",
+        ) as stage:
+            if settings.is_pal24_enabled():
+                pal24_server = await start_pal24_webhook_server(payment_service)
+                stage.log(
+                    f"Endpoint: {settings.WEBHOOK_URL}:{settings.PAL24_WEBHOOK_PORT}{settings.PAL24_WEBHOOK_PATH}"
+                )
+            else:
+                stage.skip("PayPalych отключен настройками")
+
+        async with timeline.stage(
+            "Служба мониторинга",
+            "📈",
+            success_message="Служба мониторинга запущена",
+        ) as stage:
+            monitoring_task = asyncio.create_task(monitoring_service.start_monitoring())
+            stage.log(f"Интервал опроса: {settings.MONITORING_INTERVAL}с")
+
+        async with timeline.stage(
+            "Служба техработ",
+            "🛡️",
+            success_message="Служба техработ запущена",
+        ) as stage:
+            if not maintenance_service._check_task or maintenance_service._check_task.done():
+                maintenance_task = asyncio.create_task(maintenance_service.start_monitoring())
+                stage.log(f"Интервал проверки: {settings.MAINTENANCE_CHECK_INTERVAL}с")
+            else:
+                maintenance_task = None
+                stage.skip("Служба техработ уже активна")
+
+        async with timeline.stage(
+            "Сервис проверки версий",
+            "📄",
+            success_message="Проверка версий запущена",
+        ) as stage:
+            if settings.is_version_check_enabled():
+                version_check_task = asyncio.create_task(version_service.start_periodic_check())
+                stage.log(
+                    f"Интервал проверки: {settings.VERSION_CHECK_INTERVAL_HOURS}ч"
+                )
+            else:
+                version_check_task = None
+                stage.skip("Проверка версий отключена настройками")
+
+        async with timeline.stage(
+            "Административное веб-API",
+            "🌐",
+            success_message="Веб-API запущено",
+        ) as stage:
+            if settings.is_web_api_enabled():
+                try:
+                    from app.webapi import WebAPIServer
+
+                    web_api_server = WebAPIServer()
+                    await web_api_server.start()
+                    stage.success(
+                        f"Доступно на http://{settings.WEB_API_HOST}:{settings.WEB_API_PORT}"
+                    )
+                except Exception as error:
+                    stage.warning(f"Не удалось запустить веб-API: {error}")
+                    logger.error(f"❌ Не удалось запустить веб-API: {error}")
+            else:
+                stage.skip("Веб-API отключено")
+
+        async with timeline.stage(
+            "Запуск polling",
+            "🤖",
+            success_message="Aiogram polling запущен",
+        ) as stage:
+            polling_task = asyncio.create_task(dp.start_polling(bot, skip_updates=True))
+            stage.log("skip_updates=True")
+
+        webhook_lines = []
         if webhook_needed:
             if settings.TRIBUTE_ENABLED:
-                logger.info(f"   Tribute: {settings.WEBHOOK_URL}:{settings.TRIBUTE_WEBHOOK_PORT}{settings.TRIBUTE_WEBHOOK_PATH}")
+                webhook_lines.append(
+                    f"Tribute: {settings.WEBHOOK_URL}:{settings.TRIBUTE_WEBHOOK_PORT}{settings.TRIBUTE_WEBHOOK_PATH}"
+                )
             if settings.is_mulenpay_enabled():
-                logger.info(f"   Mulen Pay: {settings.WEBHOOK_URL}:{settings.TRIBUTE_WEBHOOK_PORT}{settings.MULENPAY_WEBHOOK_PATH}")
+                webhook_lines.append(
+                    f"Mulen Pay: {settings.WEBHOOK_URL}:{settings.TRIBUTE_WEBHOOK_PORT}{settings.MULENPAY_WEBHOOK_PATH}"
+                )
             if settings.is_cryptobot_enabled():
-                logger.info(f"   CryptoBot: {settings.WEBHOOK_URL}:{settings.TRIBUTE_WEBHOOK_PORT}{settings.CRYPTOBOT_WEBHOOK_PATH}")
+                webhook_lines.append(
+                    f"CryptoBot: {settings.WEBHOOK_URL}:{settings.TRIBUTE_WEBHOOK_PORT}{settings.CRYPTOBOT_WEBHOOK_PATH}"
+                )
         if settings.is_yookassa_enabled():
-            logger.info(f"   YooKassa: {settings.WEBHOOK_URL}:{settings.YOOKASSA_WEBHOOK_PORT}{settings.YOOKASSA_WEBHOOK_PATH}")
-        if settings.is_pal24_enabled():
-            logger.info(
-                f"   PayPalych: {settings.WEBHOOK_URL}:{settings.PAL24_WEBHOOK_PORT}{settings.PAL24_WEBHOOK_PATH}"
+            webhook_lines.append(
+                f"YooKassa: {settings.WEBHOOK_URL}:{settings.YOOKASSA_WEBHOOK_PORT}{settings.YOOKASSA_WEBHOOK_PATH}"
             )
-        logger.info("📄 Активные фоновые сервисы:")
-        logger.info(f"   Мониторинг: {'Включен' if monitoring_task else 'Отключен'}")
-        logger.info(f"   Техработы: {'Включен' if maintenance_task else 'Отключен'}")
-        logger.info(f"   Проверка версий: {'Включен' if version_check_task else 'Отключен'}")
-        logger.info(
-            "   Отчеты: %s",
-            "Включен" if reporting_service.is_running() else "Отключен",
+        if settings.is_pal24_enabled():
+            webhook_lines.append(
+                f"PayPalych: {settings.WEBHOOK_URL}:{settings.PAL24_WEBHOOK_PORT}{settings.PAL24_WEBHOOK_PATH}"
+            )
+
+        timeline.log_section(
+            "Активные webhook endpoints",
+            webhook_lines if webhook_lines else ["Нет активных endpoints"],
+            icon="🎯",
         )
-        logger.info("=" * 50)
+
+        services_lines = [
+            f"Мониторинг: {'Включен' if monitoring_task else 'Отключен'}",
+            f"Техработы: {'Включен' if maintenance_task else 'Отключен'}",
+            f"Проверка версий: {'Включен' if version_check_task else 'Отключен'}",
+            f"Отчеты: {'Включен' if reporting_service.is_running() else 'Отключен'}",
+        ]
+        timeline.log_section("Активные фоновые сервисы", services_lines, icon="📄")
+
+        timeline.log_summary()
+        summary_logged = True
         
         try:
             while not killer.exit:
@@ -257,6 +410,9 @@ async def main():
         raise
         
     finally:
+        if not summary_logged:
+            timeline.log_summary()
+            summary_logged = True
         logger.info("🛑 Начинается корректное завершение работы...")
         
         if yookassa_server_task and not yookassa_server_task.done():
@@ -320,6 +476,13 @@ async def main():
         if webhook_server:
             logger.info("ℹ️ Остановка webhook сервера...")
             await webhook_server.stop()
+
+        if web_api_server:
+            try:
+                await web_api_server.stop()
+                logger.info("✅ Административное веб-API остановлено")
+            except Exception as error:
+                logger.error(f"Ошибка остановки веб-API: {error}")
         
         if 'bot' in locals():
             try:

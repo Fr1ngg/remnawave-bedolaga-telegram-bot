@@ -21,8 +21,8 @@ from app.keyboards.admin import (
     get_custom_criteria_keyboard, get_broadcast_history_keyboard,
     get_admin_pagination_keyboard, get_broadcast_media_keyboard,
     get_media_confirm_keyboard, get_updated_message_buttons_selector_keyboard_with_media,
-    BROADCAST_BUTTONS, BROADCAST_BUTTON_ROWS, DEFAULT_BROADCAST_BUTTONS,
-    BROADCAST_BUTTON_LABELS
+    BROADCAST_BUTTON_ROWS, DEFAULT_BROADCAST_BUTTONS,
+    get_broadcast_button_config, get_broadcast_button_labels
 )
 from app.localization.texts import get_texts
 from app.database.crud.user import get_users_list
@@ -31,10 +31,8 @@ from app.utils.decorators import admin_required, error_handler
 
 logger = logging.getLogger(__name__)
 
-BUTTON_CONFIG = BROADCAST_BUTTONS
 BUTTON_ROWS = BROADCAST_BUTTON_ROWS
 DEFAULT_SELECTED_BUTTONS = DEFAULT_BROADCAST_BUTTONS
-BUTTON_LABELS = BROADCAST_BUTTON_LABELS
 
 
 def get_message_buttons_selector_keyboard(language: str = "ru") -> types.InlineKeyboardMarkup:
@@ -45,16 +43,17 @@ def get_updated_message_buttons_selector_keyboard(selected_buttons: list, langua
     return get_updated_message_buttons_selector_keyboard_with_media(selected_buttons, False, language)
 
 
-def create_broadcast_keyboard(selected_buttons: list) -> Optional[types.InlineKeyboardMarkup]:
+def create_broadcast_keyboard(selected_buttons: list, language: str = "ru") -> Optional[types.InlineKeyboardMarkup]:
     selected_buttons = selected_buttons or []
     keyboard: list[list[types.InlineKeyboardButton]] = []
+    button_config_map = get_broadcast_button_config(language)
 
     for row in BUTTON_ROWS:
         row_buttons: list[types.InlineKeyboardButton] = []
         for button_key in row:
             if button_key not in selected_buttons:
                 continue
-            button_config = BUTTON_CONFIG[button_key]
+            button_config = button_config_map[button_key]
             row_buttons.append(
                 types.InlineKeyboardButton(
                     text=button_config["text"],
@@ -628,7 +627,8 @@ async def confirm_button_selection(
         media_info = f"\n🖼️ <b>Медиафайл:</b> {media_type_names.get(media_type, media_type)}"
     
     ordered_keys = [button_key for row in BUTTON_ROWS for button_key in row]
-    selected_names = [BUTTON_LABELS[key] for key in ordered_keys if key in selected_buttons]
+    button_labels = get_broadcast_button_labels(db_user.language)
+    selected_names = [button_labels[key] for key in ordered_keys if key in selected_buttons]
     if selected_names:
         buttons_info = f"\n📘 <b>Кнопки:</b> {', '.join(selected_names)}"
     else:
@@ -745,7 +745,7 @@ async def confirm_broadcast(
     sent_count = 0
     failed_count = 0
     
-    broadcast_keyboard = create_broadcast_keyboard(selected_buttons)
+    broadcast_keyboard = create_broadcast_keyboard(selected_buttons, db_user.language)
     
     for user in users:
         try:

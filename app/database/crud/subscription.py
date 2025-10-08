@@ -1,6 +1,6 @@
 import logging
 from datetime import datetime, timedelta
-from typing import Optional, List, Tuple
+from typing import Iterable, Optional, List, Tuple
 from sqlalchemy import select, and_, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -47,10 +47,31 @@ async def create_trial_subscription(
     duration_days = duration_days or settings.TRIAL_DURATION_DAYS
     traffic_limit_gb = traffic_limit_gb or settings.TRIAL_TRAFFIC_LIMIT_GB
     device_limit = device_limit or settings.TRIAL_DEVICE_LIMIT
-    squad_uuid = squad_uuid or settings.TRIAL_SQUAD_UUID
-    
+    if not squad_uuid:
+        try:
+            from app.database.crud.server_squad import get_random_trial_squad_uuid
+
+            squad_uuid = await get_random_trial_squad_uuid(
+                db,
+                settings.TRIAL_SQUAD_UUID,
+            )
+
+            if squad_uuid:
+                logger.debug(
+                    "Выбран сквад %s для триальной подписки пользователя %s",
+                    squad_uuid,
+                    user_id,
+                )
+        except Exception as error:
+            logger.error(
+                "Не удалось получить сквад для триальной подписки пользователя %s: %s",
+                user_id,
+                error,
+            )
+            squad_uuid = settings.TRIAL_SQUAD_UUID
+
     end_date = datetime.utcnow() + timedelta(days=duration_days)
-    
+
     subscription = Subscription(
         user_id=user_id,
         status=SubscriptionStatus.ACTIVE.value,
@@ -59,14 +80,43 @@ async def create_trial_subscription(
         end_date=end_date,
         traffic_limit_gb=traffic_limit_gb,
         device_limit=device_limit,
-        connected_squads=[squad_uuid] if squad_uuid else []
+        connected_squads=[squad_uuid] if squad_uuid else [],
+        autopay_enabled=settings.is_autopay_enabled_by_default(),
+        autopay_days_before=settings.DEFAULT_AUTOPAY_DAYS_BEFORE,
     )
     
     db.add(subscription)
     await db.commit()
     await db.refresh(subscription)
-    
+
     logger.info(f"🎁 Создана триальная подписка для пользователя {user_id}")
+
+    if squad_uuid:
+        try:
+            from app.database.crud.server_squad import (
+                get_server_ids_by_uuids,
+                add_user_to_servers,
+            )
+
+            server_ids = await get_server_ids_by_uuids(db, [squad_uuid])
+            if server_ids:
+                await add_user_to_servers(db, server_ids)
+                logger.info(
+                    "📈 Обновлен счетчик пользователей для триального сквада %s",
+                    squad_uuid,
+                )
+            else:
+                logger.warning(
+                    "⚠️ Не удалось найти серверы для обновления счетчика (сквад %s)",
+                    squad_uuid,
+                )
+        except Exception as error:
+            logger.error(
+                "⚠️ Ошибка обновления счетчика пользователей для триального сквада %s: %s",
+                squad_uuid,
+                error,
+            )
+
     return subscription
 
 
@@ -74,9 +124,10 @@ async def create_paid_subscription(
     db: AsyncSession,
     user_id: int,
     duration_days: int,
-    traffic_limit_gb: int = 0, 
+    traffic_limit_gb: int = 0,
     device_limit: int = 1,
-    connected_squads: List[str] = None
+    connected_squads: List[str] = None,
+    update_server_counters: bool = False,
 ) -> Subscription:
     
     end_date = datetime.utcnow() + timedelta(days=duration_days)
@@ -89,7 +140,9 @@ async def create_paid_subscription(
         end_date=end_date,
         traffic_limit_gb=traffic_limit_gb,
         device_limit=device_limit,
-        connected_squads=connected_squads or []
+        connected_squads=connected_squads or [],
+        autopay_enabled=settings.is_autopay_enabled_by_default(),
+        autopay_days_before=settings.DEFAULT_AUTOPAY_DAYS_BEFORE,
     )
     
     db.add(subscription)
@@ -97,6 +150,36 @@ async def create_paid_subscription(
     await db.refresh(subscription)
     
     logger.info(f"💎 Создана платная подписка для пользователя {user_id}")
+
+    squad_uuids = list(connected_squads or [])
+    if update_server_counters and squad_uuids:
+        try:
+            from app.database.crud.server_squad import (
+                get_server_ids_by_uuids,
+                add_user_to_servers,
+            )
+
+            server_ids = await get_server_ids_by_uuids(db, squad_uuids)
+            if server_ids:
+                await add_user_to_servers(db, server_ids)
+                logger.info(
+                    "📈 Обновлен счетчик пользователей для платной подписки пользователя %s (сквады: %s)",
+                    user_id,
+                    squad_uuids,
+                )
+            else:
+                logger.warning(
+                    "⚠️ Не удалось найти серверы для обновления счетчика платной подписки пользователя %s (сквады: %s)",
+                    user_id,
+                    squad_uuids,
+                )
+        except Exception as error:
+            logger.error(
+                "⚠️ Ошибка обновления счетчика пользователей серверов для платной подписки пользователя %s: %s",
+                user_id,
+                error,
+            )
+
     return subscription
 
 
@@ -110,19 +193,46 @@ async def extend_subscription(
     logger.info(f"🔄 Продление подписки {subscription.id} на {days} дней")
     logger.info(f"📊 Текущие параметры: статус={subscription.status}, окончание={subscription.end_date}")
     
-    if subscription.end_date > current_time:
+    if days < 0:
+        subscription.end_date = subscription.end_date + timedelta(days=days)
+        logger.info(
+            "📅 Срок подписки уменьшен на %s дней, новая дата окончания: %s",
+            abs(days),
+            subscription.end_date,
+        )
+    elif subscription.end_date > current_time:
         subscription.end_date = subscription.end_date + timedelta(days=days)
         logger.info(f"📅 Подписка активна, добавляем {days} дней к текущей дате окончания")
     else:
         subscription.end_date = current_time + timedelta(days=days)
         logger.info(f"📅 Подписка истекла, устанавливаем новую дату окончания")
-    
-    if subscription.status == SubscriptionStatus.EXPIRED.value:
+
+    if subscription.is_trial:
+        start_date = subscription.start_date or current_time
+        total_duration = subscription.end_date - start_date
+        max_trial_duration = timedelta(days=settings.TRIAL_DURATION_DAYS)
+
+        if total_duration > max_trial_duration:
+            subscription.is_trial = False
+            logger.info(
+                "🎯 Подписка %s автоматически переведена из триальной в платную после продления"
+                ", итоговая длительность: %s дней",
+                subscription.id,
+                total_duration.days,
+            )
+            if subscription.user:
+                subscription.user.has_had_paid_subscription = True
+
+    if subscription.status == SubscriptionStatus.EXPIRED.value and days > 0:
         subscription.status = SubscriptionStatus.ACTIVE.value
         logger.info(f"🔄 Статус изменён с EXPIRED на ACTIVE")
-    
+
+    if settings.RESET_TRAFFIC_ON_PAYMENT:
+        subscription.traffic_used_gb = 0.0
+        logger.info("🔄 Сбрасываем использованный трафик согласно настройке RESET_TRAFFIC_ON_PAYMENT")
+
     subscription.updated_at = current_time
-    
+
     await db.commit()
     await db.refresh(subscription)
     await clear_notifications(db, subscription.id)
@@ -201,6 +311,64 @@ async def remove_subscription_squad(
         logger.info(f"🚫 Из подписки пользователя {subscription.user_id} удален сквад {squad_uuid}")
     
     return subscription
+
+
+async def decrement_subscription_server_counts(
+    db: AsyncSession,
+    subscription: Optional[Subscription],
+    *,
+    subscription_servers: Optional[Iterable[SubscriptionServer]] = None,
+) -> None:
+    """Decrease server counters linked to the provided subscription."""
+
+    if not subscription:
+        return
+
+    server_ids: set[int] = set()
+
+    if subscription_servers is not None:
+        for sub_server in subscription_servers:
+            if sub_server and sub_server.server_squad_id is not None:
+                server_ids.add(sub_server.server_squad_id)
+    else:
+        try:
+            ids_from_links = await get_subscription_server_ids(db, subscription.id)
+            server_ids.update(ids_from_links)
+        except Exception as error:
+            logger.error(
+                "⚠️ Не удалось получить серверы подписки %s для уменьшения счетчика: %s",
+                subscription.id,
+                error,
+            )
+
+    connected_squads = list(subscription.connected_squads or [])
+    if connected_squads:
+        try:
+            from app.database.crud.server_squad import get_server_ids_by_uuids
+
+            squad_server_ids = await get_server_ids_by_uuids(db, connected_squads)
+            server_ids.update(squad_server_ids)
+        except Exception as error:
+            logger.error(
+                "⚠️ Не удалось сопоставить сквады подписки %s с серверами: %s",
+                subscription.id,
+                error,
+            )
+
+    if not server_ids:
+        return
+
+    try:
+        from app.database.crud.server_squad import remove_user_from_servers
+
+        await remove_user_from_servers(db, sorted(server_ids))
+    except Exception as error:
+        logger.error(
+            "⚠️ Ошибка уменьшения счетчика пользователей серверов %s для подписки %s: %s",
+            list(server_ids),
+            subscription.id,
+            error,
+        )
 
 
 async def update_subscription_autopay(
@@ -966,7 +1134,9 @@ async def create_subscription(
     connected_squads: list = None,
     remnawave_short_uuid: str = None,
     subscription_url: str = "",
-    subscription_crypto_link: str = ""
+    subscription_crypto_link: str = "",
+    autopay_enabled: Optional[bool] = None,
+    autopay_days_before: Optional[int] = None,
 ) -> Subscription:
     
     if end_date is None:
@@ -986,7 +1156,17 @@ async def create_subscription(
         connected_squads=connected_squads,
         remnawave_short_uuid=remnawave_short_uuid,
         subscription_url=subscription_url,
-        subscription_crypto_link=subscription_crypto_link
+        subscription_crypto_link=subscription_crypto_link,
+        autopay_enabled=(
+            settings.is_autopay_enabled_by_default()
+            if autopay_enabled is None
+            else autopay_enabled
+        ),
+        autopay_days_before=(
+            settings.DEFAULT_AUTOPAY_DAYS_BEFORE
+            if autopay_days_before is None
+            else autopay_days_before
+        ),
     )
     
     db.add(subscription)

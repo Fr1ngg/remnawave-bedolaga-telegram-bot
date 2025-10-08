@@ -17,6 +17,11 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+_LANGUAGE_DISPLAY_NAMES = {
+    "ru": "🇷🇺 Русский",
+    "en": "🇬🇧 English",
+}
+
 def get_rules_keyboard(language: str = DEFAULT_LANGUAGE) -> InlineKeyboardMarkup:
     texts = get_texts(language)
     return InlineKeyboardMarkup(inline_keyboard=[
@@ -62,6 +67,49 @@ def get_post_registration_keyboard(language: str = DEFAULT_LANGUAGE) -> InlineKe
     ])
 
 
+def get_language_selection_keyboard(
+    current_language: Optional[str] = None,
+    *,
+    include_back: bool = False,
+    language: str = DEFAULT_LANGUAGE,
+) -> InlineKeyboardMarkup:
+    available_languages = settings.get_available_languages()
+
+    buttons: List[List[InlineKeyboardButton]] = []
+    row: List[InlineKeyboardButton] = []
+
+    normalized_current = (current_language or "").lower()
+
+    for index, lang_code in enumerate(available_languages, start=1):
+        normalized_code = lang_code.lower()
+        display_name = _LANGUAGE_DISPLAY_NAMES.get(
+            normalized_code,
+            normalized_code.upper(),
+        )
+
+        prefix = "✅ " if normalized_code == normalized_current and normalized_current else ""
+
+        row.append(
+            InlineKeyboardButton(
+                text=f"{prefix}{display_name}",
+                callback_data=f"language_select:{normalized_code}",
+            )
+        )
+
+        if len(row) == 2:
+            buttons.append(row)
+            row = []
+
+    if row:
+        buttons.append(row)
+
+    if include_back:
+        texts = get_texts(language)
+        buttons.append([InlineKeyboardButton(text=texts.BACK, callback_data="back_to_menu")])
+
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
 def get_main_menu_keyboard(
     language: str = DEFAULT_LANGUAGE,
     is_admin: bool = False,
@@ -73,6 +121,7 @@ def get_main_menu_keyboard(
     show_resume_checkout: bool = False,
     *,
     is_moderator: bool = False,
+    custom_buttons: Optional[list[InlineKeyboardButton]] = None,
 ) -> InlineKeyboardMarkup:
     texts = get_texts(language)
     
@@ -182,6 +231,11 @@ def get_main_menu_keyboard(
             )
         ])
 
+    if custom_buttons:
+        for button in custom_buttons:
+            if isinstance(button, InlineKeyboardButton):
+                keyboard.append([button])
+
     keyboard.extend([
         [
             InlineKeyboardButton(text=texts.MENU_PROMOCODE, callback_data="menu_promocode"),
@@ -189,41 +243,28 @@ def get_main_menu_keyboard(
         ]
     ])
 
-    # Server status button
-    server_status_mode = settings.get_server_status_mode()
-    server_status_text = texts.t("MENU_SERVER_STATUS", "📊 Статус серверов")
-
-    if server_status_mode == "external_link":
-        status_url = settings.get_server_status_external_url()
-        if status_url:
-            keyboard.append([
-                InlineKeyboardButton(text=server_status_text, url=status_url)
-            ])
-    elif server_status_mode == "external_link_miniapp":
-        status_url = settings.get_server_status_external_url()
-        if status_url:
-            keyboard.append([
-                InlineKeyboardButton(
-                    text=server_status_text,
-                    web_app=types.WebAppInfo(url=status_url),
-                )
-            ])
-    elif server_status_mode == "xray":
-        keyboard.append([
-            InlineKeyboardButton(text=server_status_text, callback_data="menu_server_status")
-        ])
-
     # Support button is configurable (runtime via service)
     try:
         from app.services.support_settings_service import SupportSettingsService
         support_enabled = SupportSettingsService.is_support_menu_enabled()
     except Exception:
         support_enabled = settings.SUPPORT_MENU_ENABLED
-    support_row = []
     if support_enabled:
-        support_row.append(InlineKeyboardButton(text=texts.MENU_SUPPORT, callback_data="menu_support"))
-    support_row.append(InlineKeyboardButton(text=texts.MENU_RULES, callback_data="menu_rules"))
-    keyboard.append(support_row)
+        keyboard.append([
+            InlineKeyboardButton(text=texts.MENU_SUPPORT, callback_data="menu_support")
+        ])
+
+    keyboard.append([
+        InlineKeyboardButton(
+            text=texts.t("MENU_INFO", "ℹ️ Инфо"),
+            callback_data="menu_info",
+        )
+    ])
+
+    if settings.is_language_selection_enabled():
+        keyboard.append([
+            InlineKeyboardButton(text=texts.MENU_LANGUAGE, callback_data="menu_language")
+        ])
     if settings.DEBUG:
         print(f"DEBUG KEYBOARD: is_admin={is_admin}, добавляем админ кнопку: {is_admin}")
 
@@ -243,6 +284,82 @@ def get_main_menu_keyboard(
         ])
     
     return InlineKeyboardMarkup(inline_keyboard=keyboard)
+
+
+def get_info_menu_keyboard(
+    language: str = DEFAULT_LANGUAGE,
+    show_privacy_policy: bool = False,
+    show_public_offer: bool = False,
+    show_faq: bool = False,
+    show_promo_groups: bool = False,
+) -> InlineKeyboardMarkup:
+    texts = get_texts(language)
+
+    buttons: List[List[InlineKeyboardButton]] = []
+
+    if show_faq:
+        buttons.append([
+            InlineKeyboardButton(
+                text=texts.t("MENU_FAQ", "❓ FAQ"),
+                callback_data="menu_faq",
+            )
+        ])
+
+    if show_promo_groups:
+        buttons.append([
+            InlineKeyboardButton(
+                text=texts.t("MENU_PROMO_GROUPS_INFO", "🎯 Промогруппы"),
+                callback_data="menu_info_promo_groups",
+            )
+        ])
+
+    if show_privacy_policy:
+        buttons.append([
+            InlineKeyboardButton(
+                text=texts.t("MENU_PRIVACY_POLICY", "🛡️ Политика конф."),
+                callback_data="menu_privacy_policy",
+            )
+        ])
+
+    if show_public_offer:
+        buttons.append([
+            InlineKeyboardButton(
+                text=texts.t("MENU_PUBLIC_OFFER", "📄 Оферта"),
+                callback_data="menu_public_offer",
+            )
+        ])
+
+    buttons.append([
+        InlineKeyboardButton(text=texts.MENU_RULES, callback_data="menu_rules")
+    ])
+
+    server_status_mode = settings.get_server_status_mode()
+    server_status_text = texts.t("MENU_SERVER_STATUS", "📊 Статус серверов")
+
+    if server_status_mode == "external_link":
+        status_url = settings.get_server_status_external_url()
+        if status_url:
+            buttons.append([InlineKeyboardButton(text=server_status_text, url=status_url)])
+    elif server_status_mode == "external_link_miniapp":
+        status_url = settings.get_server_status_external_url()
+        if status_url:
+            buttons.append([
+                InlineKeyboardButton(
+                    text=server_status_text,
+                    web_app=types.WebAppInfo(url=status_url),
+                )
+            ])
+    elif server_status_mode == "xray":
+        buttons.append([
+            InlineKeyboardButton(
+                text=server_status_text,
+                callback_data="menu_server_status",
+            )
+        ])
+
+    buttons.append([InlineKeyboardButton(text=texts.BACK, callback_data="back_to_menu")])
+
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
 def get_happ_download_button_row(texts) -> Optional[List[InlineKeyboardButton]]:
@@ -1593,14 +1710,25 @@ def get_extend_subscription_keyboard_with_prices(language: str, prices: dict) ->
     available_periods = settings.get_available_renewal_periods()
 
     for days in available_periods:
-        if days in prices:
-            period_display = format_period_description(days, language)
-            keyboard.append([
-                InlineKeyboardButton(
-                    text=f"📅 {period_display} - {texts.format_price(prices[days])}",
-                    callback_data=f"extend_period_{days}"
-                )
-            ])
+        if days not in prices:
+            continue
+
+        price_info = prices[days]
+
+        if isinstance(price_info, dict):
+            final_price = price_info.get("final")
+            if final_price is None:
+                final_price = price_info.get("original", 0)
+        else:
+            final_price = price_info
+
+        period_display = format_period_description(days, language)
+        keyboard.append([
+            InlineKeyboardButton(
+                text=f"📅 {period_display} - {texts.format_price(final_price)}",
+                callback_data=f"extend_period_{days}"
+            )
+        ])
 
     keyboard.append([
         InlineKeyboardButton(text=texts.BACK, callback_data="menu_subscription")
@@ -1925,10 +2053,22 @@ def get_admin_tickets_keyboard(
         status_emoji = ticket.get('status_emoji', '❓')
         if ticket.get('is_closed', False):
             status_emoji = '✅'
-        user_name = ticket.get('user_name', 'Unknown')[:15]
+        user_name = ticket.get('user_name', 'Unknown')
+        username = ticket.get('username')
+        telegram_id = ticket.get('telegram_id')
+        # Сформируем компактное отображение: Имя (@username | ID)
+        name_parts = [user_name[:15]]
+        contact_parts = []
+        if username:
+            contact_parts.append(f"@{username}")
+        if telegram_id:
+            contact_parts.append(str(telegram_id))
+        if contact_parts:
+            name_parts.append(f"({' | '.join(contact_parts)})")
+        name_display = ' '.join(name_parts)
         title = ticket.get('title', 'Без названия')[:20]
         locked_emoji = ticket.get('locked_emoji', '')
-        button_text = f"{status_emoji} #{ticket['id']} {locked_emoji} {user_name}: {title}".replace("  ", " ")
+        button_text = f"{status_emoji} #{ticket['id']} {locked_emoji} {name_display}: {title}".replace("  ", " ")
         row = [InlineKeyboardButton(text=button_text, callback_data=f"admin_view_ticket_{ticket['id']}")]
         if ticket.get('is_closed', False):
             closed_rows.append(row)

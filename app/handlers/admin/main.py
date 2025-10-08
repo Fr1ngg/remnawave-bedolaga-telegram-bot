@@ -71,10 +71,10 @@ async def show_users_submenu(
     db: AsyncSession
 ):
     texts = get_texts(db_user.language)
-    
+
     await callback.message.edit_text(
-        "👥 **Управление пользователями и подписками**\n\n"
-        "Выберите нужный раздел:",
+        texts.t("ADMIN_USERS_SUBMENU_TITLE", "👥 **Управление пользователями и подписками**\n\n") +
+        texts.t("ADMIN_SUBMENU_SELECT_SECTION", "Выберите нужный раздел:"),
         reply_markup=get_admin_users_submenu_keyboard(db_user.language),
         parse_mode="Markdown"
     )
@@ -89,10 +89,10 @@ async def show_promo_submenu(
     db: AsyncSession
 ):
     texts = get_texts(db_user.language)
-    
+
     await callback.message.edit_text(
-        "💰 **Промокоды и статистика**\n\n"
-        "Выберите нужный раздел:",
+        texts.t("ADMIN_PROMO_SUBMENU_TITLE", "💰 **Промокоды и статистика**\n\n") +
+        texts.t("ADMIN_SUBMENU_SELECT_SECTION", "Выберите нужный раздел:"),
         reply_markup=get_admin_promo_submenu_keyboard(db_user.language),
         parse_mode="Markdown"
     )
@@ -107,10 +107,10 @@ async def show_communications_submenu(
     db: AsyncSession
 ):
     texts = get_texts(db_user.language)
-    
+
     await callback.message.edit_text(
-        "📨 **Коммуникации**\n\n"
-        "Управление рассылками и текстами интерфейса:",
+        texts.t("ADMIN_COMMUNICATIONS_SUBMENU_TITLE", "📨 **Коммуникации**\n\n") +
+        texts.t("ADMIN_COMMUNICATIONS_SUBMENU_DESCRIPTION", "Управление рассылками и текстами интерфейса:"),
         reply_markup=get_admin_communications_submenu_keyboard(db_user.language),
         parse_mode="Markdown"
     )
@@ -128,16 +128,19 @@ async def show_support_submenu(
     # Moderators have access only to tickets and not to settings
     is_moderator_only = (not settings.is_admin(callback.from_user.id) and SupportSettingsService.is_moderator(callback.from_user.id))
     
-    from app.keyboards.admin import get_admin_support_submenu_keyboard
     kb = get_admin_support_submenu_keyboard(db_user.language)
     if is_moderator_only:
         # Rebuild keyboard to include only tickets and back to main menu
         kb = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="🎫 Тикеты поддержки", callback_data="admin_tickets")],
-            [InlineKeyboardButton(text="⬅️ Назад", callback_data="back_to_menu")]
+            [InlineKeyboardButton(text=texts.t("ADMIN_SUPPORT_TICKETS", "🎫 Тикеты поддержки"), callback_data="admin_tickets")],
+            [InlineKeyboardButton(text=texts.BACK, callback_data="back_to_menu")]
         ])
     await callback.message.edit_text(
-        "🛟 **Поддержка**\n\n" + ("Доступ к тикетам." if is_moderator_only else "Управление тикетами и настройками поддержки:"),
+        texts.t("ADMIN_SUPPORT_SUBMENU_TITLE", "🛟 **Поддержка**\n\n") + (
+            texts.t("ADMIN_SUPPORT_SUBMENU_DESCRIPTION_MODERATOR", "Доступ к тикетам.")
+            if is_moderator_only
+            else texts.t("ADMIN_SUPPORT_SUBMENU_DESCRIPTION", "Управление тикетами и настройками поддержки:")
+        ),
         reply_markup=kb,
         parse_mode="Markdown"
     )
@@ -150,12 +153,14 @@ async def show_moderator_panel(
     db_user: User,
     db: AsyncSession
 ):
+    texts = get_texts(db_user.language)
     kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🎫 Тикеты поддержки", callback_data="admin_tickets")],
-        [InlineKeyboardButton(text="⬅️ В главное меню", callback_data="back_to_menu")]
+        [InlineKeyboardButton(text=texts.t("ADMIN_SUPPORT_TICKETS", "🎫 Тикеты поддержки"), callback_data="admin_tickets")],
+        [InlineKeyboardButton(text=texts.t("BACK_TO_MAIN_MENU_BUTTON", "⬅️ В главное меню"), callback_data="back_to_menu")]
     ])
     await callback.message.edit_text(
-        "🧑‍⚖️ <b>Модерация поддержки</b>\n\nДоступ к тикетам поддержки.",
+        texts.t("ADMIN_SUPPORT_MODERATION_TITLE", "🧑‍⚖️ <b>Модерация поддержки</b>") + "\n\n" +
+        texts.t("ADMIN_SUPPORT_MODERATION_DESCRIPTION", "Доступ к тикетам поддержки."),
         parse_mode="HTML",
         reply_markup=kb
     )
@@ -169,6 +174,7 @@ async def show_support_audit(
     db_user: User,
     db: AsyncSession
 ):
+    texts = get_texts(db_user.language)
     # pagination
     page = 1
     if callback.data.startswith("admin_support_audit_page_"):
@@ -186,18 +192,22 @@ async def show_support_audit(
     offset = (page - 1) * per_page
     logs = await TicketCRUD.list_support_audit(db, limit=per_page, offset=offset)
 
-    lines = ["🧾 <b>Аудит модераторов</b>", ""]
+    lines = [texts.t("ADMIN_SUPPORT_AUDIT_TITLE", "🧾 <b>Аудит модераторов</b>"), ""]
     if not logs:
-        lines.append("Пока пусто")
+        lines.append(texts.t("ADMIN_SUPPORT_AUDIT_EMPTY", "Пока пусто"))
     else:
         for log in logs:
-            role = "Модератор" if getattr(log, 'is_moderator', False) else "Админ"
+            role = (
+                texts.t("ADMIN_SUPPORT_AUDIT_ROLE_MODERATOR", "Модератор")
+                if getattr(log, 'is_moderator', False)
+                else texts.t("ADMIN_SUPPORT_AUDIT_ROLE_ADMIN", "Админ")
+            )
             ts = log.created_at.strftime('%d.%m.%Y %H:%M') if getattr(log, 'created_at', None) else ''
             action_map = {
-                'close_ticket': 'Закрытие тикета',
-                'block_user_timed': 'Блокировка (время)',
-                'block_user_perm': 'Блокировка (навсегда)',
-                'unblock_user': 'Снятие блока',
+                'close_ticket': texts.t("ADMIN_SUPPORT_AUDIT_ACTION_CLOSE_TICKET", "Закрытие тикета"),
+                'block_user_timed': texts.t("ADMIN_SUPPORT_AUDIT_ACTION_BLOCK_TIMED", "Блокировка (время)"),
+                'block_user_perm': texts.t("ADMIN_SUPPORT_AUDIT_ACTION_BLOCK_PERM", "Блокировка (навсегда)"),
+                'unblock_user': texts.t("ADMIN_SUPPORT_AUDIT_ACTION_UNBLOCK", "Снятие блока"),
             }
             action_text = action_map.get(log.action, log.action)
             ticket_part = f" тикет #{log.ticket_id}" if log.ticket_id else ""
@@ -219,7 +229,7 @@ async def show_support_audit(
     kb_rows = []
     if nav_row:
         kb_rows.append(nav_row)
-    kb_rows.append([InlineKeyboardButton(text="⬅️ Назад", callback_data="admin_submenu_support")])
+    kb_rows.append([InlineKeyboardButton(text=texts.BACK, callback_data="admin_submenu_support")])
     kb = InlineKeyboardMarkup(inline_keyboard=kb_rows)
 
     await callback.message.edit_text("\n".join(lines), parse_mode="HTML", reply_markup=kb)
@@ -234,10 +244,10 @@ async def show_settings_submenu(
     db: AsyncSession
 ):
     texts = get_texts(db_user.language)
-    
+
     await callback.message.edit_text(
-        "⚙️ **Настройки системы**\n\n"
-        "Управление Remnawave, мониторингом и другими настройками:",
+        texts.t("ADMIN_SETTINGS_SUBMENU_TITLE", "⚙️ **Настройки системы**\n\n") +
+        texts.t("ADMIN_SETTINGS_SUBMENU_DESCRIPTION", "Управление Remnawave, мониторингом и другими настройками:"),
         reply_markup=get_admin_settings_submenu_keyboard(db_user.language),
         parse_mode="Markdown"
     )
@@ -252,10 +262,10 @@ async def show_system_submenu(
     db: AsyncSession
 ):
     texts = get_texts(db_user.language)
-    
+
     await callback.message.edit_text(
-        "🛠️ **Системные функции**\n\n"
-        "Отчеты, обновления, резервные копии и системные операции:",
+        texts.t("ADMIN_SYSTEM_SUBMENU_TITLE", "🛠️ **Системные функции**\n\n") +
+        texts.t("ADMIN_SYSTEM_SUBMENU_DESCRIPTION", "Отчеты, обновления, логи, резервные копии и системные операции:"),
         reply_markup=get_admin_system_submenu_keyboard(db_user.language),
         parse_mode="Markdown"
     )

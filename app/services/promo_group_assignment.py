@@ -2,13 +2,62 @@ import logging
 from datetime import datetime
 from typing import Optional
 
+from aiogram import Bot
+from aiogram.client.default import DefaultBotProperties
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import settings
 from app.database.crud.transaction import get_user_total_spent_kopeks
 from app.database.models import PromoGroup, User
+from app.services.admin_notification_service import AdminNotificationService
 
 logger = logging.getLogger(__name__)
+
+
+async def _notify_admins_about_auto_assignment(
+    db: AsyncSession,
+    user: User,
+    old_group: Optional[PromoGroup],
+    new_group: PromoGroup,
+    total_spent_kopeks: int,
+):
+    if not getattr(settings, "ADMIN_NOTIFICATIONS_ENABLED", False):
+        return
+
+    bot_token = getattr(settings, "BOT_TOKEN", None)
+    if not bot_token:
+        logger.debug("BOT_TOKEN не настроен — пропускаем уведомление о промогруппе")
+        return
+
+    bot = Bot(token=bot_token, default=DefaultBotProperties(parse_mode="HTML"))
+    try:
+        notification_service = AdminNotificationService(bot)
+        reason = (
+            f"Автоназначение за траты {settings.format_price(total_spent_kopeks)}"
+            if hasattr(settings, "format_price")
+            else f"Автоназначение за траты {total_spent_kopeks / 100:.2f}₽"
+        )
+        await notification_service.send_user_promo_group_change_notification(
+            db,
+            user,
+            old_group,
+            new_group,
+            reason=reason,
+            initiator=None,
+            automatic=True,
+        )
+    except Exception as exc:
+        logger.error(
+            "Ошибка отправки уведомления о автоназначении промогруппы пользователю %s: %s",
+            user.telegram_id,
+            exc,
+        )
+    finally:
+        try:
+            await bot.session.close()
+        except Exception:
+            pass
 
 
 async def _get_best_group_for_spending(
@@ -47,6 +96,14 @@ async def maybe_assign_promo_group_by_total_spent(
     if not user:
         logger.debug("Не удалось найти пользователя %s для автовыдачи промогруппы", user_id)
         return None
+
+    old_group = None
+    if user.promo_group_id:
+        try:
+            await db.refresh(user, attribute_names=["promo_group"])
+        except Exception:
+            pass
+        old_group = getattr(user, "promo_group", None)
 
     total_spent = await get_user_total_spent_kopeks(db, user_id)
     if total_spent <= 0:
@@ -111,6 +168,15 @@ async def maybe_assign_promo_group_by_total_spent(
 
         await db.commit()
         await db.refresh(user)
+
+        if target_group.id != previous_group_id:
+            await _notify_admins_about_auto_assignment(
+                db,
+                user,
+                old_group,
+                target_group,
+                total_spent,
+            )
 
         return target_group
     except Exception as exc:

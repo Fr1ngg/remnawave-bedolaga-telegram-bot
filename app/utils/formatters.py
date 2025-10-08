@@ -28,7 +28,7 @@ def format_date(dt: Union[datetime, str], format_str: str = "%d.%m.%Y") -> str:
     return dt.strftime(format_str)
 
 
-def format_time_ago(dt: Union[datetime, str]) -> str:
+def format_time_ago(dt: Union[datetime, str], language: str = "ru") -> str:
     if isinstance(dt, str):
         if dt == "now" or dt == "":
             dt = datetime.now()
@@ -40,32 +40,51 @@ def format_time_ago(dt: Union[datetime, str]) -> str:
     
     now = datetime.utcnow()
     diff = now - dt
-    
+
+    language_code = (language or "ru").split("-")[0].lower()
+
     if diff.days > 0:
         if diff.days == 1:
-            return "вчера"
-        elif diff.days < 7:
-            return f"{diff.days} дн. назад"
-        elif diff.days < 30:
-            weeks = diff.days // 7
-            return f"{weeks} нед. назад"
-        elif diff.days < 365:
-            months = diff.days // 30
-            return f"{months} мес. назад"
-        else:
-            years = diff.days // 365
-            return f"{years} г. назад"
-    
-    elif diff.seconds > 3600:
-        hours = diff.seconds // 3600
-        return f"{hours} ч. назад"
-    
-    elif diff.seconds > 60:
-        minutes = diff.seconds // 60
-        return f"{minutes} мин. назад"
-    
-    else:
-        return "только что"
+            return "yesterday" if language_code == "en" else "вчера"
+        if diff.days < 7:
+            value = diff.days
+            if language_code == "en":
+                suffix = "day" if value == 1 else "days"
+                return f"{value} {suffix} ago"
+            return f"{value} дн. назад"
+        if diff.days < 30:
+            value = diff.days // 7
+            if language_code == "en":
+                suffix = "week" if value == 1 else "weeks"
+                return f"{value} {suffix} ago"
+            return f"{value} нед. назад"
+        if diff.days < 365:
+            value = diff.days // 30
+            if language_code == "en":
+                suffix = "month" if value == 1 else "months"
+                return f"{value} {suffix} ago"
+            return f"{value} мес. назад"
+        value = diff.days // 365
+        if language_code == "en":
+            suffix = "year" if value == 1 else "years"
+            return f"{value} {suffix} ago"
+        return f"{value} г. назад"
+
+    if diff.seconds > 3600:
+        value = diff.seconds // 3600
+        if language_code == "en":
+            suffix = "hour" if value == 1 else "hours"
+            return f"{value} {suffix} ago"
+        return f"{value} ч. назад"
+
+    if diff.seconds > 60:
+        value = diff.seconds // 60
+        if language_code == "en":
+            suffix = "minute" if value == 1 else "minutes"
+            return f"{value} {suffix} ago"
+        return f"{value} мин. назад"
+
+    return "just now" if language_code == "en" else "только что"
 
 def format_days_declension(days: int, language: str = "ru") -> str:
     if language != "ru":

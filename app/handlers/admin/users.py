@@ -1,5 +1,6 @@
 import logging
 from datetime import datetime, timedelta
+from typing import Optional
 from aiogram import Dispatcher, types, F
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.fsm.context import FSMContext
@@ -20,12 +21,19 @@ from app.keyboards.admin import (
 )
 from app.localization.texts import get_texts
 from app.services.user_service import UserService
+from app.services.admin_notification_service import AdminNotificationService
 from app.database.crud.promo_group import get_promo_groups_with_counts
 from app.utils.decorators import admin_required, error_handler
 from app.utils.formatters import format_datetime, format_time_ago
 from app.services.remnawave_service import RemnaWaveService
 from app.external.remnawave_api import TrafficLimitStrategy
-from app.database.crud.server_squad import get_all_server_squads, get_server_squad_by_uuid, get_server_squad_by_id
+from app.database.crud.server_squad import (
+    get_all_server_squads,
+    get_server_squad_by_uuid,
+    get_server_squad_by_id,
+    get_server_ids_by_uuids,
+)
+from app.services.subscription_service import SubscriptionService
 
 logger = logging.getLogger(__name__)
 
@@ -72,7 +80,7 @@ async def show_users_filters(
     state: FSMContext
 ):
     
-    text = "⚙️ <b>Фильтры пользователей</b>\n\nВыберите фильтр для отображения пользователей:"
+    text = ("⚙️ <b>Фильтры пользователей</b>\n\nВыберите фильтр для отображения пользователей:\n")
     
     await callback.message.edit_text(
         text,
@@ -134,7 +142,7 @@ async def show_users_list(
         if user.balance_kopeks > 0:
             button_text += f" | 💰 {settings.format_price(user.balance_kopeks)}"
         
-        button_text += f" | 📅 {format_time_ago(user.created_at)}"
+        button_text += f" | 📅 {format_time_ago(user.created_at, db_user.language)}"
         
         if len(button_text) > 60:
             short_name = user.full_name
@@ -282,6 +290,464 @@ async def show_users_list_by_balance(
 
 @admin_required
 @error_handler
+async def show_users_list_by_traffic(
+    callback: types.CallbackQuery,
+    db_user: User,
+    db: AsyncSession,
+    state: FSMContext,
+    page: int = 1
+):
+    
+    await state.set_state(AdminStates.viewing_user_from_traffic_list)
+
+    user_service = UserService()
+    users_data = await user_service.get_users_page(
+        db, page=page, limit=10, order_by_traffic=True
+    )
+
+    if not users_data["users"]:
+        await callback.message.edit_text(
+            "📶 Пользователи с трафиком не найдены",
+            reply_markup=get_admin_users_keyboard(db_user.language)
+        )
+        await callback.answer()
+        return
+
+    text = f"👥 <b>Список пользователей по использованному трафику</b> (стр. {page}/{users_data['total_pages']})\n\n"
+    text += "Нажмите на пользователя для управления:"
+
+    keyboard = []
+
+    for user in users_data["users"]:
+        if user.status == UserStatus.ACTIVE.value:
+            status_emoji = "✅"
+        elif user.status == UserStatus.BLOCKED.value:
+            status_emoji = "🚫"
+        else:
+            status_emoji = "🗑️"
+
+        if user.subscription:
+            sub = user.subscription
+            if sub.is_trial:
+                subscription_emoji = "🎁"
+            elif sub.is_active:
+                subscription_emoji = "💎"
+            else:
+                subscription_emoji = "⏰"
+            used = sub.traffic_used_gb or 0.0
+            if sub.traffic_limit_gb and sub.traffic_limit_gb > 0:
+                limit_display = f"{sub.traffic_limit_gb}"
+            else:
+                limit_display = "♾️"
+            traffic_display = f"{used:.1f}/{limit_display} ГБ"
+        else:
+            subscription_emoji = "❌"
+            traffic_display = "нет подписки"
+
+        button_text = f"{status_emoji} {subscription_emoji} {user.full_name}"
+        button_text += f" | 📶 {traffic_display}"
+
+        if user.balance_kopeks > 0:
+            button_text += f" | 💰 {settings.format_price(user.balance_kopeks)}"
+
+        if len(button_text) > 60:
+            short_name = user.full_name
+            if len(short_name) > 20:
+                short_name = short_name[:17] + "..."
+            button_text = f"{status_emoji} {subscription_emoji} {short_name}"
+            button_text += f" | 📶 {traffic_display}"
+
+        keyboard.append([
+            types.InlineKeyboardButton(
+                text=button_text,
+                callback_data=f"admin_user_manage_{user.id}"
+            )
+        ])
+
+    if users_data["total_pages"] > 1:
+        pagination_row = get_admin_pagination_keyboard(
+            users_data["current_page"],
+            users_data["total_pages"],
+            "admin_users_traffic_list",
+            "admin_users",
+            db_user.language
+        ).inline_keyboard[0]
+        keyboard.append(pagination_row)
+
+    keyboard.extend([
+        [
+            types.InlineKeyboardButton(text="🔍 Поиск", callback_data="admin_users_search"),
+            types.InlineKeyboardButton(text="📊 Статистика", callback_data="admin_users_stats")
+        ],
+        [
+            types.InlineKeyboardButton(text="⬅️ Назад", callback_data="admin_users")
+        ]
+    ])
+
+    await callback.message.edit_text(
+        text,
+        reply_markup=types.InlineKeyboardMarkup(inline_keyboard=keyboard)
+    )
+    await callback.answer()
+
+
+@admin_required
+@error_handler
+async def show_users_list_by_last_activity(
+    callback: types.CallbackQuery,
+    db_user: User,
+    db: AsyncSession,
+    state: FSMContext,
+    page: int = 1
+):
+    
+    await state.set_state(AdminStates.viewing_user_from_last_activity_list)
+
+    user_service = UserService()
+    users_data = await user_service.get_users_page(
+        db,
+        page=page,
+        limit=10,
+        order_by_last_activity=True,
+    )
+
+    if not users_data["users"]:
+        await callback.message.edit_text(
+            "🕒 Пользователи с активностью не найдены",
+            reply_markup=get_admin_users_keyboard(db_user.language)
+        )
+        await callback.answer()
+        return
+
+    text = f"👥 <b>Пользователи по активности</b> (стр. {page}/{users_data['total_pages']})\n\n"
+    text += "Нажмите на пользователя для управления:"
+
+    keyboard = []
+
+    for user in users_data["users"]:
+        if user.status == UserStatus.ACTIVE.value:
+            status_emoji = "✅"
+        elif user.status == UserStatus.BLOCKED.value:
+            status_emoji = "🚫"
+        else:
+            status_emoji = "🗑️"
+
+        activity_display = (
+            format_time_ago(user.last_activity, db_user.language)
+            if user.last_activity
+            else "неизвестно"
+        )
+
+        subscription_emoji = "❌"
+        if user.subscription:
+            if user.subscription.is_trial:
+                subscription_emoji = "🎁"
+            elif user.subscription.is_active:
+                subscription_emoji = "💎"
+            else:
+                subscription_emoji = "⏰"
+
+        button_text = f"{status_emoji} {subscription_emoji} {user.full_name}"
+        button_text += f" | 🕒 {activity_display}"
+
+        keyboard.append([
+            types.InlineKeyboardButton(
+                text=button_text,
+                callback_data=f"admin_user_manage_{user.id}"
+            )
+        ])
+
+    if users_data["total_pages"] > 1:
+        pagination_row = get_admin_pagination_keyboard(
+            users_data["current_page"],
+            users_data["total_pages"],
+            "admin_users_activity_list",
+            "admin_users",
+            db_user.language
+        ).inline_keyboard[0]
+        keyboard.append(pagination_row)
+
+    keyboard.extend([
+        [
+            types.InlineKeyboardButton(text="🔍 Поиск", callback_data="admin_users_search"),
+            types.InlineKeyboardButton(text="📊 Статистика", callback_data="admin_users_stats")
+        ],
+        [
+            types.InlineKeyboardButton(text="⬅️ Назад", callback_data="admin_users")
+        ]
+    ])
+
+    await callback.message.edit_text(
+        text,
+        reply_markup=types.InlineKeyboardMarkup(inline_keyboard=keyboard)
+    )
+    await callback.answer()
+
+
+@admin_required
+@error_handler
+async def show_users_list_by_spending(
+    callback: types.CallbackQuery,
+    db_user: User,
+    db: AsyncSession,
+    state: FSMContext,
+    page: int = 1
+):
+    
+    await state.set_state(AdminStates.viewing_user_from_spending_list)
+
+    user_service = UserService()
+    users_data = await user_service.get_users_page(
+        db,
+        page=page,
+        limit=10,
+        order_by_total_spent=True,
+    )
+
+    users = users_data["users"]
+    if not users:
+        await callback.message.edit_text(
+            "💳 Пользователи с тратами не найдены",
+            reply_markup=get_admin_users_keyboard(db_user.language)
+        )
+        await callback.answer()
+        return
+
+    spending_map = await user_service.get_user_spending_stats_map(
+        db,
+        [user.id for user in users],
+    )
+
+    text = f"👥 <b>Пользователи по сумме трат</b> (стр. {page}/{users_data['total_pages']})\n\n"
+    text += "Нажмите на пользователя для управления:"
+
+    keyboard = []
+
+    for user in users:
+        stats = spending_map.get(
+            user.id,
+            {"total_spent": 0, "purchase_count": 0},
+        )
+        total_spent = stats.get("total_spent", 0)
+        purchases = stats.get("purchase_count", 0)
+
+        status_emoji = "✅" if user.status == UserStatus.ACTIVE.value else "🚫" if user.status == UserStatus.BLOCKED.value else "🗑️"
+
+        button_text = (
+            f"{status_emoji} {user.full_name}"
+            f" | 💳 {settings.format_price(total_spent)}"
+            f" | 🛒 {purchases}"
+        )
+
+        keyboard.append([
+            types.InlineKeyboardButton(
+                text=button_text,
+                callback_data=f"admin_user_manage_{user.id}"
+            )
+        ])
+
+    if users_data["total_pages"] > 1:
+        pagination_row = get_admin_pagination_keyboard(
+            users_data["current_page"],
+            users_data["total_pages"],
+            "admin_users_spending_list",
+            "admin_users",
+            db_user.language
+        ).inline_keyboard[0]
+        keyboard.append(pagination_row)
+
+    keyboard.extend([
+        [
+            types.InlineKeyboardButton(text="🔍 Поиск", callback_data="admin_users_search"),
+            types.InlineKeyboardButton(text="📊 Статистика", callback_data="admin_users_stats")
+        ],
+        [
+            types.InlineKeyboardButton(text="⬅️ Назад", callback_data="admin_users")
+        ]
+    ])
+
+    await callback.message.edit_text(
+        text,
+        reply_markup=types.InlineKeyboardMarkup(inline_keyboard=keyboard)
+    )
+    await callback.answer()
+
+
+@admin_required
+@error_handler
+async def show_users_list_by_purchases(
+    callback: types.CallbackQuery,
+    db_user: User,
+    db: AsyncSession,
+    state: FSMContext,
+    page: int = 1
+):
+    
+    await state.set_state(AdminStates.viewing_user_from_purchases_list)
+
+    user_service = UserService()
+    users_data = await user_service.get_users_page(
+        db,
+        page=page,
+        limit=10,
+        order_by_purchase_count=True,
+    )
+
+    users = users_data["users"]
+    if not users:
+        await callback.message.edit_text(
+            "🛒 Пользователи с покупками не найдены",
+            reply_markup=get_admin_users_keyboard(db_user.language)
+        )
+        await callback.answer()
+        return
+
+    spending_map = await user_service.get_user_spending_stats_map(
+        db,
+        [user.id for user in users],
+    )
+
+    text = f"👥 <b>Пользователи по количеству покупок</b> (стр. {page}/{users_data['total_pages']})\n\n"
+    text += "Нажмите на пользователя для управления:"
+
+    keyboard = []
+
+    for user in users:
+        stats = spending_map.get(
+            user.id,
+            {"total_spent": 0, "purchase_count": 0},
+        )
+        total_spent = stats.get("total_spent", 0)
+        purchases = stats.get("purchase_count", 0)
+
+        status_emoji = "✅" if user.status == UserStatus.ACTIVE.value else "🚫" if user.status == UserStatus.BLOCKED.value else "🗑️"
+
+        button_text = (
+            f"{status_emoji} {user.full_name}"
+            f" | 🛒 {purchases}"
+            f" | 💳 {settings.format_price(total_spent)}"
+        )
+
+        keyboard.append([
+            types.InlineKeyboardButton(
+                text=button_text,
+                callback_data=f"admin_user_manage_{user.id}"
+            )
+        ])
+
+    if users_data["total_pages"] > 1:
+        pagination_row = get_admin_pagination_keyboard(
+            users_data["current_page"],
+            users_data["total_pages"],
+            "admin_users_purchases_list",
+            "admin_users",
+            db_user.language
+        ).inline_keyboard[0]
+        keyboard.append(pagination_row)
+
+    keyboard.extend([
+        [
+            types.InlineKeyboardButton(text="🔍 Поиск", callback_data="admin_users_search"),
+            types.InlineKeyboardButton(text="📊 Статистика", callback_data="admin_users_stats")
+        ],
+        [
+            types.InlineKeyboardButton(text="⬅️ Назад", callback_data="admin_users")
+        ]
+    ])
+
+    await callback.message.edit_text(
+        text,
+        reply_markup=types.InlineKeyboardMarkup(inline_keyboard=keyboard)
+    )
+    await callback.answer()
+
+
+@admin_required
+@error_handler
+async def show_users_list_by_campaign(
+    callback: types.CallbackQuery,
+    db_user: User,
+    db: AsyncSession,
+    state: FSMContext,
+    page: int = 1
+):
+    
+    await state.set_state(AdminStates.viewing_user_from_campaign_list)
+
+    user_service = UserService()
+    users_data = await user_service.get_users_by_campaign_page(
+        db,
+        page=page,
+        limit=10,
+    )
+
+    users = users_data.get("users", [])
+    campaign_map = users_data.get("campaigns", {})
+
+    if not users:
+        await callback.message.edit_text(
+            "📢 Пользователи с кампанией не найдены",
+            reply_markup=get_admin_users_keyboard(db_user.language)
+        )
+        await callback.answer()
+        return
+
+    text = f"👥 <b>Пользователи по кампании регистрации</b> (стр. {page}/{users_data['total_pages']})\n\n"
+    text += "Нажмите на пользователя для управления:"
+
+    keyboard = []
+
+    for user in users:
+        info = campaign_map.get(user.id, {})
+        campaign_name = info.get("campaign_name") or "Без кампании"
+        registered_at = info.get("registered_at")
+        registered_display = format_datetime(registered_at) if registered_at else "неизвестно"
+
+        status_emoji = "✅" if user.status == UserStatus.ACTIVE.value else "🚫" if user.status == UserStatus.BLOCKED.value else "🗑️"
+
+        button_text = (
+            f"{status_emoji} {user.full_name}"
+            f" | 📢 {campaign_name}"
+            f" | 📅 {registered_display}"
+        )
+
+        keyboard.append([
+            types.InlineKeyboardButton(
+                text=button_text,
+                callback_data=f"admin_user_manage_{user.id}"
+            )
+        ])
+
+    if users_data["total_pages"] > 1:
+        pagination_row = get_admin_pagination_keyboard(
+            users_data["current_page"],
+            users_data["total_pages"],
+            "admin_users_campaign_list",
+            "admin_users",
+            db_user.language
+        ).inline_keyboard[0]
+        keyboard.append(pagination_row)
+
+    keyboard.extend([
+        [
+            types.InlineKeyboardButton(text="🔍 Поиск", callback_data="admin_users_search"),
+            types.InlineKeyboardButton(text="📊 Статистика", callback_data="admin_users_stats")
+        ],
+        [
+            types.InlineKeyboardButton(text="⬅️ Назад", callback_data="admin_users")
+        ]
+    ])
+
+    await callback.message.edit_text(
+        text,
+        reply_markup=types.InlineKeyboardMarkup(inline_keyboard=keyboard)
+    )
+    await callback.answer()
+
+
+
+@admin_required
+@error_handler
 async def handle_users_list_pagination_fixed(
     callback: types.CallbackQuery,
     db_user: User,
@@ -312,6 +778,91 @@ async def handle_users_balance_list_pagination(
     except (ValueError, IndexError) as e:
         logger.error(f"Ошибка парсинга номера страницы: {e}")
         await show_users_list_by_balance(callback, db_user, db, state, 1)
+
+
+@admin_required
+@error_handler
+async def handle_users_traffic_list_pagination(
+    callback: types.CallbackQuery,
+    db_user: User,
+    db: AsyncSession,
+    state: FSMContext
+):
+    try:
+        callback_parts = callback.data.split('_')
+        page = int(callback_parts[-1]) 
+        await show_users_list_by_traffic(callback, db_user, db, state, page)
+    except (ValueError, IndexError) as e:
+        logger.error(f"Ошибка парсинга номера страницы: {e}")
+        await show_users_list_by_traffic(callback, db_user, db, state, 1)
+
+
+@admin_required
+@error_handler
+async def handle_users_activity_list_pagination(
+    callback: types.CallbackQuery,
+    db_user: User,
+    db: AsyncSession,
+    state: FSMContext
+):
+    try:
+        callback_parts = callback.data.split('_')
+        page = int(callback_parts[-1]) 
+        await show_users_list_by_last_activity(callback, db_user, db, state, page)
+    except (ValueError, IndexError) as e:
+        logger.error(f"Ошибка парсинга номера страницы: {e}")
+        await show_users_list_by_last_activity(callback, db_user, db, state, 1)
+
+
+@admin_required
+@error_handler
+async def handle_users_spending_list_pagination(
+    callback: types.CallbackQuery,
+    db_user: User,
+    db: AsyncSession,
+    state: FSMContext
+):
+    try:
+        callback_parts = callback.data.split('_')
+        page = int(callback_parts[-1]) 
+        await show_users_list_by_spending(callback, db_user, db, state, page)
+    except (ValueError, IndexError) as e:
+        logger.error(f"Ошибка парсинга номера страницы: {e}")
+        await show_users_list_by_spending(callback, db_user, db, state, 1)
+
+
+@admin_required
+@error_handler
+async def handle_users_purchases_list_pagination(
+    callback: types.CallbackQuery,
+    db_user: User,
+    db: AsyncSession,
+    state: FSMContext
+):
+    try:
+        callback_parts = callback.data.split('_')
+        page = int(callback_parts[-1]) 
+        await show_users_list_by_purchases(callback, db_user, db, state, page)
+    except (ValueError, IndexError) as e:
+        logger.error(f"Ошибка парсинга номера страницы: {e}")
+        await show_users_list_by_purchases(callback, db_user, db, state, 1)
+
+
+@admin_required
+@error_handler
+async def handle_users_campaign_list_pagination(
+    callback: types.CallbackQuery,
+    db_user: User,
+    db: AsyncSession,
+    state: FSMContext
+):
+    try:
+        callback_parts = callback.data.split('_')
+        page = int(callback_parts[-1]) 
+        await show_users_list_by_campaign(callback, db_user, db, state, page)
+    except (ValueError, IndexError) as e:
+        logger.error(f"Ошибка парсинга номера страницы: {e}")
+        await show_users_list_by_campaign(callback, db_user, db, state, 1)
 
 
 @admin_required
@@ -348,32 +899,46 @@ async def show_users_statistics(
     user_service = UserService()
     stats = await user_service.get_user_statistics(db)
     
-    from sqlalchemy import select, func, and_
-    
-    with_sub_result = await db.execute(
-        select(func.count(User.id))
-        .join(Subscription)
+    from sqlalchemy import select, func, or_
+
+    current_time = datetime.utcnow()
+
+    active_subscription_query = (
+        select(func.count(Subscription.id))
+        .join(User, Subscription.user_id == User.id)
         .where(
-            and_(
-                User.status == UserStatus.ACTIVE.value,
-                Subscription.is_active == True
-            )
+            User.status == UserStatus.ACTIVE.value,
+            Subscription.status.in_(
+                [
+                    SubscriptionStatus.ACTIVE.value,
+                    SubscriptionStatus.TRIAL.value,
+                ]
+            ),
+            Subscription.end_date > current_time,
         )
     )
-    users_with_subscription = with_sub_result.scalar() or 0
-    
-    trial_result = await db.execute(
-        select(func.count(User.id))
-        .join(Subscription)
+    users_with_subscription = (
+        await db.execute(active_subscription_query)
+    ).scalar() or 0
+
+    trial_subscription_query = (
+        select(func.count(Subscription.id))
+        .join(User, Subscription.user_id == User.id)
         .where(
-            and_(
-                User.status == UserStatus.ACTIVE.value,
-                Subscription.is_trial == True,
-                Subscription.is_active == True
-            )
+            User.status == UserStatus.ACTIVE.value,
+            Subscription.end_date > current_time,
+            or_(
+                Subscription.status == SubscriptionStatus.TRIAL.value,
+                Subscription.is_trial.is_(True),
+            ),
         )
     )
-    trial_users = trial_result.scalar() or 0
+    trial_users = (await db.execute(trial_subscription_query)).scalar() or 0
+
+    users_without_subscription = max(
+        stats["active_users"] - users_with_subscription,
+        0,
+    )
     
     avg_balance_result = await db.execute(
         select(func.avg(User.balance_kopeks))
@@ -392,7 +957,7 @@ async def show_users_statistics(
 📱 <b>Подписки:</b>
 • С активной подпиской: {users_with_subscription}
 • На триале: {trial_users}
-• Без подписки: {stats['active_users'] - users_with_subscription}
+• Без подписки: {users_without_subscription}
 
 💰 <b>Финансы:</b>
 • Средний баланс: {settings.format_price(int(avg_balance))}
@@ -766,7 +1331,32 @@ async def show_user_management(
     state: FSMContext
 ):
     
-    user_id = int(callback.data.split('_')[-1])
+    # Поддерживаем переход "из тикета": admin_user_manage_{userId}_from_ticket_{ticketId}
+    parts = callback.data.split('_')
+    try:
+        user_id = int(parts[3])  # admin_user_manage_{userId}
+    except Exception:
+        user_id = int(callback.data.split('_')[-1])
+    origin_ticket_id = None
+    if "from" in parts and "ticket" in parts:
+        try:
+            origin_ticket_id = int(parts[-1])
+        except Exception:
+            origin_ticket_id = None
+    # Если пришли из тикета — запомним в состоянии, чтобы сохранять кнопку возврата
+    try:
+        if origin_ticket_id:
+            await state.update_data(origin_ticket_id=origin_ticket_id, origin_ticket_user_id=user_id)
+    except Exception:
+        pass
+    # Если не пришло в колбэке — попробуем достать из состояния
+    if origin_ticket_id is None:
+        try:
+            data_state = await state.get_data()
+            if data_state.get("origin_ticket_user_id") == user_id:
+                origin_ticket_id = data_state.get("origin_ticket_id")
+        except Exception:
+            pass
     
     # Проверяем, откуда пришел пользователь
     back_callback = "admin_users_list"
@@ -783,70 +1373,114 @@ async def show_user_management(
     
     user = profile["user"]
     subscription = profile["subscription"]
-    
-    if user.status == UserStatus.ACTIVE.value:
-        status_text = "✅ Активен"
-    elif user.status == UserStatus.BLOCKED.value:
-        status_text = "🚫 Заблокирован"
-    elif user.status == UserStatus.DELETED.value:
-        status_text = "🗑️ Удален"
-    else:
-        status_text = "❓ Неизвестно"
-    
-    text = f"""
-👤 <b>Управление пользователем</b>
 
-<b>Основная информация:</b>
-• Имя: {user.full_name}
-• ID: <code>{user.telegram_id}</code>
-• Username: @{user.username or 'не указан'}
-• Статус: {status_text}
-• Язык: {user.language}
+    texts = get_texts(db_user.language)
 
-<b>Финансы:</b>
-• Баланс: {settings.format_price(user.balance_kopeks)}
-• Транзакций: {profile['transactions_count']}
+    status_map = {
+        UserStatus.ACTIVE.value: texts.ADMIN_USER_STATUS_ACTIVE,
+        UserStatus.BLOCKED.value: texts.ADMIN_USER_STATUS_BLOCKED,
+        UserStatus.DELETED.value: texts.ADMIN_USER_STATUS_DELETED,
+    }
+    status_text = status_map.get(user.status, texts.ADMIN_USER_STATUS_UNKNOWN)
 
-<b>Активность:</b>
-• Регистрация: {format_datetime(user.created_at)}
-• Последняя активность: {format_time_ago(user.last_activity) if user.last_activity else 'Неизвестно'}
-• Дней с регистрации: {profile['registration_days']}
-"""
-    
+    username_display = (
+        f"@{user.username}" if user.username else texts.ADMIN_USER_USERNAME_NOT_SET
+    )
+    last_activity = (
+        format_time_ago(user.last_activity, db_user.language)
+        if user.last_activity
+        else texts.ADMIN_USER_LAST_ACTIVITY_UNKNOWN
+    )
+
+    sections = [
+        texts.ADMIN_USER_MANAGEMENT_PROFILE.format(
+            name=user.full_name,
+            telegram_id=user.telegram_id,
+            username=username_display,
+            status=status_text,
+            language=user.language,
+            balance=settings.format_price(user.balance_kopeks),
+            transactions=profile["transactions_count"],
+            registration=format_datetime(user.created_at),
+            last_activity=last_activity,
+            registration_days=profile["registration_days"],
+        )
+    ]
+
     if subscription:
-        text += f"""
-<b>Подписка:</b>
-• Тип: {'🎁 Триал' if subscription.is_trial else '💎 Платная'}
-• Статус: {'✅ Активна' if subscription.is_active else '❌ Неактивна'}
-• До: {format_datetime(subscription.end_date)}
-• Трафик: {subscription.traffic_used_gb:.1f}/{subscription.traffic_limit_gb} ГБ
-• Устройства: {subscription.device_limit}
-• Стран: {len(subscription.connected_squads)}
-"""
+        subscription_type = (
+            texts.ADMIN_USER_SUBSCRIPTION_TYPE_TRIAL
+            if subscription.is_trial
+            else texts.ADMIN_USER_SUBSCRIPTION_TYPE_PAID
+        )
+        subscription_status = (
+            texts.ADMIN_USER_SUBSCRIPTION_STATUS_ACTIVE
+            if subscription.is_active
+            else texts.ADMIN_USER_SUBSCRIPTION_STATUS_INACTIVE
+        )
+        traffic_usage = texts.ADMIN_USER_TRAFFIC_USAGE.format(
+            used=f"{subscription.traffic_used_gb:.1f}",
+            limit=subscription.traffic_limit_gb,
+        )
+        sections.append(
+            texts.ADMIN_USER_MANAGEMENT_SUBSCRIPTION.format(
+                type=subscription_type,
+                status=subscription_status,
+                end_date=format_datetime(subscription.end_date),
+                traffic=traffic_usage,
+                devices=subscription.device_limit,
+                countries=len(subscription.connected_squads),
+            )
+        )
     else:
-        text += "\n<b>Подписка:</b> Отсутствует"
+        sections.append(texts.ADMIN_USER_MANAGEMENT_SUBSCRIPTION_NONE)
 
     if user.promo_group:
         promo_group = user.promo_group
-        text += f"""
-
-<b>Промогруппа:</b>
-• Название: {promo_group.name}
-• Скидка на сервера: {promo_group.server_discount_percent}%
-• Скидка на трафик: {promo_group.traffic_discount_percent}%
-• Скидка на устройства: {promo_group.device_discount_percent}%
-"""
+        sections.append(
+            texts.ADMIN_USER_MANAGEMENT_PROMO_GROUP.format(
+                name=promo_group.name,
+                server_discount=promo_group.server_discount_percent,
+                traffic_discount=promo_group.traffic_discount_percent,
+                device_discount=promo_group.device_discount_percent,
+            )
+        )
     else:
-        text += "\n<b>Промогруппа:</b> Не назначена"
+        sections.append(texts.ADMIN_USER_MANAGEMENT_PROMO_GROUP_NONE)
+
+    text = "\n\n".join(sections)
 
     # Проверяем состояние, чтобы определить, откуда пришел пользователь
     current_state = await state.get_state()
     if current_state == AdminStates.viewing_user_from_balance_list:
         back_callback = "admin_users_balance_filter"
+    elif current_state == AdminStates.viewing_user_from_traffic_list:
+        back_callback = "admin_users_traffic_filter"
+    elif current_state == AdminStates.viewing_user_from_last_activity_list:
+        back_callback = "admin_users_activity_filter"
+    elif current_state == AdminStates.viewing_user_from_spending_list:
+        back_callback = "admin_users_spending_filter"
+    elif current_state == AdminStates.viewing_user_from_purchases_list:
+        back_callback = "admin_users_purchases_filter"
+    elif current_state == AdminStates.viewing_user_from_campaign_list:
+        back_callback = "admin_users_campaign_filter"
     
+    # Базовая клавиатура профиля
+    kb = get_user_management_keyboard(user.id, user.status, db_user.language, back_callback)
+    # Если пришли из тикета — добавим в начало кнопку возврата к тикету
+    try:
+        if origin_ticket_id:
+            back_to_ticket_btn = types.InlineKeyboardButton(
+                text="🎫 Вернуться к тикету",
+                callback_data=f"admin_view_ticket_{origin_ticket_id}"
+            )
+            kb.inline_keyboard.insert(0, [back_to_ticket_btn])
+    except Exception:
+        pass
+
     await callback.message.edit_text(
         text,
-        reply_markup=get_user_management_keyboard(user.id, user.status, db_user.language, back_callback)
+        reply_markup=kb
     )
     await callback.answer()
 
@@ -941,7 +1575,7 @@ async def set_user_promo_group(
         return
 
     user_service = UserService()
-    success, updated_user, new_group = await user_service.update_user_promo_group(
+    success, updated_user, new_group, old_group = await user_service.update_user_promo_group(
         db,
         user_id,
         group_id
@@ -958,6 +1592,27 @@ async def set_user_promo_group(
         texts.ADMIN_USER_PROMO_GROUP_UPDATED.format(name=new_group.name),
         show_alert=True
     )
+
+    try:
+        notification_service = AdminNotificationService(callback.bot)
+        reason = (
+            f"Назначено администратором {db_user.full_name} (ID: {db_user.telegram_id})"
+        )
+        await notification_service.send_user_promo_group_change_notification(
+            db,
+            updated_user,
+            old_group,
+            new_group,
+            reason=reason,
+            initiator=db_user,
+            automatic=False,
+        )
+    except Exception as notify_error:
+        logger.error(
+            "Ошибка отправки уведомления о смене промогруппы пользователя %s: %s",
+            updated_user.telegram_id,
+            notify_error,
+        )
 
 
 
@@ -1129,7 +1784,12 @@ async def show_inactive_users(
     for user in inactive_users[:10]: 
         text += f"👤 {user.full_name}\n"
         text += f"🆔 <code>{user.telegram_id}</code>\n"
-        text += f"📅 {format_time_ago(user.last_activity) if user.last_activity else 'Никогда'}\n\n"
+        last_activity_display = (
+            format_time_ago(user.last_activity, db_user.language)
+            if user.last_activity
+            else "Никогда"
+        )
+        text += f"📅 {last_activity_display}\n\n"
     
     if len(inactive_users) > 10:
         text += f"... и еще {len(inactive_users) - 10} пользователей"
@@ -1420,11 +2080,16 @@ async def extend_user_subscription(
     
     await callback.message.edit_text(
         "⏰ <b>Продление подписки</b>\n\n"
-        "Введите количество дней для продления:\n"
-        "• Например: 30, 7, 90\n"
-        "• Максимум: 365 дней\n\n"
+        "Введите количество дней для изменения:\n"
+        "• Положительные значения продлят подписку\n"
+        "• Отрицательные сократят срок подписки\n"
+        "• Диапазон: от -365 до 365 дней (0 недопустимо)\n\n"
         "Или нажмите /cancel для отмены",
         reply_markup=types.InlineKeyboardMarkup(inline_keyboard=[
+            [
+                types.InlineKeyboardButton(text="-7 дней", callback_data=f"admin_sub_extend_days_{user_id}_-7"),
+                types.InlineKeyboardButton(text="-30 дней", callback_data=f"admin_sub_extend_days_{user_id}_-30")
+            ],
             [
                 types.InlineKeyboardButton(text="7 дней", callback_data=f"admin_sub_extend_days_{user_id}_7"),
                 types.InlineKeyboardButton(text="30 дней", callback_data=f"admin_sub_extend_days_{user_id}_30")
@@ -1454,11 +2119,19 @@ async def process_subscription_extension_days(
     user_id = int(parts[-2])
     days = int(parts[-1])
     
+    if days == 0 or days < -365 or days > 365:
+        await callback.answer("❌ Количество дней должно быть от -365 до 365, исключая 0", show_alert=True)
+        return
+
     success = await _extend_subscription_by_days(db, user_id, days, db_user.id)
-    
+
     if success:
+        if days > 0:
+            action_text = f"продлена на {days} дней"
+        else:
+            action_text = f"уменьшена на {abs(days)} дней"
         await callback.message.edit_text(
-            f"✅ Подписка пользователя продлена на {days} дней",
+            f"✅ Подписка пользователя {action_text}",
             reply_markup=types.InlineKeyboardMarkup(inline_keyboard=[
                 [types.InlineKeyboardButton(text="📱 К подписке", callback_data=f"admin_user_subscription_{user_id}")]
             ])
@@ -1493,15 +2166,19 @@ async def process_subscription_extension_text(
     try:
         days = int(message.text.strip())
         
-        if days <= 0 or days > 365:
-            await message.answer("❌ Количество дней должно быть от 1 до 365")
+        if days == 0 or days < -365 or days > 365:
+            await message.answer("❌ Количество дней должно быть от -365 до 365, исключая 0")
             return
-        
+
         success = await _extend_subscription_by_days(db, user_id, days, db_user.id)
-        
+
         if success:
+            if days > 0:
+                action_text = f"продлена на {days} дней"
+            else:
+                action_text = f"уменьшена на {abs(days)} дней"
             await message.answer(
-                f"✅ Подписка пользователя продлена на {days} дней",
+                f"✅ Подписка пользователя {action_text}",
                 reply_markup=types.InlineKeyboardMarkup(inline_keyboard=[
                     [types.InlineKeyboardButton(text="📱 К подписке", callback_data=f"admin_user_subscription_{user_id}")]
                 ])
@@ -2455,9 +3132,12 @@ async def _extend_subscription_by_days(db: AsyncSession, user_id: int, days: int
         subscription_service = SubscriptionService()
         await subscription_service.update_remnawave_user(db, subscription)
         
-        logger.info(f"Админ {admin_id} продлил подписку пользователя {user_id} на {days} дней")
+        if days > 0:
+            logger.info(f"Админ {admin_id} продлил подписку пользователя {user_id} на {days} дней")
+        else:
+            logger.info(f"Админ {admin_id} сократил подписку пользователя {user_id} на {abs(days)} дней")
         return True
-        
+
     except Exception as e:
         logger.error(f"Ошибка продления подписки: {e}")
         return False
@@ -2580,13 +3260,34 @@ async def _grant_paid_subscription(db: AsyncSession, user_id: int, days: int, ad
             logger.error(f"У пользователя {user_id} уже есть подписка")
             return False
         
+        trial_squads: list[str] = []
+
+        try:
+            from app.database.crud.server_squad import get_random_trial_squad_uuid
+
+            trial_uuid = await get_random_trial_squad_uuid(
+                db,
+                getattr(settings, "TRIAL_SQUAD_UUID", None),
+            )
+            if trial_uuid:
+                trial_squads = [trial_uuid]
+        except Exception as error:
+            logger.error(
+                "Не удалось подобрать сквад при выдаче подписки админом %s: %s",
+                admin_id,
+                error,
+            )
+            if getattr(settings, "TRIAL_SQUAD_UUID", None):
+                trial_squads = [settings.TRIAL_SQUAD_UUID]
+
         subscription = await create_paid_subscription(
             db=db,
             user_id=user_id,
             duration_days=days,
             traffic_limit_gb=settings.DEFAULT_TRAFFIC_LIMIT_GB,
             device_limit=settings.DEFAULT_DEVICE_LIMIT,
-            connected_squads=[settings.TRIAL_SQUAD_UUID] if settings.TRIAL_SQUAD_UUID else []
+            connected_squads=trial_squads,
+            update_server_counters=True,
         )
         
         subscription_service = SubscriptionService()
@@ -2598,6 +3299,56 @@ async def _grant_paid_subscription(db: AsyncSession, user_id: int, days: int, ad
     except Exception as e:
         logger.error(f"Ошибка выдачи платной подписки: {e}")
         return False
+
+
+async def _calculate_subscription_period_price(
+    db: AsyncSession,
+    target_user: User,
+    subscription: Subscription,
+    period_days: int,
+    subscription_service: Optional[SubscriptionService] = None,
+) -> int:
+    """Рассчитывает стоимость подписки для администратора с учётом всех параметров."""
+
+    service = subscription_service or SubscriptionService()
+
+    connected_squads = list(subscription.connected_squads or [])
+    server_ids = []
+
+    if connected_squads:
+        try:
+            server_ids = await get_server_ids_by_uuids(db, connected_squads)
+            if len(server_ids) != len(connected_squads):
+                logger.warning(
+                    "Не удалось сопоставить все сервера подписки пользователя %s для расчёта цены",
+                    target_user.telegram_id,
+                )
+        except Exception as e:
+            logger.error(
+                "Не удалось получить идентификаторы серверов для расчёта цены подписки пользователя %s: %s",
+                target_user.telegram_id,
+                e,
+            )
+            server_ids = []
+    traffic_limit_gb = subscription.traffic_limit_gb
+    if traffic_limit_gb is None:
+        traffic_limit_gb = settings.DEFAULT_TRAFFIC_LIMIT_GB
+
+    device_limit = subscription.device_limit
+    if not device_limit or device_limit < 0:
+        device_limit = settings.DEFAULT_DEVICE_LIMIT
+
+    total_price, _ = await service.calculate_subscription_price(
+        period_days=period_days,
+        traffic_gb=traffic_limit_gb,
+        server_squad_ids=server_ids,
+        devices=device_limit,
+        db=db,
+        user=target_user,
+        promo_group=target_user.promo_group,
+    )
+
+    return total_price
 
 @admin_required
 @error_handler
@@ -2697,30 +3448,55 @@ async def admin_buy_subscription(
         return
     
     available_periods = settings.get_available_subscription_periods()
-    
+
+    subscription_service = SubscriptionService()
     period_buttons = []
+
     for period in available_periods:
-        price_attr = f"PRICE_{period}_DAYS"
-        if hasattr(settings, price_attr):
-            price_kopeks = getattr(settings, price_attr)
-            price_rubles = price_kopeks // 100
-            period_buttons.append([
-                types.InlineKeyboardButton(
-                    text=f"{period} дней ({price_rubles} ₽)",
-                    callback_data=f"admin_buy_sub_confirm_{user_id}_{period}_{price_kopeks}"
-                )
-            ])
-    
+        try:
+            price_kopeks = await _calculate_subscription_period_price(
+                db,
+                target_user,
+                subscription,
+                period,
+                subscription_service=subscription_service,
+            )
+        except Exception as e:
+            logger.error(
+                "Ошибка расчёта стоимости подписки для пользователя %s и периода %s дней: %s",
+                target_user.telegram_id,
+                period,
+                e,
+            )
+            continue
+
+        period_buttons.append([
+            types.InlineKeyboardButton(
+                text=f"{period} дней ({settings.format_price(price_kopeks)})",
+                callback_data=f"admin_buy_sub_confirm_{user_id}_{period}_{price_kopeks}"
+            )
+        ])
+
+    if not period_buttons:
+        await callback.answer("❌ Не удалось рассчитать стоимость подписки", show_alert=True)
+        return
+
     period_buttons.append([
         types.InlineKeyboardButton(
             text="❌ Отмена",
             callback_data=f"admin_user_subscription_{user_id}"
         )
     ])
-    
+
     text = f"💳 <b>Покупка подписки для пользователя</b>\n\n"
     text += f"👤 {target_user.full_name} (ID: {target_user.telegram_id})\n"
     text += f"💰 Баланс пользователя: {settings.format_price(target_user.balance_kopeks)}\n\n"
+    traffic_text = "Безлимит" if (subscription.traffic_limit_gb or 0) <= 0 else f"{subscription.traffic_limit_gb} ГБ"
+    devices_limit = subscription.device_limit or settings.DEFAULT_DEVICE_LIMIT
+    servers_count = len(subscription.connected_squads or [])
+    text += f"📶 Трафик: {traffic_text}\n"
+    text += f"📱 Устройства: {devices_limit}\n"
+    text += f"🌐 Серверов: {servers_count}\n\n"
     text += "Выберите период подписки:\n"
     
     await callback.message.edit_text(
@@ -2740,7 +3516,7 @@ async def admin_buy_subscription_confirm(
     parts = callback.data.split('_')
     user_id = int(parts[4])
     period_days = int(parts[5])
-    price_kopeks = int(parts[6])
+    price_kopeks_from_callback = int(parts[6]) if len(parts) > 6 else None
     
     user_service = UserService()
     profile = await user_service.get_user_profile(db, user_id)
@@ -2751,7 +3527,38 @@ async def admin_buy_subscription_confirm(
     
     target_user = profile["user"]
     subscription = profile["subscription"]
-    
+
+    if not subscription:
+        await callback.answer("❌ У пользователя нет подписки", show_alert=True)
+        return
+
+    subscription_service = SubscriptionService()
+
+    try:
+        price_kopeks = await _calculate_subscription_period_price(
+            db,
+            target_user,
+            subscription,
+            period_days,
+            subscription_service=subscription_service,
+        )
+    except Exception as e:
+        logger.error(
+            "Ошибка расчёта стоимости подписки при подтверждении админом для пользователя %s: %s",
+            target_user.telegram_id,
+            e,
+        )
+        await callback.answer("❌ Не удалось рассчитать стоимость подписки", show_alert=True)
+        return
+
+    if price_kopeks_from_callback is not None and price_kopeks_from_callback != price_kopeks:
+        logger.info(
+            "Стоимость подписки для пользователя %s изменилась с %s до %s при подтверждении",
+            target_user.telegram_id,
+            price_kopeks_from_callback,
+            price_kopeks,
+        )
+
     if target_user.balance_kopeks < price_kopeks:
         missing_kopeks = price_kopeks - target_user.balance_kopeks
         await callback.message.edit_text(
@@ -2770,12 +3577,17 @@ async def admin_buy_subscription_confirm(
         await callback.answer()
         return
     
-    price_rubles = price_kopeks // 100
     text = f"💳 <b>Подтверждение покупки подписки</b>\n\n"
     text += f"👤 {target_user.full_name} (ID: {target_user.telegram_id})\n"
     text += f"📅 Период подписки: {period_days} дней\n"
     text += f"💰 Стоимость: {settings.format_price(price_kopeks)}\n"
     text += f"💰 Баланс пользователя: {settings.format_price(target_user.balance_kopeks)}\n\n"
+    traffic_text = "Безлимит" if (subscription.traffic_limit_gb or 0) <= 0 else f"{subscription.traffic_limit_gb} ГБ"
+    devices_limit = subscription.device_limit or settings.DEFAULT_DEVICE_LIMIT
+    servers_count = len(subscription.connected_squads or [])
+    text += f"📶 Трафик: {traffic_text}\n"
+    text += f"📱 Устройства: {devices_limit}\n"
+    text += f"🌐 Серверов: {servers_count}\n\n"
     text += "Вы уверены, что хотите купить подписку для этого пользователя?"
     
     keyboard = [
@@ -2810,7 +3622,7 @@ async def admin_buy_subscription_execute(
     parts = callback.data.split('_')
     user_id = int(parts[4])
     period_days = int(parts[5])
-    price_kopeks = int(parts[6])
+    price_kopeks_from_callback = int(parts[6]) if len(parts) > 6 else None
     
     user_service = UserService()
     profile = await user_service.get_user_profile(db, user_id)
@@ -2821,7 +3633,38 @@ async def admin_buy_subscription_execute(
     
     target_user = profile["user"]
     subscription = profile["subscription"]
-    
+
+    if not subscription:
+        await callback.answer("❌ У пользователя нет подписки", show_alert=True)
+        return
+
+    subscription_service = SubscriptionService()
+
+    try:
+        price_kopeks = await _calculate_subscription_period_price(
+            db,
+            target_user,
+            subscription,
+            period_days,
+            subscription_service=subscription_service,
+        )
+    except Exception as e:
+        logger.error(
+            "Ошибка расчёта стоимости подписки при списании средств админом для пользователя %s: %s",
+            target_user.telegram_id,
+            e,
+        )
+        await callback.answer("❌ Не удалось рассчитать стоимость подписки", show_alert=True)
+        return
+
+    if price_kopeks_from_callback is not None and price_kopeks_from_callback != price_kopeks:
+        logger.info(
+            "Стоимость подписки для пользователя %s изменилась с %s до %s перед списанием",
+            target_user.telegram_id,
+            price_kopeks_from_callback,
+            price_kopeks,
+        )
+
     if target_user.balance_kopeks < price_kopeks:
         await callback.answer("❌ Недостаточно средств на балансе пользователя", show_alert=True)
         return
@@ -2839,16 +3682,31 @@ async def admin_buy_subscription_execute(
         
         if subscription:
             current_time = datetime.utcnow()
-            
+            bonus_period = timedelta()
+
+            if (
+                subscription.is_trial
+                and settings.TRIAL_ADD_REMAINING_DAYS_TO_PAID
+                and subscription.end_date
+            ):
+                remaining_trial_delta = subscription.end_date - current_time
+                if remaining_trial_delta.total_seconds() > 0:
+                    bonus_period = remaining_trial_delta
+                    logger.info(
+                        "Админ продлевает подписку: добавляем оставшееся время триала (%s) пользователю %s",
+                        bonus_period,
+                        target_user.telegram_id,
+                    )
+
             if subscription.end_date <= current_time:
                 subscription.start_date = current_time
-                
-            subscription.end_date = current_time + timedelta(days=period_days)
+
+            subscription.end_date = current_time + timedelta(days=period_days) + bonus_period
             subscription.status = SubscriptionStatus.ACTIVE.value
             subscription.updated_at = current_time
-            
+
             if subscription.is_trial or not subscription.is_active:
-                subscription.is_trial = False  
+                subscription.is_trial = False
                 if subscription.traffic_limit_gb != 0: 
                     subscription.traffic_limit_gb = 0
                 subscription.device_limit = settings.DEFAULT_DEVICE_LIMIT
@@ -3103,6 +3961,31 @@ def register_handlers(dp: Dispatcher):
     )
     
     dp.callback_query.register(
+        handle_users_traffic_list_pagination,
+        F.data.startswith("admin_users_traffic_list_page_")
+    )
+
+    dp.callback_query.register(
+        handle_users_activity_list_pagination,
+        F.data.startswith("admin_users_activity_list_page_")
+    )
+
+    dp.callback_query.register(
+        handle_users_spending_list_pagination,
+        F.data.startswith("admin_users_spending_list_page_")
+    )
+
+    dp.callback_query.register(
+        handle_users_purchases_list_pagination,
+        F.data.startswith("admin_users_purchases_list_page_")
+    )
+
+    dp.callback_query.register(
+        handle_users_campaign_list_pagination,
+        F.data.startswith("admin_users_campaign_list_page_")
+    )
+    
+    dp.callback_query.register(
         start_user_search,
         F.data == "admin_users_search"
     )
@@ -3307,9 +4190,27 @@ def register_handlers(dp: Dispatcher):
     )
     
     dp.callback_query.register(
-        show_users_list_by_balance,
-        F.data.startswith("admin_users_balance_list_page_")
+        show_users_list_by_traffic,
+        F.data == "admin_users_traffic_filter"
     )
 
+    dp.callback_query.register(
+        show_users_list_by_last_activity,
+        F.data == "admin_users_activity_filter"
+    )
 
+    dp.callback_query.register(
+        show_users_list_by_spending,
+        F.data == "admin_users_spending_filter"
+    )
 
+    dp.callback_query.register(
+        show_users_list_by_purchases,
+        F.data == "admin_users_purchases_filter"
+    )
+
+    dp.callback_query.register(
+        show_users_list_by_campaign,
+        F.data == "admin_users_campaign_filter"
+    )
+    

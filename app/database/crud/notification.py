@@ -50,3 +50,17 @@ async def clear_notifications(db: AsyncSession, subscription_id: int) -> None:
         )
     )
     await db.commit()
+
+
+async def clear_notification_by_type(
+    db: AsyncSession,
+    subscription_id: int,
+    notification_type: str,
+) -> None:
+    await db.execute(
+        delete(SentNotification).where(
+            SentNotification.subscription_id == subscription_id,
+            SentNotification.notification_type == notification_type,
+        )
+    )
+    await db.commit()

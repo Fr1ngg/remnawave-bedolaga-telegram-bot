@@ -10,7 +10,7 @@ from app.database.models import Base
 logger = logging.getLogger(__name__)
 
 engine = create_async_engine(
-    settings.DATABASE_URL,
+    settings.get_database_url(),
     poolclass=NullPool,
     echo=settings.DEBUG,
     future=True

@@ -143,6 +143,23 @@ def sanitize_html(text: str) -> str:
     return text
 
 
+def sanitize_telegram_name(name: Optional[str]) -> Optional[str]:
+    """Санитизация Telegram-имени для безопасной вставки в HTML и хранения.
+    Заменяет угловые скобки и амперсанд на безопасные визуальные аналоги.
+    """
+    if not name:
+        return name
+    try:
+        return (
+            name.replace('<', '‹')
+                .replace('>', '›')
+                .replace('&', '＆')
+                .strip()
+        )
+    except Exception:
+        return name
+
+
 def validate_device_count(count: Union[str, int]) -> Optional[int]:
     try:
         count_int = int(count)

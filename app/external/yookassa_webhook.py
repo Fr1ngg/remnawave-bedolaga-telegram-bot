@@ -218,15 +218,24 @@ async def start_yookassa_webhook_server(payment_service: PaymentService) -> None
         await runner.setup()
         
         site = web.TCPSite(
-            runner, 
-            host='0.0.0.0',  
+            runner,
+            host=settings.YOOKASSA_WEBHOOK_HOST,
             port=settings.YOOKASSA_WEBHOOK_PORT
         )
         
         await site.start()
         
-        logger.info(f"✅ YooKassa webhook сервер запущен на порту {settings.YOOKASSA_WEBHOOK_PORT}")
-        logger.info(f"🎯 YooKassa webhook URL: http://0.0.0.0:{settings.YOOKASSA_WEBHOOK_PORT}{settings.YOOKASSA_WEBHOOK_PATH}")
+        logger.info(
+            "✅ YooKassa webhook сервер запущен на %s:%s",
+            settings.YOOKASSA_WEBHOOK_HOST,
+            settings.YOOKASSA_WEBHOOK_PORT,
+        )
+        logger.info(
+            "🎯 YooKassa webhook URL: http://%s:%s%s",
+            settings.YOOKASSA_WEBHOOK_HOST,
+            settings.YOOKASSA_WEBHOOK_PORT,
+            settings.YOOKASSA_WEBHOOK_PATH,
+        )
         
         try:
             while True:

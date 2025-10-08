@@ -872,9 +872,55 @@ class PaymentService:
             logger.error("Pal24 не вернул bill_id: %s", response)
             return None
 
-        link_url = response.get("link_url")
-        link_page_url = response.get("link_page_url")
-        primary_link = link_page_url or link_url
+        def _pick_url(*keys: str) -> Optional[str]:
+            for key in keys:
+                value = response.get(key)
+                if value:
+                    return str(value)
+            return None
+
+        transfer_url = _pick_url(
+            "transfer_url",
+            "transferUrl",
+            "transfer_link",
+            "transferLink",
+            "transfer",
+            "sbp_url",
+            "sbpUrl",
+            "sbp_link",
+            "sbpLink",
+        )
+        card_url = _pick_url(
+            "link_url",
+            "linkUrl",
+            "link",
+            "card_url",
+            "cardUrl",
+            "card_link",
+            "cardLink",
+            "payment_url",
+            "paymentUrl",
+            "url",
+        )
+        link_page_url = _pick_url(
+            "link_page_url",
+            "linkPageUrl",
+            "page_url",
+            "pageUrl",
+        )
+
+        primary_link = transfer_url or link_page_url or card_url
+        secondary_link = link_page_url or card_url or transfer_url
+
+        metadata_links = {
+            key: value
+            for key, value in {
+                "sbp": transfer_url,
+                "card": card_url,
+                "page": link_page_url,
+            }.items()
+            if value
+        }
 
         payment = await create_pal24_payment(
             db,
@@ -887,11 +933,12 @@ class PaymentService:
             type_=response.get("type", "normal"),
             currency=response.get("currency", "RUB"),
             link_url=primary_link,
-            link_page_url=link_page_url or link_url,
+            link_page_url=secondary_link,
             ttl=ttl_seconds,
             metadata={
                 "raw_response": response,
                 "language": language,
+                **({"links": metadata_links} if metadata_links else {}),
             },
         )
 
@@ -899,9 +946,12 @@ class PaymentService:
             "bill_id": bill_id,
             "order_id": order_id,
             "link_url": primary_link,
-            "link_page_url": link_page_url or link_url,
+            "link_page_url": secondary_link,
             "local_payment_id": payment.id,
             "amount_kopeks": amount_kopeks,
+            "sbp_url": transfer_url or primary_link,
+            "card_url": card_url,
+            "transfer_url": transfer_url,
         }
 
         logger.info(
