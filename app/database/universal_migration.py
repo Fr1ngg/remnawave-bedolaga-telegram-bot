@@ -2607,66 +2607,6 @@ async def create_web_api_tokens_table() -> bool:
         return False
 
 
-async def create_external_admin_api_keys_table() -> bool:
-    table_exists = await check_table_exists("external_admin_api_keys")
-    if table_exists:
-        logger.info("ℹ️ Таблица external_admin_api_keys уже существует")
-        return True
-
-    try:
-        async with engine.begin() as conn:
-            db_type = await get_database_type()
-
-            if db_type == "sqlite":
-                create_sql = """
-                CREATE TABLE external_admin_api_keys (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    creator_user_id INTEGER NOT NULL,
-                    target_telegram_id BIGINT NOT NULL,
-                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
-                    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
-                    UNIQUE (creator_user_id, target_telegram_id),
-                    FOREIGN KEY (creator_user_id) REFERENCES users(id) ON DELETE CASCADE
-                );
-                CREATE INDEX idx_external_admin_api_keys_target ON external_admin_api_keys(target_telegram_id);
-                """
-            elif db_type == "postgresql":
-                create_sql = """
-                CREATE TABLE external_admin_api_keys (
-                    id SERIAL PRIMARY KEY,
-                    creator_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-                    target_telegram_id BIGINT NOT NULL,
-                    created_at TIMESTAMP DEFAULT NOW() NOT NULL,
-                    updated_at TIMESTAMP DEFAULT NOW() NOT NULL,
-                    UNIQUE (creator_user_id, target_telegram_id)
-                );
-                CREATE INDEX idx_external_admin_api_keys_target ON external_admin_api_keys(target_telegram_id);
-                """
-            else:
-                create_sql = """
-                CREATE TABLE external_admin_api_keys (
-                    id INT AUTO_INCREMENT PRIMARY KEY,
-                    creator_user_id INT NOT NULL,
-                    target_telegram_id BIGINT NOT NULL,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
-                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP NOT NULL,
-                    UNIQUE KEY uq_external_admin_api_keys_creator_target (creator_user_id, target_telegram_id),
-                    CONSTRAINT fk_external_admin_api_keys_creator FOREIGN KEY (creator_user_id) REFERENCES users(id) ON DELETE CASCADE
-                ) ENGINE=InnoDB;
-                CREATE INDEX idx_external_admin_api_keys_target ON external_admin_api_keys(target_telegram_id);
-                """
-
-            await conn.execute(text(create_sql))
-            logger.info("✅ Таблица external_admin_api_keys создана")
-            return True
-
-    except Exception as error:
-        logger.error(
-            f"❌ Ошибка создания таблицы external_admin_api_keys: {error}"
-        )
-        return False
-
-
 async def create_privacy_policies_table() -> bool:
     table_exists = await check_table_exists("privacy_policies")
     if table_exists:
@@ -2968,13 +2908,6 @@ async def run_universal_migration():
             logger.info("✅ Таблица web_api_tokens готова")
         else:
             logger.warning("⚠️ Проблемы с таблицей web_api_tokens")
-
-        logger.info("=== СОЗДАНИЕ ТАБЛИЦЫ EXTERNAL_ADMIN_API_KEYS ===")
-        external_api_keys_ready = await create_external_admin_api_keys_table()
-        if external_api_keys_ready:
-            logger.info("✅ Таблица external_admin_api_keys готова")
-        else:
-            logger.warning("⚠️ Проблемы с таблицей external_admin_api_keys")
 
         logger.info("=== ДОБАВЛЕНИЕ КОЛОНКИ ДЛЯ ТРИАЛЬНЫХ СКВАДОВ ===")
         trial_column_ready = await add_server_trial_flag_column()
