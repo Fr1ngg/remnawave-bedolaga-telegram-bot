@@ -589,19 +589,6 @@ class Settings(BaseSettings):
         ).hexdigest()
         return digest[:48]
 
-    def build_external_admin_api_key(self, telegram_id: int) -> str:
-        """Формирует стабильный API-ключ для внешней админки по Telegram ID и общему токену."""
-        token = self.get_external_admin_token()
-        if not token:
-            raise ValueError("External admin token is not configured")
-
-        digest = hmac.new(
-            key=token.encode("utf-8"),
-            msg=str(int(telegram_id)).encode("utf-8"),
-            digestmod=hashlib.sha256,
-        ).hexdigest()
-        return digest[:48]
-
     def get_external_admin_token(self) -> Optional[str]:
         token = (self.EXTERNAL_ADMIN_TOKEN or "").strip()
         return token or None
