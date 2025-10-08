@@ -151,6 +151,7 @@ class AdvertisingCampaignService:
             traffic_limit_gb=traffic_limit or 0,
             device_limit=device_limit,
             connected_squads=squads,
+            update_server_counters=True,
         )
 
         try:

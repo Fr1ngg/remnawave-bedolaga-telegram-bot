@@ -3286,7 +3286,8 @@ async def _grant_paid_subscription(db: AsyncSession, user_id: int, days: int, ad
             duration_days=days,
             traffic_limit_gb=settings.DEFAULT_TRAFFIC_LIMIT_GB,
             device_limit=settings.DEFAULT_DEVICE_LIMIT,
-            connected_squads=trial_squads
+            connected_squads=trial_squads,
+            update_server_counters=True,
         )
         
         subscription_service = SubscriptionService()

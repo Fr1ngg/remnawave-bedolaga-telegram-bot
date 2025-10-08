@@ -4343,7 +4343,8 @@ async def create_paid_subscription_with_traffic_mode(
         duration_days=duration_days,
         traffic_limit_gb=traffic_limit_gb,
         device_limit=device_limit,
-        connected_squads=connected_squads
+        connected_squads=connected_squads,
+        update_server_counters=False,
     )
 
     logger.info(f"📋 Создана подписка с трафиком: {traffic_limit_gb} ГБ (режим: {settings.TRAFFIC_SELECTION_MODE})")

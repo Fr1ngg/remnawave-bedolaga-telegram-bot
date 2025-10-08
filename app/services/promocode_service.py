@@ -135,9 +135,10 @@ class PromoCodeService:
                     db=db,
                     user_id=user.id,
                     duration_days=promocode.subscription_days,
-                    traffic_limit_gb=0, 
+                    traffic_limit_gb=0,
                     device_limit=1,
-                    connected_squads=trial_squads 
+                    connected_squads=trial_squads,
+                    update_server_counters=True,
                 )
                 
                 await self.subscription_service.create_remnawave_user(db, new_subscription)
