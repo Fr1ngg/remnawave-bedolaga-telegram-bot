@@ -1,0 +1,37 @@
+# Caddyfile for Remnawave Bedolaga
+
+{$ADMIN_DOMAIN} {
+    encode gzip zstd
+
+    # API first (strip /api before proxying)
+    handle_path /api/* {
+        reverse_proxy remnawave_bot:8080
+    }
+
+    # Webhooks (reverse proxy to bot service ports)
+    handle_path /tribute-webhook* {
+        reverse_proxy remnawave_bot:8081
+    }
+
+    handle_path /cryptobot-webhook* {
+        reverse_proxy remnawave_bot:8081
+    }
+
+    handle_path /mulenpay-webhook* {
+        reverse_proxy remnawave_bot:8081
+    }
+
+    handle_path /pal24-webhook* {
+        reverse_proxy remnawave_bot:8084
+    }
+
+    handle_path /yookassa-webhook* {
+        reverse_proxy remnawave_bot:8082
+    }
+
+    # Static UI
+    root * /srv/web-admin
+    @spa not path /api/*
+    try_files @spa {path} {path}/ /index.html
+    file_server
+}

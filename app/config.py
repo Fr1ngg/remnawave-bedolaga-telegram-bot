@@ -259,6 +259,10 @@ class Settings(BaseSettings):
     WEB_API_DEFAULT_TOKEN_NAME: str = "Bootstrap Token"
     WEB_API_TOKEN_HASH_ALGORITHM: str = "sha256"
     WEB_API_REQUEST_LOGGING: bool = True
+
+    # Admin reset controls
+    ADMIN_RESET_TOKEN: Optional[str] = None
+    ADMIN_RESET_IP_WHITELIST: str = ""
     
     APP_CONFIG_PATH: str = "app-config.json"
     ENABLE_DEEP_LINKS: bool = True
@@ -1074,6 +1078,14 @@ class Settings(BaseSettings):
 
     def is_web_api_enabled(self) -> bool:
         return bool(self.WEB_API_ENABLED)
+
+    def get_admin_reset_token(self) -> Optional[str]:
+        token = (self.ADMIN_RESET_TOKEN or "").strip()
+        return token or None
+
+    def get_admin_reset_ip_whitelist(self) -> list[str]:
+        raw = (self.ADMIN_RESET_IP_WHITELIST or "").split(",")
+        return [ip.strip() for ip in raw if ip.strip()]
 
     def get_web_api_allowed_origins(self) -> list[str]:
         raw = (self.WEB_API_ALLOWED_ORIGINS or "").split(",")

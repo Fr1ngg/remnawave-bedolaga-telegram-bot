@@ -34,3 +34,9 @@ app/**/*.pyd
 *.pyc
 *.pyo
 *.pyd
+!web-admin/
+!web-admin/**
+
+# Разрешаем папку caddy/ и все её содержимое
+!caddy/
+!caddy/**

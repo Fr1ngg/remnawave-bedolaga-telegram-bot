@@ -25,6 +25,7 @@ class RemnaWaveNode(BaseModel):
     name: str
     address: str
     country_code: Optional[str] = None
+    port: Optional[int] = None
     is_connected: bool
     is_disabled: bool
     is_node_online: bool
@@ -32,6 +33,13 @@ class RemnaWaveNode(BaseModel):
     users_online: Optional[int] = None
     traffic_used_bytes: Optional[int] = None
     traffic_limit_bytes: Optional[int] = None
+    # extra (optional) fields from panel
+    xray_version: Optional[str] = None
+    node_version: Optional[str] = None
+    xray_uptime_seconds: Optional[int] = None
+    cpu_count: Optional[int] = None
+    cpu_model: Optional[str] = None
+    total_ram_bytes: Optional[int] = None
 
 
 class RemnaWaveNodeListResponse(BaseModel):

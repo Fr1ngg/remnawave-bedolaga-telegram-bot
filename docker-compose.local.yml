@@ -53,23 +53,16 @@ services:
       POSTGRES_DB: "${POSTGRES_DB:-remnawave_bot}"
       POSTGRES_USER: "${POSTGRES_USER:-remnawave_user}"
       POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:-secure_password_123}"
-      
       REDIS_URL: "redis://redis:6379/0"
-      
       TZ: "Europe/Moscow"
       LOCALES_PATH: "${LOCALES_PATH:-/app/locales}"
     volumes:
-      # Логи
       - ./logs:/app/logs:rw
-      # Данные приложения (для SQLite в случае переключения)
       - ./data:/app/data:rw
       - ./locales:/app/locales:rw
-      # Конфигурация приложения
       # - ./app-config.json:/app/app-config.json:ro
-      # Timezone
       - /etc/timezone:/etc/timezone:ro
       - /etc/localtime:/etc/localtime:ro
-      # Логотип для сообщений
       - ./vpn_logo.png:/app/vpn_logo.png:ro
     ports:
       - "${WEB_API_PORT:-8080}:8080"
@@ -84,14 +77,38 @@ services:
       retries: 3
       start_period: 30s
 
+  web-admin:
+    image: node:20-alpine
+    container_name: remnawave_web_admin
+    working_dir: /app
+    restart: unless-stopped
+    depends_on:
+      bot:
+        condition: service_started
+    environment:
+      VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://bot:8080}
+      VITE_API_TIMEOUT: ${VITE_API_TIMEOUT:-15000}
+      CHOKIDAR_USEPOLLING: "true"
+    volumes:
+      - ./web-admin:/app
+      - web_admin_node_modules:/app/node_modules
+    command: sh -c "if [ ! -f node_modules/.bin/vite ]; then npm install; fi && npm run dev -- --host 0.0.0.0 --port 5173"
+    ports:
+      - "${WEB_ADMIN_PORT:-5173}:5173"
+    networks:
+      - bot_network
+
 volumes:
   postgres_data:
     driver: local
   redis_data:
     driver: local
+  web_admin_node_modules:
+    driver: local
 
 networks:
   bot_network:
+    name: bot_network
     driver: bridge
     ipam:
       config:

@@ -56,6 +56,9 @@ patch_message_methods()
 logger = logging.getLogger(__name__)
 
 
+bot: Bot | None = None
+dp: Dispatcher | None = None
+
 async def debug_callback_handler(callback: types.CallbackQuery):
     logger.info(f"🔍 DEBUG CALLBACK:")
     logger.info(f"  - Data: {callback.data}")
@@ -64,6 +67,7 @@ async def debug_callback_handler(callback: types.CallbackQuery):
 
 
 async def setup_bot() -> tuple[Bot, Dispatcher]:
+    global bot, dp
     
     try:
         await cache.connect()
@@ -172,6 +176,7 @@ async def setup_bot() -> tuple[Bot, Dispatcher]:
 
 
 async def shutdown_bot():
+    global bot, dp
     try:
         await maintenance_service.stop_monitoring()
         logger.info("Мониторинг техработ остановлен")
@@ -183,3 +188,6 @@ async def shutdown_bot():
         logger.info("Соединения с кешем закрыты")
     except Exception as e:
         logger.error(f"Ошибка закрытия кеша: {e}")
+    bot = None
+    dp = None
+

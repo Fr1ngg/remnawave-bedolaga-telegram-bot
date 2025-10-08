@@ -53,3 +53,23 @@ class BackupTaskInfo(BackupStatusResponse):
 class BackupTaskListResponse(BaseModel):
     items: list[BackupTaskInfo]
     total: int
+
+
+class BackupSettingsResponse(BaseModel):
+    auto_backup_enabled: bool
+    backup_interval_hours: int
+    backup_time: str
+    max_backups_keep: int
+    compression_enabled: bool
+    include_logs: bool
+    backup_location: str
+
+
+class BackupSettingsUpdateRequest(BaseModel):
+    auto_backup_enabled: bool | None = None
+    backup_interval_hours: int | None = None
+    backup_time: str | None = None
+    max_backups_keep: int | None = None
+    compression_enabled: bool | None = None
+    include_logs: bool | None = None
+    backup_location: str | None = None

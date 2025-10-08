@@ -19,6 +19,7 @@ from app.database.crud.user import (
 from app.database.models import PromoGroup, Subscription, User, UserStatus
 
 from ..dependencies import get_db_session, require_api_token
+from .notifications import broker
 from ..schemas.users import (
     BalanceUpdateRequest,
     PromoGroupSummary,
@@ -192,6 +193,10 @@ async def create_user_endpoint(
         user = await update_user(db, user, promo_group_id=promo_group.id)
 
     user = await get_user_by_id(db, user.id)
+    try:
+        await broker.publish("users.update")
+    except Exception:
+        pass
     return _serialize_user(user)
 
 
@@ -245,6 +250,10 @@ async def update_user_endpoint(
 
     user = await update_user(db, user, **updates)
     user = await get_user_by_id(db, user.id)
+    try:
+        await broker.publish("users.update")
+    except Exception:
+        pass
     return _serialize_user(user)
 
 
@@ -274,4 +283,8 @@ async def update_balance(
         raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "Failed to update balance")
 
     user = await get_user_by_id(db, user_id)
+    try:
+        await broker.publish("users.update")
+    except Exception:
+        pass
     return _serialize_user(user)

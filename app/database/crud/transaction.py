@@ -6,6 +6,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.database.models import Transaction, TransactionType, PaymentMethod, User
+try:
+    # Lazy import pattern similar to tickets to avoid hard dependency
+    from app.webapi.routes.notifications import broker as sse_broker  # type: ignore
+except Exception:  # pragma: no cover
+    sse_broker = None  # type: ignore
 
 logger = logging.getLogger(__name__)
 
@@ -37,6 +42,13 @@ async def create_transaction(
     await db.refresh(transaction)
     
     logger.info(f"💳 Создана транзакция: {type.value} на {amount_kopeks/100}₽ для пользователя {user_id}")
+
+    # Publish SSE so finance lists update in real time
+    try:
+        if sse_broker is not None:
+            await sse_broker.publish("transactions.update")
+    except Exception:
+        pass
 
     try:
         from app.services.promo_group_assignment import (
@@ -134,6 +146,13 @@ async def complete_transaction(db: AsyncSession, transaction: Transaction) -> Tr
     await db.refresh(transaction)
 
     logger.info(f"✅ Транзакция {transaction.id} завершена")
+
+    # Publish SSE to reflect completion status changes
+    try:
+        if sse_broker is not None:
+            await sse_broker.publish("transactions.update")
+    except Exception:
+        pass
 
     try:
         from app.services.promo_group_assignment import (

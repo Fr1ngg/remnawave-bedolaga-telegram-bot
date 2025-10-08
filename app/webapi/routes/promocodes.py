@@ -18,6 +18,7 @@ from app.database.crud.promocode import (
 from app.database.models import PromoCode, PromoCodeType, PromoCodeUse
 
 from ..dependencies import get_db_session, require_api_token
+from .notifications import broker
 from ..schemas.promocodes import (
     PromoCodeCreateRequest,
     PromoCodeDetailResponse,
@@ -226,6 +227,10 @@ async def create_promocode_endpoint(
     if update_fields:
         promocode = await update_promocode(db, promocode, **update_fields)
 
+    try:
+        await broker.publish("promocodes.update")
+    except Exception:
+        pass
     return _serialize_promocode(promocode)
 
 
@@ -277,6 +282,10 @@ async def update_promocode_endpoint(
         return _serialize_promocode(promocode)
 
     promocode = await update_promocode(db, promocode, **updates)
+    try:
+        await broker.publish("promocodes.update")
+    except Exception:
+        pass
     return _serialize_promocode(promocode)
 
 
@@ -298,4 +307,8 @@ async def delete_promocode_endpoint(
     if not success:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Failed to delete promo code")
 
+    try:
+        await broker.publish("promocodes.update")
+    except Exception:
+        pass
     return Response(status_code=status.HTTP_204_NO_CONTENT)

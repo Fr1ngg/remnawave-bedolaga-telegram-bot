@@ -90,7 +90,18 @@ async def create_trial_subscription(
     await db.refresh(subscription)
 
     logger.info(f"🎁 Создана триальная подписка для пользователя {user_id}")
+    # SSE broker notifications
+    try:
+        from app.webapi.routes.notifications import broker as sse_broker  # type: ignore
+    except Exception:
+        sse_broker = None  # type: ignore
+    try:
+        if sse_broker is not None:
+            await sse_broker.publish("subscriptions.update")
+    except Exception:
+        pass
 
+    # Server counter updates
     if squad_uuid:
         try:
             from app.database.crud.server_squad import (
@@ -116,7 +127,6 @@ async def create_trial_subscription(
                 squad_uuid,
                 error,
             )
-
     return subscription
 
 
@@ -150,7 +160,18 @@ async def create_paid_subscription(
     await db.refresh(subscription)
     
     logger.info(f"💎 Создана платная подписка для пользователя {user_id}")
+    # SSE broker notifications
+    try:
+        from app.webapi.routes.notifications import broker as sse_broker  # type: ignore
+    except Exception:
+        sse_broker = None  # type: ignore
+    try:
+        if sse_broker is not None:
+            await sse_broker.publish("subscriptions.update")
+    except Exception:
+        pass
 
+    # Server counter updates
     squad_uuids = list(connected_squads or [])
     if update_server_counters and squad_uuids:
         try:
@@ -179,7 +200,6 @@ async def create_paid_subscription(
                 user_id,
                 error,
             )
-
     return subscription
 
 
@@ -1174,4 +1194,13 @@ async def create_subscription(
     await db.refresh(subscription)
     
     logger.info(f"✅ Создана подписка для пользователя {user_id}")
+    try:
+        from app.webapi.routes.notifications import broker as sse_broker  # type: ignore
+    except Exception:
+        sse_broker = None  # type: ignore
+    try:
+        if sse_broker is not None:
+            await sse_broker.publish("subscriptions.update")
+    except Exception:
+        pass
     return subscription

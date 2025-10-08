@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 from typing import Dict, List, Optional, Tuple
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -94,3 +94,26 @@ async def list_promo_offer_logs(
     total = (await db.execute(count_stmt)).scalar() or 0
 
     return logs, total
+
+
+async def delete_promo_offer_logs(
+    db: AsyncSession,
+    *,
+    user_id: Optional[int] = None,
+    offer_id: Optional[int] = None,
+    action: Optional[str] = None,
+    source: Optional[str] = None,
+) -> int:
+    stmt = delete(PromoOfferLog)
+    if user_id is not None:
+        stmt = stmt.where(PromoOfferLog.user_id == user_id)
+    if offer_id is not None:
+        stmt = stmt.where(PromoOfferLog.offer_id == offer_id)
+    if action:
+        stmt = stmt.where(PromoOfferLog.action == action)
+    if source:
+        stmt = stmt.where(PromoOfferLog.source == source)
+
+    result = await db.execute(stmt)
+    await db.commit()
+    return int(result.rowcount or 0)

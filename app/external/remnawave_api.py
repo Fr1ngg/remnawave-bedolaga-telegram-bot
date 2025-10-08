@@ -83,6 +83,12 @@ class RemnaWaveNode:
     users_online: Optional[int]
     traffic_used_bytes: Optional[int]
     traffic_limit_bytes: Optional[int]
+    # Optional fields must follow non-default fields
+    port: Optional[int] = None
+    # Extra fields from panel for richer UI/stats
+    xray_version: Optional[str] = None
+    node_version: Optional[str] = None
+    xray_uptime_seconds: Optional[int] = None
 
 
 @dataclass
@@ -639,18 +645,35 @@ class RemnaWaveAPI:
         )
     
     def _parse_node(self, node_data: Dict) -> RemnaWaveNode:
+        # Safe helpers
+        def _to_int(value: Any) -> Optional[int]:
+            try:
+                if value is None:
+                    return None
+                if isinstance(value, (int, float)):
+                    return int(value)
+                if isinstance(value, str) and value.strip():
+                    return int(float(value.strip()))
+            except (ValueError, TypeError):
+                return None
+            return None
+
         return RemnaWaveNode(
             uuid=node_data['uuid'],
             name=node_data['name'],
             address=node_data['address'],
-            country_code=node_data['countryCode'],
-            is_connected=node_data['isConnected'],
-            is_disabled=node_data['isDisabled'],
-            is_node_online=node_data['isNodeOnline'],
-            is_xray_running=node_data['isXrayRunning'],
-            users_online=node_data.get('usersOnline'),
-            traffic_used_bytes=node_data.get('trafficUsedBytes'),
-            traffic_limit_bytes=node_data.get('trafficLimitBytes')
+            country_code=node_data.get('countryCode') or node_data.get('country_code') or '',
+            port=_to_int(node_data.get('port')),
+            is_connected=bool(node_data.get('isConnected')),
+            is_disabled=bool(node_data.get('isDisabled')),
+            is_node_online=bool(node_data.get('isNodeOnline')),
+            is_xray_running=bool(node_data.get('isXrayRunning')),
+            users_online=_to_int(node_data.get('usersOnline')),
+            traffic_used_bytes=_to_int(node_data.get('trafficUsedBytes')),
+            traffic_limit_bytes=_to_int(node_data.get('trafficLimitBytes')),
+            xray_version=node_data.get('xrayVersion'),
+            node_version=node_data.get('nodeVersion'),
+            xray_uptime_seconds=_to_int(node_data.get('xrayUptime')),
         )
     
     def _parse_subscription_info(self, data: Dict) -> SubscriptionInfo:

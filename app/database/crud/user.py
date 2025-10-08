@@ -22,6 +22,21 @@ from app.config import settings
 from app.database.crud.promo_group import get_default_promo_group
 from app.database.crud.discount_offer import get_latest_claimed_offer_for_user
 from app.database.crud.promo_offer_log import log_promo_offer_action
+try:
+    from app.webapi.routes.notifications import broker as sse_broker  # type: ignore
+except Exception:  # pragma: no cover
+    sse_broker = None  # type: ignore
+
+def _resolve_sse_broker():  # lazy resolver to avoid import-time ordering issues
+    global sse_broker
+    if sse_broker is not None:
+        return sse_broker
+    try:
+        from app.webapi.routes.notifications import broker as _broker  # type: ignore
+        sse_broker = _broker
+    except Exception:
+        sse_broker = None  # type: ignore
+    return sse_broker
 from app.utils.validators import sanitize_telegram_name
 
 logger = logging.getLogger(__name__)
@@ -130,42 +145,54 @@ async def create_user(
     referred_by_id: int = None,
     referral_code: str = None
 ) -> User:
-    
+
     if not referral_code:
         referral_code = await create_unique_referral_code(db)
-    
+
     attempts = 3
 
     for attempt in range(1, attempts + 1):
         default_group = await _get_or_create_default_promo_group(db)
-        promo_group_id = default_group.id
-
-        safe_first = sanitize_telegram_name(first_name)
-        safe_last = sanitize_telegram_name(last_name)
-        user = User(
-            telegram_id=telegram_id,
-            username=username,
-            first_name=safe_first,
-            last_name=safe_last,
-            language=language,
-            referred_by_id=referred_by_id,
-            referral_code=referral_code,
-            balance_kopeks=0,
-            has_had_paid_subscription=False,
-            has_made_first_topup=False,
-            promo_group_id=promo_group_id,
-        )
-
-        db.add(user)
+        promo_group_id = default_group.id if default_group else None
 
         try:
+            safe_first = sanitize_telegram_name(first_name)
+            safe_last = sanitize_telegram_name(last_name)
+            user = User(
+                telegram_id=telegram_id,
+                username=username,
+                first_name=safe_first,
+                last_name=safe_last,
+                language=language,
+                referred_by_id=referred_by_id,
+                referral_code=referral_code,
+                balance_kopeks=0,
+                has_had_paid_subscription=False,
+                has_made_first_topup=False,
+                promo_group_id=promo_group_id,
+            )
+
+            db.add(user)
             await db.commit()
             await db.refresh(user)
 
-            user.promo_group = default_group
+            if default_group:
+                user.promo_group = default_group
+
             logger.info(
-                f"✅ Создан пользователь {telegram_id} с реферальным кодом {referral_code}"
+                "Created user %s with referral code %s",
+                telegram_id,
+                referral_code,
             )
+
+            # Notify SSE subscribers about new/updated users list
+            try:
+                broker = _resolve_sse_broker()
+                if broker is not None:
+                    await broker.publish("users.update")
+            except Exception:
+                pass
+
             return user
 
         except IntegrityError as exc:
@@ -177,8 +204,7 @@ async def create_user(
                 and attempt < attempts
             ):
                 logger.warning(
-                    "⚠️ Обнаружено несоответствие последовательности users_id_seq при создании пользователя %s. "
-                    "Выполняем повторную синхронизацию (попытка %s/%s)",
+                    "users_id_seq desync while creating user %s. Attempt %s/%s",
                     telegram_id,
                     attempt,
                     attempts,
@@ -188,7 +214,7 @@ async def create_user(
 
             raise
 
-    raise RuntimeError("Не удалось создать пользователя после синхронизации последовательности")
+    raise RuntimeError("Failed to create user after syncing users_id_seq")
 
 
 async def update_user(
@@ -238,6 +264,12 @@ async def add_user_balance(
         
         await db.commit()
         await db.refresh(user)
+        try:
+            broker = _resolve_sse_broker()
+            if broker is not None:
+                await broker.publish("users.update")
+        except Exception:
+            pass
         
         
         logger.info(f"💰 Баланс пользователя {user.telegram_id} изменен: {old_balance} → {user.balance_kopeks} (изменение: +{amount_kopeks})")
@@ -337,6 +369,12 @@ async def subtract_user_balance(
 
         await db.commit()
         await db.refresh(user)
+        try:
+            broker = _resolve_sse_broker()
+            if broker is not None:
+                await broker.publish("users.update")
+        except Exception:
+            pass
 
         if create_transaction:
             from app.database.crud.transaction import (
