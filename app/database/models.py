@@ -411,6 +411,11 @@ class User(Base):
     has_made_first_topup: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     promo_group_id = Column(Integer, ForeignKey("promo_groups.id", ondelete="RESTRICT"), nullable=False, index=True)
     promo_group = relationship("PromoGroup", back_populates="users")
+    external_admin_api_keys = relationship(
+        "ExternalAdminApiKey",
+        back_populates="creator",
+        cascade="all, delete-orphan",
+    )
     
     @property
     def balance_rubles(self) -> float:
@@ -1265,6 +1270,39 @@ class WebApiToken(Base):
     def __repr__(self) -> str:
         status = "active" if self.is_active else "revoked"
         return f"<WebApiToken id={self.id} name='{self.name}' status={status}>"
+
+
+class ExternalAdminApiKey(Base):
+    __tablename__ = "external_admin_api_keys"
+
+    id = Column(Integer, primary_key=True, index=True)
+    creator_user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    target_telegram_id = Column(BigInteger, nullable=False)
+    created_at = Column(DateTime, default=func.now(), nullable=False)
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now(), nullable=False)
+
+    creator = relationship("User", back_populates="external_admin_api_keys")
+
+    __table_args__ = (
+        UniqueConstraint(
+            "creator_user_id",
+            "target_telegram_id",
+            name="uq_external_admin_api_keys_creator_target",
+        ),
+        UniqueConstraint(
+            "target_telegram_id",
+            name="uq_external_admin_api_keys_target",
+        ),
+    )
+
+    def __repr__(self) -> str:
+        return (
+            "<ExternalAdminApiKey id={id} creator={creator} target={target}>".format(
+                id=self.id,
+                creator=self.creator_user_id,
+                target=self.target_telegram_id,
+            )
+        )
 
 
 class MainMenuButton(Base):
