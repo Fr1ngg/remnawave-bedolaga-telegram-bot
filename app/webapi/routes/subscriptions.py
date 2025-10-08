@@ -132,6 +132,7 @@ async def create_subscription(
             traffic_limit_gb=payload.traffic_limit_gb or settings.DEFAULT_TRAFFIC_LIMIT_GB,
             device_limit=payload.device_limit or settings.DEFAULT_DEVICE_LIMIT,
             connected_squads=payload.connected_squads or [],
+            update_server_counters=True,
         )
 
     subscription = await _get_subscription(db, subscription.id)

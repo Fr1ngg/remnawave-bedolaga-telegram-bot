@@ -125,8 +125,24 @@ class AdvertisingCampaignService:
         )
         squads = list(campaign.subscription_squads or [])
 
-        if not squads and getattr(settings, "TRIAL_SQUAD_UUID", None):
-            squads = [settings.TRIAL_SQUAD_UUID]
+        if not squads:
+            try:
+                from app.database.crud.server_squad import get_random_trial_squad_uuid
+
+                trial_uuid = await get_random_trial_squad_uuid(
+                    db,
+                    getattr(settings, "TRIAL_SQUAD_UUID", None),
+                )
+                if trial_uuid:
+                    squads = [trial_uuid]
+            except Exception as error:
+                logger.error(
+                    "Не удалось подобрать сквад для кампании %s: %s",
+                    campaign.id,
+                    error,
+                )
+                if getattr(settings, "TRIAL_SQUAD_UUID", None):
+                    squads = [settings.TRIAL_SQUAD_UUID]
 
         new_subscription = await create_paid_subscription(
             db=db,
@@ -135,6 +151,7 @@ class AdvertisingCampaignService:
             traffic_limit_gb=traffic_limit or 0,
             device_limit=device_limit,
             connected_squads=squads,
+            update_server_counters=True,
         )
 
         try:

@@ -87,6 +87,12 @@ class AdminStates(StatesGroup):
     editing_user_traffic = State()
 
     editing_rules_page = State()
+    editing_privacy_policy = State()
+    editing_public_offer = State()
+    creating_faq_title = State()
+    creating_faq_content = State()
+    editing_faq_title = State()
+    editing_faq_content = State()
     editing_notification_value = State()
 
     confirming_sync = State()
@@ -113,6 +119,8 @@ class AdminStates(StatesGroup):
     editing_promo_offer_discount = State()
     editing_promo_offer_test_duration = State()
     editing_promo_offer_squads = State()
+    selecting_promo_offer_user = State()
+    searching_promo_offer_user = State()
     
     # Состояния для отслеживания источника перехода
     viewing_user_from_balance_list = State()

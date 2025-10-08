@@ -1,4 +1,5 @@
 import logging
+import random
 from datetime import datetime
 from typing import Iterable, List, Optional, Sequence, Tuple
 
@@ -38,6 +39,7 @@ async def create_server_squad(
     description: str = None,
     max_users: int = None,
     is_available: bool = True,
+    is_trial_eligible: bool = False,
     promo_group_ids: Optional[Iterable[int]] = None,
 ) -> ServerSquad:
 
@@ -70,6 +72,7 @@ async def create_server_squad(
         description=description,
         max_users=max_users,
         is_available=is_available,
+        is_trial_eligible=is_trial_eligible,
         allowed_promo_groups=promo_groups,
     )
 
@@ -199,7 +202,7 @@ async def update_server_squad(
     
     valid_fields = {
         'display_name', 'country_code', 'price_kopeks', 'description',
-        'max_users', 'is_available', 'sort_order'
+        'max_users', 'is_available', 'sort_order', 'is_trial_eligible'
     }
     
     filtered_updates = {k: v for k, v in updates.items() if k in valid_fields}
@@ -393,8 +396,70 @@ async def get_server_connected_users(
     return result.scalars().unique().all()
 
 
+async def get_trial_eligible_server_squads(
+    db: AsyncSession,
+    include_unavailable: bool = False,
+) -> List[ServerSquad]:
+
+    query = select(ServerSquad).where(ServerSquad.is_trial_eligible.is_(True))
+
+    result = await db.execute(query)
+    squads = result.scalars().unique().all()
+
+    if include_unavailable:
+        return squads
+
+    preferred_squads: List[ServerSquad] = []
+    fallback_squads: List[ServerSquad] = []
+
+    for squad in squads:
+        current_users = squad.current_users or 0
+        is_full = squad.max_users is not None and current_users >= squad.max_users
+
+        if is_full:
+            continue
+
+        if squad.is_available:
+            preferred_squads.append(squad)
+        else:
+            fallback_squads.append(squad)
+
+    if preferred_squads:
+        return preferred_squads
+
+    if fallback_squads:
+        return fallback_squads
+
+    return squads
+
+
+async def choose_random_trial_server_squad(
+    db: AsyncSession,
+) -> Optional[ServerSquad]:
+
+    squads = await get_trial_eligible_server_squads(db)
+
+    if not squads:
+        return None
+
+    return random.choice(squads)
+
+
+async def get_random_trial_squad_uuid(
+    db: AsyncSession,
+    fallback_uuid: Optional[str] = None,
+) -> Optional[str]:
+
+    squad = await choose_random_trial_server_squad(db)
+
+    if squad:
+        return squad.squad_uuid
+
+    return fallback_uuid
+
+
 def _generate_display_name(original_name: str) -> str:
-    
+
     country_names = {
         'NL': '🇳🇱 Нидерланды',
         'DE': '🇩🇪 Германия', 

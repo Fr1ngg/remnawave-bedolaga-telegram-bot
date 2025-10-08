@@ -21,6 +21,25 @@ logger = logging.getLogger(__name__)
 PriceItem = Tuple[str, str, int]
 
 
+TRAFFIC_PACKAGE_FIELDS: Tuple[Tuple[int, str], ...] = (
+    (5, "PRICE_TRAFFIC_5GB"),
+    (10, "PRICE_TRAFFIC_10GB"),
+    (25, "PRICE_TRAFFIC_25GB"),
+    (50, "PRICE_TRAFFIC_50GB"),
+    (100, "PRICE_TRAFFIC_100GB"),
+    (250, "PRICE_TRAFFIC_250GB"),
+    (500, "PRICE_TRAFFIC_500GB"),
+    (1000, "PRICE_TRAFFIC_1000GB"),
+    (0, "PRICE_TRAFFIC_UNLIMITED"),
+)
+
+TRAFFIC_PACKAGE_FIELD_MAP: Dict[int, str] = {gb: field for gb, field in TRAFFIC_PACKAGE_FIELDS}
+TRAFFIC_PACKAGE_ORDER: Tuple[int, ...] = tuple(gb for gb, _ in TRAFFIC_PACKAGE_FIELDS)
+TRAFFIC_PACKAGE_ORDER_INDEX: Dict[int, int] = {
+    gb: index for index, gb in enumerate(TRAFFIC_PACKAGE_ORDER)
+}
+
+
 @dataclass(slots=True)
 class ChoiceOption:
     value: Any
@@ -178,6 +197,71 @@ SETTING_ENTRY_BY_KEY: Dict[str, SettingEntry] = {
 }
 
 
+def _traffic_package_sort_key(package: Dict[str, Any]) -> Tuple[int, int]:
+    order_index = TRAFFIC_PACKAGE_ORDER_INDEX.get(package["gb"])
+    if order_index is not None:
+        return (0, order_index)
+    return (1, package["gb"])
+
+
+def _collect_traffic_packages() -> List[Dict[str, Any]]:
+    raw_packages = settings.get_traffic_packages()
+
+    packages_map: Dict[int, Dict[str, Any]] = {}
+    for package in raw_packages:
+        gb = int(package.get("gb", 0))
+        packages_map[gb] = {
+            "gb": gb,
+            "price": int(package.get("price") or 0),
+            "enabled": bool(package.get("enabled", True)),
+            "field": TRAFFIC_PACKAGE_FIELD_MAP.get(gb),
+        }
+
+    for gb, field in TRAFFIC_PACKAGE_FIELDS:
+        if not hasattr(settings, field):
+            continue
+
+        price = getattr(settings, field)
+        existing = packages_map.get(gb)
+        enabled = existing["enabled"] if existing is not None else True
+
+        packages_map[gb] = {
+            "gb": gb,
+            "price": int(price),
+            "enabled": enabled,
+            "field": field,
+        }
+
+    packages = list(packages_map.values())
+    packages.sort(key=_traffic_package_sort_key)
+    return packages
+
+
+def _serialize_traffic_packages(packages: Iterable[Dict[str, Any]]) -> str:
+    parts = []
+    for package in packages:
+        enabled_flag = "true" if package.get("enabled") else "false"
+        parts.append(f"{int(package['gb'])}:{int(package['price'])}:{enabled_flag}")
+    return ",".join(parts)
+
+
+async def _save_traffic_packages(
+    db: AsyncSession,
+    packages: Iterable[Dict[str, Any]],
+    *,
+    skip_if_same: bool = False,
+) -> bool:
+    new_value = _serialize_traffic_packages(packages)
+    current_value = bot_configuration_service.get_current_value("TRAFFIC_PACKAGES_CONFIG") or ""
+
+    if skip_if_same and current_value == new_value:
+        return False
+
+    await bot_configuration_service.set_value(db, "TRAFFIC_PACKAGES_CONFIG", new_value)
+    await db.commit()
+    return True
+
+
 def _language_code(language: str | None) -> str:
     return (language or "ru").split("-")[0].lower()
 
@@ -236,23 +320,17 @@ def _get_period_items(lang_code: str) -> List[PriceItem]:
 
 
 def _get_traffic_items(lang_code: str) -> List[PriceItem]:
-    traffic_keys: Tuple[Tuple[int, str], ...] = (
-        (5, "PRICE_TRAFFIC_5GB"),
-        (10, "PRICE_TRAFFIC_10GB"),
-        (25, "PRICE_TRAFFIC_25GB"),
-        (50, "PRICE_TRAFFIC_50GB"),
-        (100, "PRICE_TRAFFIC_100GB"),
-        (250, "PRICE_TRAFFIC_250GB"),
-        (500, "PRICE_TRAFFIC_500GB"),
-        (1000, "PRICE_TRAFFIC_1000GB"),
-        (0, "PRICE_TRAFFIC_UNLIMITED"),
-    )
+    packages = _collect_traffic_packages()
 
     items: List[PriceItem] = []
-    for gb, key in traffic_keys:
-        if hasattr(settings, key):
-            price = getattr(settings, key)
-            items.append((key, _format_traffic_label(gb, lang_code), price))
+    for package in packages:
+        field = package.get("field")
+        if not field:
+            continue
+
+        label = _format_traffic_label(package["gb"], lang_code)
+        icon = "✅" if package["enabled"] else "⚪️"
+        items.append((field, f"{icon} {label}", int(package["price"])))
     return items
 
 
@@ -285,17 +363,17 @@ def _build_period_summary(items: Iterable[PriceItem], lang_code: str, fallback: 
     return ", ".join(parts) if parts else fallback
 
 
-def _build_traffic_summary(items: Iterable[PriceItem], lang_code: str, fallback: str) -> str:
-    parts: List[str] = []
-    for key, label, price in items:
-        if key.endswith("UNLIMITED"):
-            short_label = "∞"
-        else:
-            digits = ''.join(ch for ch in key if ch.isdigit())
-            unit = "ГБ" if lang_code == "ru" else "GB"
-            short_label = f"{digits}{unit}" if digits else label
+def _build_traffic_summary(lang_code: str, fallback: str) -> str:
+    packages = _collect_traffic_packages()
+    enabled_packages = [package for package in packages if package["enabled"]]
 
-        parts.append(f"{short_label}: {settings.format_price(price)}")
+    if not enabled_packages:
+        return fallback
+
+    parts: List[str] = []
+    for package in enabled_packages:
+        short_label = _format_traffic_label(package["gb"], lang_code, short=True)
+        parts.append(f"{short_label}: {settings.format_price(int(package['price']))}")
 
     return ", ".join(parts) if parts else fallback
 
@@ -407,6 +485,68 @@ def _build_settings_section(
     return "\n".join(lines).strip(), keyboard
 
 
+def _build_traffic_options_section(language: str) -> Tuple[str, types.InlineKeyboardMarkup]:
+    texts = get_texts(language)
+    lang_code = _language_code(language)
+    packages = _collect_traffic_packages()
+
+    title = texts.t(
+        "ADMIN_PRICING_SECTION_TRAFFIC_OPTIONS_TITLE",
+        "🚦 Отображение пакетов трафика",
+    )
+
+    lines: List[str] = [title, ""]
+
+    enabled_labels = [
+        _format_traffic_label(package["gb"], lang_code, short=True)
+        for package in packages
+        if package["enabled"]
+    ]
+
+    if enabled_labels:
+        lines.append(
+            texts.t(
+                "ADMIN_PRICING_SECTION_TRAFFIC_OPTIONS_ACTIVE",
+                "Активные пакеты: {items}",
+            ).format(items=", ".join(enabled_labels))
+        )
+    else:
+        lines.append(
+            texts.t(
+                "ADMIN_PRICING_SECTION_TRAFFIC_OPTIONS_NONE",
+                "Активных пакетов нет.",
+            )
+        )
+
+    lines.append("")
+    lines.append(
+        texts.t(
+            "ADMIN_PRICING_SECTION_TRAFFIC_OPTIONS_PROMPT",
+            "Нажмите на пакет, чтобы включить или выключить его отображение.",
+        )
+    )
+
+    keyboard_rows: List[List[types.InlineKeyboardButton]] = []
+    buttons: List[types.InlineKeyboardButton] = []
+
+    for package in packages:
+        icon = "✅" if package["enabled"] else "⚪️"
+        label = _format_traffic_label(package["gb"], lang_code, short=True)
+        buttons.append(
+            types.InlineKeyboardButton(
+                text=f"{icon} {label}",
+                callback_data=f"admin_pricing_toggle_traffic:{package['gb']}",
+            )
+        )
+
+    for i in range(0, len(buttons), 3):
+        keyboard_rows.append(buttons[i : i + 3])
+
+    keyboard_rows.append([types.InlineKeyboardButton(text=texts.BACK, callback_data="admin_pricing")])
+    keyboard = types.InlineKeyboardMarkup(inline_keyboard=keyboard_rows)
+    return "\n".join(lines), keyboard
+
+
 def _build_period_options_section(language: str) -> Tuple[str, types.InlineKeyboardMarkup]:
     texts = get_texts(language)
     lang_code = _language_code(language)
@@ -485,7 +625,7 @@ def _build_overview(language: str) -> Tuple[str, types.InlineKeyboardMarkup]:
 
     fallback = texts.t("ADMIN_PRICING_SUMMARY_EMPTY", "—")
     summary_periods = _build_period_summary(period_items, lang_code, fallback)
-    summary_traffic = _build_traffic_summary(traffic_items, lang_code, fallback)
+    summary_traffic = _build_traffic_summary(lang_code, fallback)
     summary_extra = _build_extra_summary(extra_items, fallback)
     summary_trial = _format_trial_summary(lang_code)
     summary_core = _format_core_summary(lang_code)
@@ -537,6 +677,13 @@ def _build_overview(language: str) -> Tuple[str, types.InlineKeyboardMarkup]:
                     callback_data="admin_pricing_section:traffic",
                 ),
                 types.InlineKeyboardButton(
+                    text=texts.t(
+                        "ADMIN_PRICING_BUTTON_TRAFFIC_OPTIONS",
+                        "🚦 Отображение пакетов",
+                    ),
+                    callback_data="admin_pricing_section:traffic_options",
+                ),
+                types.InlineKeyboardButton(
                     text=texts.t("ADMIN_PRICING_BUTTON_EXTRA", "➕ Дополнительно"),
                     callback_data="admin_pricing_section:extra",
                 ),
@@ -564,6 +711,8 @@ def _build_section(
     elif section == "extra":
         items = _get_extra_items(lang_code)
         title = texts.t("ADMIN_PRICING_SECTION_EXTRA_TITLE", "➕ Дополнительные опции")
+    elif section == "traffic_options":
+        return _build_traffic_options_section(language)
     elif section in SETTING_ENTRIES_BY_SECTION:
         return _build_settings_section(section, language)
     elif section == "period_options":
@@ -922,14 +1071,27 @@ async def process_pricing_input(
     await bot_configuration_service.set_value(db, key, new_value)
     await db.commit()
 
+    if key.startswith("PRICE_TRAFFIC_"):
+        packages = _collect_traffic_packages()
+        await _save_traffic_packages(db, packages, skip_if_same=True)
+
+    section_text, section_keyboard = _build_section(section, db_user.language)
+
     if mode == "price":
-        label = _resolve_label(section, key, db_user.language)
-        await message.answer(
-            texts.t("ADMIN_PRICING_EDIT_SUCCESS", "Цена для {item} обновлена: {price}").format(
-                item=label,
-                price=settings.format_price(int(new_value)),
+        if message_id:
+            await _render_message_by_id(
+                message.bot,
+                message.chat.id,
+                message_id,
+                section_text,
+                section_keyboard,
             )
-        )
+        try:
+            await message.delete()
+        except TelegramBadRequest as error:
+            logger.debug("Failed to delete pricing input message: %s", error)
+        await state.clear()
+        return
     else:
         entry = SETTING_ENTRY_BY_KEY.get(key)
         lang_code = _language_code(db_user.language)
@@ -1045,6 +1207,57 @@ async def select_setting_choice(
 
 @admin_required
 @error_handler
+async def toggle_traffic_package(
+    callback: types.CallbackQuery,
+    db_user: User,
+    db: AsyncSession,
+    state: FSMContext,
+) -> None:
+    try:
+        _, gb_raw = callback.data.split(":", 1)
+        gb_value = int(gb_raw)
+    except (ValueError, TypeError):
+        await callback.answer()
+        return
+
+    texts = get_texts(db_user.language)
+    packages = _collect_traffic_packages()
+
+    target_index = next((index for index, pkg in enumerate(packages) if pkg["gb"] == gb_value), None)
+    if target_index is None:
+        await callback.answer()
+        return
+
+    enabled_count = sum(1 for pkg in packages if pkg["enabled"])
+    target_package = packages[target_index]
+
+    if target_package["enabled"] and enabled_count <= 1:
+        await callback.answer(
+            texts.t(
+                "ADMIN_PRICING_TRAFFIC_PACKAGE_MIN",
+                "Должен оставаться хотя бы один пакет.",
+            ),
+            show_alert=True,
+        )
+        return
+
+    target_package["enabled"] = not target_package["enabled"]
+
+    await _save_traffic_packages(db, packages)
+
+    status_text = (
+        texts.t("ADMIN_PRICING_TRAFFIC_PACKAGE_ENABLED", "Пакет включен.")
+        if target_package["enabled"]
+        else texts.t("ADMIN_PRICING_TRAFFIC_PACKAGE_DISABLED", "Пакет отключен.")
+    )
+    await callback.answer(status_text)
+
+    text, keyboard = _build_traffic_options_section(db_user.language)
+    await _render_message(callback.message, text, keyboard)
+
+
+@admin_required
+@error_handler
 async def toggle_period_option(
     callback: types.CallbackQuery,
     db_user: User,
@@ -1126,6 +1339,10 @@ def register_handlers(dp: Dispatcher) -> None:
     dp.callback_query.register(
         select_setting_choice,
         F.data.startswith("admin_pricing_choice:"),
+    )
+    dp.callback_query.register(
+        toggle_traffic_package,
+        F.data.startswith("admin_pricing_toggle_traffic:"),
     )
     dp.callback_query.register(
         toggle_period_option,

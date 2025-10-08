@@ -1,3 +1,5 @@
+import hashlib
+import hmac
 import logging
 import os
 import re
@@ -130,8 +132,9 @@ class Settings(BaseSettings):
     REFERRED_USER_REWARD: int = 0 
     
     AUTOPAY_WARNING_DAYS: str = "3,1"
-    
-    DEFAULT_AUTOPAY_DAYS_BEFORE: int = 3 
+
+    DEFAULT_AUTOPAY_ENABLED: bool = False
+    DEFAULT_AUTOPAY_DAYS_BEFORE: int = 3
     MIN_BALANCE_FOR_AUTOPAY_KOPEKS: int = 10000  
     
     MONITORING_INTERVAL: int = 60
@@ -149,6 +152,7 @@ class Settings(BaseSettings):
     TRIBUTE_API_KEY: Optional[str] = None
     TRIBUTE_DONATE_LINK: Optional[str] = None
     TRIBUTE_WEBHOOK_PATH: str = "/tribute-webhook"
+    TRIBUTE_WEBHOOK_HOST: str = "0.0.0.0"
     TRIBUTE_WEBHOOK_PORT: int = 8081
 
     YOOKASSA_ENABLED: bool = False
@@ -158,9 +162,10 @@ class Settings(BaseSettings):
     YOOKASSA_DEFAULT_RECEIPT_EMAIL: Optional[str] = None
     YOOKASSA_VAT_CODE: int = 1
     YOOKASSA_SBP_ENABLED: bool = False 
-    YOOKASSA_PAYMENT_MODE: str = "full_payment" 
+    YOOKASSA_PAYMENT_MODE: str = "full_payment"
     YOOKASSA_PAYMENT_SUBJECT: str = "service"
     YOOKASSA_WEBHOOK_PATH: str = "/yookassa-webhook"
+    YOOKASSA_WEBHOOK_HOST: str = "0.0.0.0"
     YOOKASSA_WEBHOOK_PORT: int = 8082
     YOOKASSA_WEBHOOK_SECRET: Optional[str] = None
     YOOKASSA_MIN_AMOUNT_KOPEKS: int = 5000
@@ -277,6 +282,9 @@ class Settings(BaseSettings):
     BACKUP_SEND_ENABLED: bool = False
     BACKUP_SEND_CHAT_ID: Optional[str] = None
     BACKUP_SEND_TOPIC_ID: Optional[int] = None
+
+    EXTERNAL_ADMIN_TOKEN: Optional[str] = None
+    EXTERNAL_ADMIN_TOKEN_BOT_ID: Optional[int] = None
 
     @field_validator('SERVER_STATUS_MODE', mode='before')
     @classmethod
@@ -461,6 +469,15 @@ class Settings(BaseSettings):
             return [3, 1]
         except (ValueError, AttributeError):
             return [3, 1]
+
+    def is_autopay_enabled_by_default(self) -> bool:
+        value = getattr(self, "DEFAULT_AUTOPAY_ENABLED", True)
+
+        if isinstance(value, str):
+            normalized = value.strip().lower()
+            return normalized in {"1", "true", "yes", "on"}
+
+        return bool(value)
     
     def get_available_languages(self) -> List[str]:
         try:
@@ -558,6 +575,37 @@ class Settings(BaseSettings):
     
     def get_app_config_cache_ttl(self) -> int:
         return self.APP_CONFIG_CACHE_TTL
+
+    def build_external_admin_token(self, bot_username: str) -> str:
+        """Генерирует детерминированный и криптографически стойкий токен внешней админки."""
+        normalized = (bot_username or "").strip().lstrip("@").lower()
+        if not normalized:
+            raise ValueError("Bot username is required to build external admin token")
+
+        secret = (self.BOT_TOKEN or "").strip()
+        if not secret:
+            raise ValueError("Bot token is required to build external admin token")
+
+        digest = hmac.new(
+            key=secret.encode("utf-8"),
+            msg=f"remnawave.external_admin::{normalized}".encode("utf-8"),
+            digestmod=hashlib.sha256,
+        ).hexdigest()
+        return digest[:48]
+
+    def get_external_admin_token(self) -> Optional[str]:
+        token = (self.EXTERNAL_ADMIN_TOKEN or "").strip()
+        return token or None
+
+    def get_external_admin_bot_id(self) -> Optional[int]:
+        try:
+            return int(self.EXTERNAL_ADMIN_TOKEN_BOT_ID) if self.EXTERNAL_ADMIN_TOKEN_BOT_ID else None
+        except (TypeError, ValueError):  # pragma: no cover - защитная ветка для некорректных значений
+            logging.getLogger(__name__).warning(
+                "Некорректный идентификатор бота для внешней админки: %s",
+                self.EXTERNAL_ADMIN_TOKEN_BOT_ID,
+            )
+            return None
     
     def is_traffic_selectable(self) -> bool:
         return self.TRAFFIC_SELECTION_MODE.lower() == "selectable"

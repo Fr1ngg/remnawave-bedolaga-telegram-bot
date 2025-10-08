@@ -50,6 +50,25 @@ async def get_promo_groups_with_counts(
     return result.all()
 
 
+async def get_auto_assign_promo_groups(db: AsyncSession) -> List[PromoGroup]:
+    result = await db.execute(
+        select(PromoGroup)
+        .where(PromoGroup.auto_assign_total_spent_kopeks.is_not(None))
+        .where(PromoGroup.auto_assign_total_spent_kopeks > 0)
+        .order_by(PromoGroup.auto_assign_total_spent_kopeks, PromoGroup.id)
+    )
+    return result.scalars().all()
+
+
+async def has_auto_assign_promo_groups(db: AsyncSession) -> bool:
+    result = await db.execute(
+        select(func.count(PromoGroup.id))
+        .where(PromoGroup.auto_assign_total_spent_kopeks.is_not(None))
+        .where(PromoGroup.auto_assign_total_spent_kopeks > 0)
+    )
+    return bool(result.scalar_one())
+
+
 async def get_promo_group_by_id(db: AsyncSession, group_id: int) -> Optional[PromoGroup]:
     return await db.get(PromoGroup, group_id)
 

@@ -13,7 +13,10 @@ from app.database.crud.user import (
 )
 from app.database.crud.promo_group import get_promo_group_by_id
 from app.database.crud.transaction import get_user_transactions_count
-from app.database.crud.subscription import get_subscription_by_user_id
+from app.database.crud.subscription import (
+    get_subscription_by_user_id,
+    decrement_subscription_server_counts,
+)
 from app.database.models import (
     User, UserStatus, Subscription, Transaction, PromoCode, PromoCodeUse,
     ReferralEarning, SubscriptionServer, YooKassaPayment, BroadcastHistory,
@@ -534,7 +537,13 @@ class UserService:
                         )
                     )
                     subscription_servers = subscription_servers_result.scalars().all()
-                    
+
+                    await decrement_subscription_server_counts(
+                        db,
+                        user.subscription,
+                        subscription_servers=subscription_servers,
+                    )
+
                     if subscription_servers:
                         logger.info(f"🔄 Удаляем {len(subscription_servers)} связей подписка-сервер")
                         await db.execute(

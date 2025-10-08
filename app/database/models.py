@@ -79,6 +79,17 @@ class PaymentMethod(Enum):
     PAL24 = "pal24"
     MANUAL = "manual"
 
+
+class MainMenuButtonActionType(Enum):
+    URL = "url"
+    MINI_APP = "mini_app"
+
+
+class MainMenuButtonVisibility(Enum):
+    ALL = "all"
+    ADMINS = "admins"
+    SUBSCRIBERS = "subscribers"
+
 class YooKassaPayment(Base):
     __tablename__ = "yookassa_payments"
     
@@ -746,9 +757,9 @@ class Squad(Base):
 
 class ServiceRule(Base):
     __tablename__ = "service_rules"
-    
+
     id = Column(Integer, primary_key=True, index=True)
-    
+
     order = Column(Integer, default=0)
     title = Column(String(255), nullable=False)
     
@@ -762,9 +773,54 @@ class ServiceRule(Base):
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
 
 
+class PrivacyPolicy(Base):
+    __tablename__ = "privacy_policies"
+
+    id = Column(Integer, primary_key=True, index=True)
+    language = Column(String(10), nullable=False, unique=True)
+    content = Column(Text, nullable=False)
+    is_enabled = Column(Boolean, default=True, nullable=False)
+    created_at = Column(DateTime, default=func.now())
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+
+
+class PublicOffer(Base):
+    __tablename__ = "public_offers"
+
+    id = Column(Integer, primary_key=True, index=True)
+    language = Column(String(10), nullable=False, unique=True)
+    content = Column(Text, nullable=False)
+    is_enabled = Column(Boolean, default=True, nullable=False)
+    created_at = Column(DateTime, default=func.now())
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+
+
+class FaqSetting(Base):
+    __tablename__ = "faq_settings"
+
+    id = Column(Integer, primary_key=True, index=True)
+    language = Column(String(10), nullable=False, unique=True)
+    is_enabled = Column(Boolean, default=True, nullable=False)
+    created_at = Column(DateTime, default=func.now())
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+
+
+class FaqPage(Base):
+    __tablename__ = "faq_pages"
+
+    id = Column(Integer, primary_key=True, index=True)
+    language = Column(String(10), nullable=False, index=True)
+    title = Column(String(255), nullable=False)
+    content = Column(Text, nullable=False)
+    display_order = Column(Integer, default=0, nullable=False)
+    is_active = Column(Boolean, default=True, nullable=False)
+    created_at = Column(DateTime, default=func.now())
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+
+
 class SystemSetting(Base):
     __tablename__ = "system_settings"
-    
+
     id = Column(Integer, primary_key=True, index=True)
     key = Column(String(255), unique=True, nullable=False)
     value = Column(Text, nullable=True)
@@ -920,6 +976,7 @@ class ServerSquad(Base):
     country_code = Column(String(5), nullable=True)
     
     is_available = Column(Boolean, default=True)
+    is_trial_eligible = Column(Boolean, default=False, nullable=False)
     
     price_kopeks = Column(Integer, default=0)
     
@@ -1268,16 +1325,41 @@ class WebApiToken(Base):
         return f"<WebApiToken id={self.id} name='{self.name}' status={status}>"
 
 
-class AdminUser(Base):
-    __tablename__ = "admin_users"
+
+
+class MainMenuButton(Base):
+    __tablename__ = "main_menu_buttons"
 
     id = Column(Integer, primary_key=True, index=True)
-    username = Column(String(64), unique=True, nullable=False, index=True)
-    password_hash = Column(String(255), nullable=False)
-    email = Column(String(255), nullable=True)
-    name = Column(String(255), nullable=True)
+    text = Column(String(64), nullable=False)
+    action_type = Column(String(20), nullable=False)
+    action_value = Column(Text, nullable=False)
+    visibility = Column(String(20), nullable=False, default=MainMenuButtonVisibility.ALL.value)
+    is_active = Column(Boolean, nullable=False, default=True)
+    display_order = Column(Integer, nullable=False, default=0)
     created_at = Column(DateTime, default=func.now())
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
 
+    __table_args__ = (
+        Index("ix_main_menu_buttons_order", "display_order", "id"),
+    )
+
+    @property
+    def action_type_enum(self) -> MainMenuButtonActionType:
+        try:
+            return MainMenuButtonActionType(self.action_type)
+        except ValueError:
+            return MainMenuButtonActionType.URL
+
+    @property
+    def visibility_enum(self) -> MainMenuButtonVisibility:
+        try:
+            return MainMenuButtonVisibility(self.visibility)
+        except ValueError:
+            return MainMenuButtonVisibility.ALL
+
     def __repr__(self) -> str:
-        return f"<AdminUser id={self.id} username='{self.username}'>"
+        return (
+            f"<MainMenuButton id={self.id} text='{self.text}' "
+            f"action={self.action_type} visibility={self.visibility} active={self.is_active}>"
+        )

@@ -113,16 +113,32 @@ class PromoCodeService:
                 from app.database.crud.subscription import create_paid_subscription
                 
                 trial_squads = []
-                if hasattr(settings, 'TRIAL_SQUAD_UUID') and settings.TRIAL_SQUAD_UUID:
-                    trial_squads = [settings.TRIAL_SQUAD_UUID]
+                try:
+                    from app.database.crud.server_squad import get_random_trial_squad_uuid
+
+                    trial_uuid = await get_random_trial_squad_uuid(
+                        db,
+                        settings.TRIAL_SQUAD_UUID,
+                    )
+                    if trial_uuid:
+                        trial_squads = [trial_uuid]
+                except Exception as error:
+                    logger.error(
+                        "Не удалось подобрать сквад для подписки по промокоду %s: %s",
+                        promocode.code,
+                        error,
+                    )
+                    if getattr(settings, 'TRIAL_SQUAD_UUID', None):
+                        trial_squads = [settings.TRIAL_SQUAD_UUID]
                 
                 new_subscription = await create_paid_subscription(
                     db=db,
                     user_id=user.id,
                     duration_days=promocode.subscription_days,
-                    traffic_limit_gb=0, 
+                    traffic_limit_gb=0,
                     device_limit=1,
-                    connected_squads=trial_squads 
+                    connected_squads=trial_squads,
+                    update_server_counters=True,
                 )
                 
                 await self.subscription_service.create_remnawave_user(db, new_subscription)
@@ -140,9 +156,9 @@ class PromoCodeService:
                 trial_days = promocode.subscription_days if promocode.subscription_days > 0 else settings.TRIAL_DURATION_DAYS
                 
                 trial_subscription = await create_trial_subscription(
-                    db, 
-                    user.id, 
-                    duration_days=trial_days 
+                    db,
+                    user.id,
+                    duration_days=trial_days
                 )
                 
                 await self.subscription_service.create_remnawave_user(db, trial_subscription)

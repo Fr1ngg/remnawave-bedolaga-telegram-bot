@@ -2080,11 +2080,16 @@ async def extend_user_subscription(
     
     await callback.message.edit_text(
         "⏰ <b>Продление подписки</b>\n\n"
-        "Введите количество дней для продления:\n"
-        "• Например: 30, 7, 90\n"
-        "• Максимум: 365 дней\n\n"
+        "Введите количество дней для изменения:\n"
+        "• Положительные значения продлят подписку\n"
+        "• Отрицательные сократят срок подписки\n"
+        "• Диапазон: от -365 до 365 дней (0 недопустимо)\n\n"
         "Или нажмите /cancel для отмены",
         reply_markup=types.InlineKeyboardMarkup(inline_keyboard=[
+            [
+                types.InlineKeyboardButton(text="-7 дней", callback_data=f"admin_sub_extend_days_{user_id}_-7"),
+                types.InlineKeyboardButton(text="-30 дней", callback_data=f"admin_sub_extend_days_{user_id}_-30")
+            ],
             [
                 types.InlineKeyboardButton(text="7 дней", callback_data=f"admin_sub_extend_days_{user_id}_7"),
                 types.InlineKeyboardButton(text="30 дней", callback_data=f"admin_sub_extend_days_{user_id}_30")
@@ -2114,11 +2119,19 @@ async def process_subscription_extension_days(
     user_id = int(parts[-2])
     days = int(parts[-1])
     
+    if days == 0 or days < -365 or days > 365:
+        await callback.answer("❌ Количество дней должно быть от -365 до 365, исключая 0", show_alert=True)
+        return
+
     success = await _extend_subscription_by_days(db, user_id, days, db_user.id)
-    
+
     if success:
+        if days > 0:
+            action_text = f"продлена на {days} дней"
+        else:
+            action_text = f"уменьшена на {abs(days)} дней"
         await callback.message.edit_text(
-            f"✅ Подписка пользователя продлена на {days} дней",
+            f"✅ Подписка пользователя {action_text}",
             reply_markup=types.InlineKeyboardMarkup(inline_keyboard=[
                 [types.InlineKeyboardButton(text="📱 К подписке", callback_data=f"admin_user_subscription_{user_id}")]
             ])
@@ -2153,15 +2166,19 @@ async def process_subscription_extension_text(
     try:
         days = int(message.text.strip())
         
-        if days <= 0 or days > 365:
-            await message.answer("❌ Количество дней должно быть от 1 до 365")
+        if days == 0 or days < -365 or days > 365:
+            await message.answer("❌ Количество дней должно быть от -365 до 365, исключая 0")
             return
-        
+
         success = await _extend_subscription_by_days(db, user_id, days, db_user.id)
-        
+
         if success:
+            if days > 0:
+                action_text = f"продлена на {days} дней"
+            else:
+                action_text = f"уменьшена на {abs(days)} дней"
             await message.answer(
-                f"✅ Подписка пользователя продлена на {days} дней",
+                f"✅ Подписка пользователя {action_text}",
                 reply_markup=types.InlineKeyboardMarkup(inline_keyboard=[
                     [types.InlineKeyboardButton(text="📱 К подписке", callback_data=f"admin_user_subscription_{user_id}")]
                 ])
@@ -3115,9 +3132,12 @@ async def _extend_subscription_by_days(db: AsyncSession, user_id: int, days: int
         subscription_service = SubscriptionService()
         await subscription_service.update_remnawave_user(db, subscription)
         
-        logger.info(f"Админ {admin_id} продлил подписку пользователя {user_id} на {days} дней")
+        if days > 0:
+            logger.info(f"Админ {admin_id} продлил подписку пользователя {user_id} на {days} дней")
+        else:
+            logger.info(f"Админ {admin_id} сократил подписку пользователя {user_id} на {abs(days)} дней")
         return True
-        
+
     except Exception as e:
         logger.error(f"Ошибка продления подписки: {e}")
         return False
@@ -3240,13 +3260,34 @@ async def _grant_paid_subscription(db: AsyncSession, user_id: int, days: int, ad
             logger.error(f"У пользователя {user_id} уже есть подписка")
             return False
         
+        trial_squads: list[str] = []
+
+        try:
+            from app.database.crud.server_squad import get_random_trial_squad_uuid
+
+            trial_uuid = await get_random_trial_squad_uuid(
+                db,
+                getattr(settings, "TRIAL_SQUAD_UUID", None),
+            )
+            if trial_uuid:
+                trial_squads = [trial_uuid]
+        except Exception as error:
+            logger.error(
+                "Не удалось подобрать сквад при выдаче подписки админом %s: %s",
+                admin_id,
+                error,
+            )
+            if getattr(settings, "TRIAL_SQUAD_UUID", None):
+                trial_squads = [settings.TRIAL_SQUAD_UUID]
+
         subscription = await create_paid_subscription(
             db=db,
             user_id=user_id,
             duration_days=days,
             traffic_limit_gb=settings.DEFAULT_TRAFFIC_LIMIT_GB,
             device_limit=settings.DEFAULT_DEVICE_LIMIT,
-            connected_squads=[settings.TRIAL_SQUAD_UUID] if settings.TRIAL_SQUAD_UUID else []
+            connected_squads=trial_squads,
+            update_server_counters=True,
         )
         
         subscription_service = SubscriptionService()

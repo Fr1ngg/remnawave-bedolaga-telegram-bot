@@ -45,6 +45,7 @@ class SettingDefinition(BaseModel):
     current: Any | None = Field(default=None)
     original: Any | None = Field(default=None)
     has_override: bool
+    read_only: bool = Field(default=False)
     choices: list[SettingChoice] = Field(default_factory=list)
 
     model_config = ConfigDict(extra="forbid")

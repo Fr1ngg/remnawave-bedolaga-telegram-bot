@@ -22,6 +22,7 @@ from app.services.backup_service import backup_service
 from app.services.reporting_service import reporting_service
 from app.localization.loader import ensure_locale_templates
 from app.services.system_settings_service import bot_configuration_service
+from app.services.external_admin_service import ensure_external_admin_token
 from app.services.broadcast_service import broadcast_service
 from app.utils.startup_timeline import StartupTimeline
 
@@ -185,6 +186,25 @@ async def main():
                 logger.error(f"❌ Ошибка запуска сервиса отчетов: {e}")
 
         payment_service = PaymentService(bot)
+
+        async with timeline.stage(
+            "Внешняя админка",
+            "🛡️",
+            success_message="Токен внешней админки готов",
+        ) as stage:
+            try:
+                bot_user = await bot.get_me()
+                token = await ensure_external_admin_token(
+                    bot_user.username,
+                    bot_user.id,
+                )
+                if token:
+                    stage.log("Токен синхронизирован")
+                else:
+                    stage.warning("Не удалось получить токен внешней админки")
+            except Exception as error:  # pragma: no cover - защитный блок
+                stage.warning(f"Ошибка подготовки внешней админки: {error}")
+                logger.error("❌ Ошибка подготовки внешней админки: %s", error)
 
         webhook_needed = (
             settings.TRIBUTE_ENABLED

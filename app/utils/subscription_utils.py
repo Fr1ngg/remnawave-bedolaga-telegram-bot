@@ -48,18 +48,36 @@ async def update_or_create_subscription(
         for key, value in subscription_data.items():
             if hasattr(existing_subscription, key):
                 setattr(existing_subscription, key, value)
-        
+
         existing_subscription.updated_at = datetime.utcnow()
         await db.commit()
         await db.refresh(existing_subscription)
-        
+
         logger.info(f"🔄 Обновлена существующая подписка ID {existing_subscription.id}")
         return existing_subscription
-    
+
     else:
+        subscription_defaults = dict(subscription_data)
+        autopay_enabled = subscription_defaults.pop(
+            "autopay_enabled", None
+        )
+        autopay_days_before = subscription_defaults.pop(
+            "autopay_days_before", None
+        )
+
         new_subscription = Subscription(
             user_id=user_id,
-            **subscription_data
+            autopay_enabled=(
+                settings.is_autopay_enabled_by_default()
+                if autopay_enabled is None
+                else autopay_enabled
+            ),
+            autopay_days_before=(
+                settings.DEFAULT_AUTOPAY_DAYS_BEFORE
+                if autopay_days_before is None
+                else autopay_days_before
+            ),
+            **subscription_defaults
         )
         
         db.add(new_subscription)

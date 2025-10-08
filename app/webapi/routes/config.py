@@ -5,7 +5,10 @@ from typing import Any, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, Security, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.services.system_settings_service import bot_configuration_service
+from app.services.system_settings_service import (
+    ReadOnlySettingError,
+    bot_configuration_service,
+)
 
 from ..dependencies import get_db_session, require_api_token
 from .notifications import broker
@@ -95,6 +98,7 @@ def _serialize_definition(definition, include_choices: bool = True) -> SettingDe
         current=current,
         original=original,
         has_override=has_override,
+        read_only=bot_configuration_service.is_read_only(definition.key),
         choices=choices,
     )
 
@@ -154,7 +158,10 @@ async def update_setting(
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Setting not found") from error
 
     value = _coerce_value(key, payload.value)
-    await bot_configuration_service.set_value(db, key, value)
+    try:
+        await bot_configuration_service.set_value(db, key, value)
+    except ReadOnlySettingError as error:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, str(error)) from error
     await db.commit()
 
     try:
@@ -176,7 +183,10 @@ async def reset_setting(
     except KeyError as error:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Setting not found") from error
 
-    await bot_configuration_service.reset_value(db, key)
+    try:
+        await bot_configuration_service.reset_value(db, key)
+    except ReadOnlySettingError as error:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, str(error)) from error
     await db.commit()
     try:
         await broker.publish("settings.update")
