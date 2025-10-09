@@ -10,7 +10,8 @@ from app.middlewares.auth import AuthMiddleware
 from app.middlewares.logging import LoggingMiddleware
 from app.middlewares.throttling import ThrottlingMiddleware
 from app.middlewares.subscription_checker import SubscriptionStatusMiddleware
-from app.middlewares.maintenance import MaintenanceMiddleware  
+from app.middlewares.maintenance import MaintenanceMiddleware
+from app.middlewares.display_name_restriction import DisplayNameRestrictionMiddleware
 from app.services.maintenance_service import maintenance_service
 from app.utils.cache import cache 
 
@@ -102,6 +103,10 @@ async def setup_bot() -> tuple[Bot, Dispatcher]:
     dp.callback_query.middleware(LoggingMiddleware())
     dp.message.middleware(MaintenanceMiddleware())
     dp.callback_query.middleware(MaintenanceMiddleware())
+    display_name_middleware = DisplayNameRestrictionMiddleware()
+    dp.message.middleware(display_name_middleware)
+    dp.callback_query.middleware(display_name_middleware)
+    dp.pre_checkout_query.middleware(display_name_middleware)
     dp.message.middleware(ThrottlingMiddleware())
     dp.callback_query.middleware(ThrottlingMiddleware())
 

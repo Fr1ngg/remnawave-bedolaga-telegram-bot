@@ -5,6 +5,7 @@
   "COUNTRY_MANAGEMENT_NONE": "No countries connected",
   "PAID_FEATURE_ONLY": "⚠ This feature is available only for paid subscriptions",
   "PAID_FEATURE_ONLY_SHORT": "⚠ Paid subscriptions only",
+  "SUSPICIOUS_DISPLAY_NAME_BLOCKED": "🚫 We detected that your display name looks like a link or an official account. Please change your Telegram name and try again.",
   "COUNTRY_NOT_AVAILABLE_PROMOGROUP": "❌ This server is not available for your promo group",
   "COUNTRY_CHANGES_NOT_FOUND": "⚠️ No changes detected",
   "COUNTRY_CHANGES_SUCCESS_HEADER": "✅ <b>Countries updated!</b>\n\n",
