@@ -27,6 +27,7 @@ from app.database.models import (
     MulenPayPayment, Pal24Payment, DiscountOffer, WebApiToken,
     server_squad_promo_groups
 )
+from app.database.utils import ensure_transaction_columns
 
 logger = logging.getLogger(__name__)
 
@@ -189,12 +190,13 @@ class BackupService:
                         logger.info(f"📊 Экспортируем таблицу: {table_name}")
                         
                         query = select(model)
-                        
+
                         if model == User:
                             query = query.options(selectinload(User.subscription))
                         elif model == Subscription:
                             query = query.options(selectinload(Subscription.user))
                         elif model == Transaction:
+                            await ensure_transaction_columns(db)
                             query = query.options(selectinload(Transaction.user))
                         
                         result = await db.execute(query)
