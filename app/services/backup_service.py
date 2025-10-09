@@ -8,6 +8,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Dict, Any, Optional, List, Tuple
 from dataclasses import dataclass, asdict
+from html import escape
 import aiofiles
 from aiogram.types import FSInputFile
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -973,10 +974,11 @@ class BackupService:
             }
             
             icon = icons.get(event_type, "ℹ️")
-            notification_text = f"{icon} <b>СИСТЕМА БЕКАПОВ</b>\n\n{message}"
-            
+            safe_message = escape(message)
+            notification_text = f"{icon} <b>СИСТЕМА БЕКАПОВ</b>\n\n{safe_message}"
+
             if file_path:
-                notification_text += f"\n📁 <code>{Path(file_path).name}</code>"
+                notification_text += f"\n📁 <code>{escape(Path(file_path).name)}</code>"
             
             notification_text += f"\n\n⏰ <i>{datetime.now().strftime('%d.%m.%Y %H:%M:%S')}</i>"
             
