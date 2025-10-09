@@ -3434,43 +3434,38 @@ async def run_universal_migration():
         async with engine.begin() as conn:
             total_subs = await conn.execute(text("SELECT COUNT(*) FROM subscriptions"))
             unique_users = await conn.execute(text("SELECT COUNT(DISTINCT user_id) FROM subscriptions"))
-            
+
             total_count = total_subs.fetchone()[0]
             unique_count = unique_users.fetchone()[0]
-            
-            logger.info(f"Всего подписок: {total_count}")
-            logger.info(f"Уникальных пользователей: {unique_count}")
-            
-            if total_count == unique_count:
-                logger.info("База данных уже в корректном состоянии")
-                logger.info("=== МИГРАЦИЯ ЗАВЕРШЕНА УСПЕШНО ===")
-                return True
-        
-        deleted_count = await fix_subscription_duplicates_universal()
-        
-        async with engine.begin() as conn:
-            final_check = await conn.execute(text("""
-                SELECT user_id, COUNT(*) as count 
-                FROM subscriptions 
-                GROUP BY user_id 
-                HAVING COUNT(*) > 1
-            """))
-            
-            remaining_duplicates = final_check.fetchall()
-            
+
+        logger.info(f"Всего подписок: {total_count}")
+        logger.info(f"Уникальных пользователей: {unique_count}")
+
+        duplicates_need_fix = total_count != unique_count
+        duplicates_deleted = 0
+
+        if not duplicates_need_fix:
+            logger.info("База данных уже в корректном состоянии")
+        else:
+            logger.info("Обнаружены пользователи с дублирующимися подписками — запускаем очистку")
+            duplicates_deleted = await fix_subscription_duplicates_universal()
+
+            async with engine.begin() as conn:
+                final_check = await conn.execute(text("""
+                    SELECT user_id, COUNT(*) as count
+                    FROM subscriptions
+                    GROUP BY user_id
+                    HAVING COUNT(*) > 1
+                """))
+
+                remaining_duplicates = final_check.fetchall()
+
             if remaining_duplicates:
                 logger.warning(f"Остались дубликаты у {len(remaining_duplicates)} пользователей")
                 return False
-            else:
-                logger.info("=== МИГРАЦИЯ ЗАВЕРШЕНА УСПЕШНО ===")
-                logger.info("✅ Реферальная система обновлена")
-                logger.info("✅ CryptoBot таблица готова")
-                logger.info("✅ Таблица конверсий подписок создана")
-                logger.info("✅ Таблица welcome_texts с полем is_enabled готова")
-                logger.info("✅ Медиа поля в broadcast_history добавлены")
-                logger.info("✅ Дубликаты подписок исправлены")
-                return True
-                
+
+            logger.info(f"✅ Дубликаты подписок исправлены (удалено {duplicates_deleted} записей)")
+
         logger.info("=== ПРОВЕРКА БАЛАНСОВ ПОЛЬЗОВАТЕЛЕЙ ===")
         balance_ready = await ensure_users_balance_columns()
         if balance_ready:
@@ -3483,6 +3478,24 @@ async def run_universal_migration():
             logger.info("✅ Таблица transactions актуальна")
         else:
             logger.warning("⚠️ Проблемы с обновлением таблицы transactions")
+
+        migration_success = balance_ready and transactions_ready
+
+        if migration_success:
+            logger.info("=== МИГРАЦИЯ ЗАВЕРШЕНА УСПЕШНО ===")
+            logger.info("✅ Реферальная система обновлена")
+            logger.info("✅ CryptoBot таблица готова")
+            logger.info("✅ Таблица конверсий подписок создана")
+            logger.info("✅ Таблица welcome_texts с полем is_enabled готова")
+            logger.info("✅ Медиа поля в broadcast_history добавлены")
+            if duplicates_need_fix:
+                logger.info("✅ Дубликаты подписок исправлены")
+            else:
+                logger.info("✅ Дубликаты подписок не обнаружены")
+            return True
+
+        logger.warning("⚠️ Миграция завершена с предупреждениями")
+        return False
                 
     except Exception as error:
         logger.error(f"=== ОШИБКА МИГРАЦИИ: {error}")
