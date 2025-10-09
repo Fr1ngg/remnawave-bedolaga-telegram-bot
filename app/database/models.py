@@ -90,6 +90,22 @@ class MainMenuButtonVisibility(Enum):
     ADMINS = "admins"
     SUBSCRIBERS = "subscribers"
 
+
+class AdminUser(Base):
+    __tablename__ = "admin_users"
+
+    id = Column(Integer, primary_key=True, index=True)
+    username = Column(String(64), nullable=False, unique=True, index=True)
+    password_hash = Column(String(255), nullable=False)
+    email = Column(String(255), nullable=True)
+    name = Column(String(255), nullable=True)
+    created_at = Column(DateTime, default=func.now())
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+
+    def __repr__(self) -> str:
+        return f"<AdminUser(id={self.id}, username={self.username})>"
+
+
 class YooKassaPayment(Base):
     __tablename__ = "yookassa_payments"
     
