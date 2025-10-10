@@ -18,6 +18,62 @@ os.environ.setdefault('BOT_TOKEN', 'test-token')
 from app.config import settings
 from app.webapi.routes import miniapp
 from app.database.models import PaymentMethod
+
+
+def _stub_user(language: str = 'ru'):
+    return types.SimpleNamespace(
+        language=language,
+        get_promo_discount=lambda scope, period: 0,
+    )
+
+
+def _stub_texts(language: str = 'ru'):
+    return types.SimpleNamespace(language=language)
+
+
+def test_build_purchase_periods_fallbacks_to_price_catalog(monkeypatch, request):
+    monkeypatch.setattr(
+        type(settings),
+        'get_available_subscription_periods',
+        lambda self: [],
+        raising=False,
+    )
+    original_prices = dict(miniapp.PERIOD_PRICES)
+
+    def restore_prices():
+        miniapp.PERIOD_PRICES.clear()
+        miniapp.PERIOD_PRICES.update(original_prices)
+
+    miniapp.PERIOD_PRICES.clear()
+    miniapp.PERIOD_PRICES.update({30: 101000, 90: 201000})
+    request.addfinalizer(restore_prices)
+
+    periods = miniapp._build_purchase_periods(_stub_user(), _stub_texts())
+
+    period_ids = [period.id for period in periods]
+    assert period_ids == ['30', '90']
+    assert [period.price_kopeks for period in periods] == [101000, 201000]
+
+
+def test_build_purchase_periods_falls_back_to_default_when_catalog_empty(monkeypatch, request):
+    monkeypatch.setattr(
+        type(settings),
+        'get_available_subscription_periods',
+        lambda self: [],
+        raising=False,
+    )
+    original_prices = dict(miniapp.PERIOD_PRICES)
+
+    def restore_prices():
+        miniapp.PERIOD_PRICES.clear()
+        miniapp.PERIOD_PRICES.update(original_prices)
+
+    miniapp.PERIOD_PRICES.clear()
+    request.addfinalizer(restore_prices)
+
+    periods = miniapp._build_purchase_periods(_stub_user(), _stub_texts())
+
+    assert periods and periods[0].id == '30'
 from app.webapi.schemas.miniapp import (
     MiniAppPaymentCreateRequest,
     MiniAppPaymentMethodsRequest,

@@ -360,10 +360,13 @@ class MiniAppSubscriptionServerOption(BaseModel):
     name: Optional[str] = None
     price_kopeks: Optional[int] = None
     price_label: Optional[str] = None
+    original_price_kopeks: Optional[int] = None
+    original_price_label: Optional[str] = None
     discount_percent: Optional[int] = None
     is_connected: bool = False
     is_available: bool = True
     disabled_reason: Optional[str] = None
+    description: Optional[str] = None
 
 
 class MiniAppSubscriptionTrafficOption(BaseModel):
@@ -371,8 +374,11 @@ class MiniAppSubscriptionTrafficOption(BaseModel):
     label: Optional[str] = None
     price_kopeks: Optional[int] = None
     price_label: Optional[str] = None
+    original_price_kopeks: Optional[int] = None
+    original_price_label: Optional[str] = None
     is_current: bool = False
     is_available: bool = True
+    is_default: bool = False
     description: Optional[str] = None
 
 
@@ -381,6 +387,10 @@ class MiniAppSubscriptionDeviceOption(BaseModel):
     label: Optional[str] = None
     price_kopeks: Optional[int] = None
     price_label: Optional[str] = None
+    original_price_kopeks: Optional[int] = None
+    original_price_label: Optional[str] = None
+    included: Optional[int] = None
+    is_default: bool = False
 
 
 class MiniAppSubscriptionCurrentSettings(BaseModel):
@@ -411,6 +421,8 @@ class MiniAppSubscriptionDevicesSettings(BaseModel):
     max: int = 0
     step: int = 1
     current: int = 0
+    default: Optional[int] = None
+    included: Optional[int] = None
     price_kopeks: Optional[int] = None
     price_label: Optional[str] = None
 
@@ -523,4 +535,195 @@ class MiniAppSubscriptionDevicesUpdateRequest(BaseModel):
 class MiniAppSubscriptionUpdateResponse(BaseModel):
     success: bool = True
     message: Optional[str] = None
+
+
+def _merge_purchase_selection(values: Any) -> Any:
+    if not isinstance(values, dict):
+        return values
+
+    alias_map = {
+        "periodId": "period_id",
+        "periodDays": "period_days",
+        "periodMonths": "period_months",
+        "period": "period_id",
+        "period_key": "period_id",
+        "periodKey": "period_id",
+        "code": "period_id",
+        "durationDays": "period_days",
+        "duration_days": "period_days",
+        "trafficValue": "traffic_value",
+        "trafficGb": "traffic_gb",
+        "serverUuids": "server_uuids",
+        "squadUuids": "squad_uuids",
+        "deviceLimit": "device_limit",
+    }
+
+    selection = values.get("selection")
+    if isinstance(selection, dict):
+        for alias, target in alias_map.items():
+            if alias in selection and target not in values:
+                values[target] = selection[alias]
+        for key in ("servers", "server_uuids", "squads", "squad_uuids"):
+            if key in selection and key not in values:
+                values[key] = selection[key]
+        if "devices" in selection and "devices" not in values:
+            values["devices"] = selection["devices"]
+        if "traffic" in selection and "traffic" not in values:
+            values["traffic"] = selection["traffic"]
+
+    for alias, target in alias_map.items():
+        if alias in values and target not in values:
+            values[target] = values[alias]
+
+    return values
+
+
+class MiniAppSubscriptionPurchasePeriod(BaseModel):
+    id: Optional[str] = None
+    code: Optional[str] = None
+    period_days: Optional[int] = Field(None, alias="periodDays")
+    period_months: Optional[int] = Field(None, alias="periodMonths")
+    months: Optional[int] = None
+    label: Optional[str] = None
+    description: Optional[str] = None
+    note: Optional[str] = None
+    price_kopeks: Optional[int] = None
+    price_label: Optional[str] = None
+    original_price_kopeks: Optional[int] = None
+    original_price_label: Optional[str] = None
+    per_month_price_kopeks: Optional[int] = None
+    per_month_price_label: Optional[str] = None
+    discount_percent: Optional[int] = None
+    is_available: bool = True
+    promo_badges: List[str] = Field(default_factory=list)
+
+
+class MiniAppSubscriptionPurchaseTrafficConfig(BaseModel):
+    selectable: bool = True
+    mode: str = "selectable"
+    options: List[MiniAppSubscriptionTrafficOption] = Field(default_factory=list)
+    default: Optional[int] = None
+    current: Optional[int] = None
+    hint: Optional[str] = None
+
+
+class MiniAppSubscriptionPurchaseServersConfig(BaseModel):
+    selectable: bool = True
+    min: int = 0
+    max: int = 0
+    options: List[MiniAppSubscriptionServerOption] = Field(default_factory=list)
+    default: List[str] = Field(default_factory=list)
+    selected: List[str] = Field(default_factory=list)
+    hint: Optional[str] = None
+
+
+class MiniAppSubscriptionPurchaseDevicesConfig(BaseModel):
+    min: int = 1
+    max: Optional[int] = None
+    step: int = 1
+    default: Optional[int] = None
+    current: Optional[int] = None
+    included: Optional[int] = None
+    price_kopeks: Optional[int] = None
+    price_label: Optional[str] = None
+    original_price_kopeks: Optional[int] = None
+    original_price_label: Optional[str] = None
+    hint: Optional[str] = None
+
+
+class MiniAppSubscriptionPurchaseOptions(BaseModel):
+    currency: str = "RUB"
+    balance_kopeks: Optional[int] = None
+    balance_label: Optional[str] = None
+    subscription_id: Optional[int] = Field(None, alias="subscriptionId")
+    periods: List[MiniAppSubscriptionPurchasePeriod] = Field(default_factory=list)
+    traffic: MiniAppSubscriptionPurchaseTrafficConfig = Field(default_factory=MiniAppSubscriptionPurchaseTrafficConfig)
+    servers: MiniAppSubscriptionPurchaseServersConfig = Field(default_factory=MiniAppSubscriptionPurchaseServersConfig)
+    devices: MiniAppSubscriptionPurchaseDevicesConfig = Field(default_factory=MiniAppSubscriptionPurchaseDevicesConfig)
+    selection: Dict[str, Any] = Field(default_factory=dict)
+    promo: Optional[Dict[str, Any]] = None
+    summary: Optional[Dict[str, Any]] = None
+
+
+class MiniAppSubscriptionPurchaseOptionsRequest(BaseModel):
+    init_data: str = Field(..., alias="initData")
+    subscription_id: Optional[int] = Field(None, alias="subscriptionId")
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _normalize(cls, values: Any) -> Any:
+        return _merge_purchase_selection(values)
+
+
+class MiniAppSubscriptionPurchaseOptionsResponse(BaseModel):
+    success: bool = True
+    data: MiniAppSubscriptionPurchaseOptions
+
+
+class MiniAppSubscriptionPurchasePreviewRequest(BaseModel):
+    init_data: str = Field(..., alias="initData")
+    subscription_id: Optional[int] = Field(None, alias="subscriptionId")
+    selection: Optional[Dict[str, Any]] = None
+    period_id: Optional[str] = Field(None, alias="periodId")
+    period_days: Optional[int] = Field(None, alias="periodDays")
+    period_months: Optional[int] = Field(None, alias="periodMonths")
+    traffic_value: Optional[int] = Field(None, alias="trafficValue")
+    traffic_gb: Optional[int] = Field(None, alias="trafficGb")
+    traffic: Optional[int] = None
+    servers: Optional[List[str]] = None
+    server_uuids: Optional[List[str]] = Field(None, alias="serverUuids")
+    squads: Optional[List[str]] = None
+    squad_uuids: Optional[List[str]] = Field(None, alias="squadUuids")
+    devices: Optional[int] = None
+    device_limit: Optional[int] = Field(None, alias="deviceLimit")
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _normalize(cls, values: Any) -> Any:
+        return _merge_purchase_selection(values)
+
+
+class MiniAppSubscriptionPurchasePreviewItem(BaseModel):
+    label: str
+    value: str
+    highlight: bool = False
+
+
+class MiniAppSubscriptionPurchasePreview(BaseModel):
+    total_price_kopeks: Optional[int] = Field(None, alias="totalPriceKopeks")
+    total_price_label: Optional[str] = Field(None, alias="totalPriceLabel")
+    original_price_kopeks: Optional[int] = Field(None, alias="originalPriceKopeks")
+    original_price_label: Optional[str] = Field(None, alias="originalPriceLabel")
+    per_month_price_kopeks: Optional[int] = Field(None, alias="perMonthPriceKopeks")
+    per_month_price_label: Optional[str] = Field(None, alias="perMonthPriceLabel")
+    discount_percent: Optional[int] = None
+    discount_label: Optional[str] = None
+    discount_lines: List[str] = Field(default_factory=list)
+    breakdown: List[MiniAppSubscriptionPurchasePreviewItem] = Field(default_factory=list)
+    balance_kopeks: Optional[int] = None
+    balance_label: Optional[str] = None
+    missing_amount_kopeks: Optional[int] = None
+    missing_amount_label: Optional[str] = None
+    can_purchase: bool = True
+    status_message: Optional[str] = None
+
+
+class MiniAppSubscriptionPurchasePreviewResponse(BaseModel):
+    success: bool = True
+    preview: MiniAppSubscriptionPurchasePreview
+
+
+class MiniAppSubscriptionPurchaseSubmitRequest(MiniAppSubscriptionPurchasePreviewRequest):
+    pass
+
+
+class MiniAppSubscriptionPurchaseSubmitResponse(BaseModel):
+    success: bool = True
+    message: Optional[str] = None
+    balance_kopeks: Optional[int] = None
+    balance_label: Optional[str] = None
 

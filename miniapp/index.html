@@ -4347,7 +4347,10 @@
                 'subscription_purchase.servers.empty': 'No servers available',
                 'subscription_purchase.servers.single': 'Included server: {name}',
                 'subscription_purchase.servers.limit': 'Select up to {count}',
+                'subscription_purchase.servers.minimum': 'Select at least {count}',
                 'subscription_purchase.servers.selected': 'Selected: {count}',
+                'subscription_purchase.servers.selected_of': 'Selected: {selected}/{total}',
+                'subscription_purchase.servers.exact': 'Select {count}',
                 'subscription_purchase.devices.title': 'Devices',
                 'subscription_purchase.devices.subtitle': 'Simultaneous connections.',
                 'subscription_purchase.devices.unlimited': 'Unlimited devices',
@@ -4673,7 +4676,10 @@
                 'subscription_purchase.servers.empty': 'Нет доступных серверов',
                 'subscription_purchase.servers.single': 'Включён сервер: {name}',
                 'subscription_purchase.servers.limit': 'Можно выбрать до {count}',
+                'subscription_purchase.servers.minimum': 'Нужно выбрать минимум {count}',
                 'subscription_purchase.servers.selected': 'Выбрано: {count}',
+                'subscription_purchase.servers.selected_of': 'Выбрано: {selected} из {total}',
+                'subscription_purchase.servers.exact': 'Нужно выбрать {count}',
                 'subscription_purchase.devices.title': 'Устройства',
                 'subscription_purchase.devices.subtitle': 'Одновременные подключения.',
                 'subscription_purchase.devices.unlimited': 'Безлимитное число устройств',
@@ -11264,6 +11270,16 @@
                 availableUuids.slice(0, minSelectable).forEach(uuid => selection.add(uuid));
             }
 
+            if (maxSelectable && maxSelectable > 0 && selection.size > maxSelectable) {
+                const prioritized = availableUuids.filter(uuid => selection.has(uuid));
+                selection.clear();
+                prioritized.slice(0, maxSelectable).forEach(uuid => selection.add(uuid));
+            }
+
+            if (minSelectable > 0 && selection.size < minSelectable) {
+                availableUuids.slice(0, minSelectable).forEach(uuid => selection.add(uuid));
+            }
+
             subscriptionPurchaseSelections.servers = selection;
         }
 
@@ -12192,8 +12208,16 @@
 
             if (metaElement) {
                 let metaText = '';
-                if (maxSelectable && maxSelectable !== minSelectable) {
-                    metaText = t('subscription_purchase.servers.limit').replace('{count}', String(maxSelectable));
+                if (maxSelectable && maxSelectable > 0 && maxSelectable !== minSelectable) {
+                    if (selectedCount) {
+                        metaText = t('subscription_purchase.servers.selected_of')
+                            .replace('{selected}', String(selectedCount))
+                            .replace('{total}', String(maxSelectable));
+                    } else {
+                        metaText = t('subscription_purchase.servers.limit').replace('{count}', String(maxSelectable));
+                    }
+                } else if (maxSelectable && maxSelectable > 0 && maxSelectable === minSelectable) {
+                    metaText = t('subscription_purchase.servers.exact').replace('{count}', String(maxSelectable));
                 } else if (selectedCount) {
                     metaText = t('subscription_purchase.servers.selected').replace('{count}', String(selectedCount));
                 }
@@ -12205,8 +12229,11 @@
                 if (config?.hint) {
                     hintParts.push(config.hint);
                 }
-                if (!config?.hint && minSelectable > 0) {
-                    hintParts.push(t('subscription_purchase.servers.limit').replace('{count}', String(minSelectable)));
+                if (minSelectable > 0) {
+                    const key = maxSelectable && maxSelectable > 0 && maxSelectable === minSelectable
+                        ? 'subscription_purchase.servers.exact'
+                        : 'subscription_purchase.servers.minimum';
+                    hintParts.push(t(key).replace('{count}', String(minSelectable)));
                 }
                 const hintText = hintParts.join(' ');
                 hintElement.textContent = hintText;
@@ -12636,17 +12663,25 @@
             if (!uuid) {
                 return;
             }
+            const period = getSelectedSubscriptionPurchasePeriod();
+            const config = getSubscriptionPurchaseServersConfig(period);
+            const minSelectable = coercePositiveInt(config?.min ?? config?.min_selectable ?? config?.minRequired, 0) || 0;
+            const maxSelectable = coercePositiveInt(config?.max ?? config?.max_selectable ?? config?.maxAllowed, 0) || 0;
             const selection = subscriptionPurchaseSelections.servers instanceof Set
                 ? new Set(subscriptionPurchaseSelections.servers)
                 : new Set();
             if (selection.has(uuid)) {
+                if (minSelectable && selection.size <= minSelectable) {
+                    return;
+                }
                 selection.delete(uuid);
             } else {
+                if (maxSelectable && maxSelectable > 0 && selection.size >= maxSelectable) {
+                    return;
+                }
                 selection.add(uuid);
             }
             subscriptionPurchaseSelections.servers = selection;
-            const period = getSelectedSubscriptionPurchasePeriod();
-            const config = getSubscriptionPurchaseServersConfig(period);
             ensurePurchaseServersSelection(config);
             renderSubscriptionPurchaseCard();
             requestSubscriptionPurchasePreviewUpdate();
