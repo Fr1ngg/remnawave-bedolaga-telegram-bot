@@ -38,6 +38,7 @@
             --radius-lg: 16px;
             --radius-xl: 20px;
             --success: #10b981;
+            --success-rgb: 16, 185, 129;
             --warning: #f59e0b;
             --danger: #ef4444;
             --danger-rgb: 239, 68, 68;
@@ -789,15 +790,57 @@
         }
 
         .subscription-purchase-options {
+            display: grid;
+            gap: 14px;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        }
+
+        .subscription-purchase-option-card {
+            position: relative;
+            flex-direction: column;
+            align-items: stretch;
+            justify-content: center;
+            gap: 14px;
+            padding: 16px 18px;
+            border-radius: var(--radius-lg);
+            border: 1px solid rgba(var(--primary-rgb), 0.18);
+            background: linear-gradient(160deg, rgba(var(--primary-rgb), 0.08), rgba(var(--primary-rgb), 0.02));
+            box-shadow: var(--shadow-sm);
+            transition: transform 0.2s ease, box-shadow 0.2s ease, border 0.2s ease;
+        }
+
+        .subscription-purchase-option-card:hover:not(.disabled) {
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-md);
+            border-color: rgba(var(--primary-rgb), 0.3);
+        }
+
+        .subscription-purchase-option-card.active {
+            border-color: rgba(var(--primary-rgb), 0.6);
+            box-shadow: var(--shadow-md);
+            background: linear-gradient(155deg, rgba(var(--primary-rgb), 0.14), rgba(var(--primary-rgb), 0.04));
+        }
+
+        .subscription-purchase-option-content {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 18px;
+            width: 100%;
+        }
+
+        .subscription-purchase-option-info {
             display: flex;
             flex-direction: column;
-            gap: 10px;
+            gap: 8px;
+            min-width: 0;
         }
 
         .subscription-purchase-option-description {
             font-size: 12px;
             color: var(--text-secondary);
-            margin-top: 4px;
+            margin-top: 0;
+            line-height: 1.45;
         }
 
         .subscription-purchase-option-meta {
@@ -811,10 +854,11 @@
             display: flex;
             flex-direction: column;
             align-items: flex-end;
-            gap: 2px;
+            gap: 4px;
             font-size: 12px;
             font-weight: 600;
             color: var(--text-secondary);
+            text-align: right;
         }
 
         .subscription-purchase-option-price-current {
@@ -840,8 +884,30 @@
         }
 
         .subscription-purchase-card .subscription-settings-toggle {
-            align-items: flex-start;
+            align-items: stretch;
             gap: 16px;
+        }
+
+        .subscription-purchase-option-card .subscription-settings-toggle-label {
+            gap: 8px;
+        }
+
+        .subscription-purchase-option-card .subscription-settings-toggle-title {
+            font-size: 15px;
+            white-space: normal;
+            line-height: 1.35;
+        }
+
+        .subscription-purchase-option-card .subscription-purchase-option-price-current {
+            font-size: 16px;
+        }
+
+        .subscription-purchase-option-card .subscription-purchase-option-price-original {
+            font-size: 13px;
+        }
+
+        .subscription-purchase-option-card .subscription-purchase-option-note {
+            font-size: 12px;
         }
 
         .subscription-purchase-option-aside {
@@ -851,6 +917,31 @@
             align-items: flex-end;
             gap: 6px;
             min-width: 120px;
+        }
+
+        .subscription-purchase-option-badges {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+        }
+
+        .subscription-purchase-option-badge {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 4px 10px;
+            border-radius: 999px;
+            background: rgba(var(--primary-rgb), 0.12);
+            color: var(--primary);
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .subscription-purchase-option-card.has-discount .subscription-purchase-option-badge {
+            background: rgba(var(--danger-rgb), 0.14);
+            color: var(--danger);
         }
 
         .subscription-purchase-option-note {
@@ -871,6 +962,32 @@
             font-weight: 600;
         }
 
+        .subscription-purchase-period-option {
+            align-items: flex-start;
+            flex-wrap: wrap;
+            row-gap: 8px;
+        }
+
+        .subscription-purchase-period-option .subscription-settings-toggle-label {
+            flex: 1 1 180px;
+        }
+
+        .subscription-purchase-period-option .subscription-settings-toggle-title {
+            white-space: normal;
+            overflow: visible;
+            text-overflow: unset;
+        }
+
+        .subscription-purchase-period-option .subscription-purchase-option-aside {
+            margin-left: auto;
+            min-width: 0;
+        }
+
+        .subscription-purchase-period-option .subscription-purchase-option-price,
+        .subscription-purchase-period-option .subscription-purchase-option-note {
+            max-width: 100%;
+        }
+
         .subscription-purchase-period-option .subscription-purchase-option-price-current {
             font-size: 18px;
             font-weight: 700;
@@ -879,6 +996,30 @@
 
         .subscription-purchase-period-option .subscription-purchase-option-price-original {
             font-size: 13px;
+        }
+
+        @media (max-width: 420px) {
+            .subscription-purchase-period-option {
+                flex-direction: column;
+                align-items: stretch;
+            }
+
+            .subscription-purchase-period-option .subscription-purchase-option-aside {
+                width: 100%;
+                align-items: flex-start;
+                text-align: left;
+                margin-left: 0;
+                gap: 6px;
+            }
+
+            .subscription-purchase-period-option .subscription-purchase-option-price {
+                align-items: flex-start;
+                text-align: left;
+            }
+
+            .subscription-purchase-period-option .subscription-purchase-option-note {
+                text-align: left;
+            }
         }
 
         .subscription-purchase-summary {
@@ -976,15 +1117,27 @@
             margin-bottom: 6px;
         }
 
+        .card.subscription-purchase-card {
+            margin-bottom: 32px;
+        }
+
         .card.subscription-purchase-card:not(.as-modal) .card-content {
-            padding: 0 16px calc(28px + env(safe-area-inset-bottom, 0));
+            padding: 0 16px 0;
         }
 
         .subscription-purchase-actions {
             display: flex;
             flex-direction: column;
-            gap: 12px;
-            margin-top: 8px;
+            gap: 14px;
+            margin: 18px -16px -16px;
+            padding: 18px 16px calc(24px + env(safe-area-inset-bottom, 0));
+            background: rgba(var(--primary-rgb), 0.08);
+            border-top: 1px solid rgba(var(--primary-rgb), 0.12);
+            box-shadow: 0 -12px 32px rgba(15, 23, 42, 0.15);
+        }
+
+        .subscription-purchase-actions .btn {
+            width: 100%;
         }
 
         .subscription-purchase-card .btn-secondary {
@@ -1007,6 +1160,61 @@
             gap: 4px;
         }
 
+        .subscription-purchase-devices-card {
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+            padding: 16px 18px;
+            border-radius: var(--radius-lg);
+            border: 1px solid rgba(var(--primary-rgb), 0.18);
+            background: linear-gradient(160deg, rgba(var(--primary-rgb), 0.08), rgba(var(--primary-rgb), 0.02));
+            box-shadow: var(--shadow-sm);
+        }
+
+        .subscription-purchase-devices-main {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+        }
+
+        .subscription-purchase-devices-card .subscription-settings-stepper {
+            gap: 16px;
+        }
+
+        .subscription-purchase-devices-card .subscription-settings-stepper button {
+            border-radius: 14px;
+            border: 1px solid rgba(var(--primary-rgb), 0.25);
+            background: rgba(var(--primary-rgb), 0.08);
+            color: var(--primary);
+        }
+
+        .subscription-purchase-devices-card .subscription-settings-stepper button:hover:not(:disabled) {
+            background: rgba(var(--primary-rgb), 0.16);
+            border-color: rgba(var(--primary-rgb), 0.4);
+        }
+
+        .subscription-purchase-devices-card .subscription-settings-stepper-value {
+            font-size: 26px;
+        }
+
+        .subscription-purchase-devices-price {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            gap: 6px;
+            min-width: 0;
+        }
+
+        .subscription-purchase-devices-card .subscription-settings-price-note {
+            font-size: 15px;
+            color: var(--primary);
+        }
+
+        .subscription-purchase-devices-card .subscription-purchase-section-hint {
+            margin: 0;
+        }
+
         :root[data-theme="dark"] .subscription-purchase-summary {
             border-color: rgba(var(--primary-rgb), 0.22);
             background: rgba(37, 99, 235, 0.08);
@@ -1016,18 +1224,82 @@
             background: rgba(var(--danger-rgb), 0.16);
         }
 
+        :root[data-theme="dark"] .subscription-purchase-option-card,
+        :root[data-theme="dark"] .subscription-purchase-devices-card {
+            border-color: rgba(var(--primary-rgb), 0.35);
+            background: linear-gradient(160deg, rgba(var(--primary-rgb), 0.18), rgba(var(--primary-rgb), 0.06));
+            box-shadow: var(--shadow-md);
+        }
+
+        :root[data-theme="dark"] .subscription-purchase-option-card.has-discount .subscription-purchase-option-badge {
+            background: rgba(var(--danger-rgb), 0.28);
+            color: #fff;
+        }
+
+        :root[data-theme="dark"] .subscription-purchase-option-badge {
+            background: rgba(var(--primary-rgb), 0.28);
+            color: #fff;
+        }
+
+        :root[data-theme="dark"] .subscription-purchase-actions {
+            background: rgba(15, 23, 42, 0.75);
+            box-shadow: 0 -12px 32px rgba(2, 6, 23, 0.65);
+        }
+
+        @media (max-width: 520px) {
+            .subscription-purchase-options {
+                grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+            }
+        }
+
         @media (max-width: 480px) {
             .card.subscription-purchase-card:not(.as-modal) .card-content {
-                padding: 0 16px calc(36px + env(safe-area-inset-bottom, 0));
+                padding: 0 16px 0;
+            }
+
+            .subscription-purchase-option-content {
+                flex-direction: column;
+                gap: 12px;
+            }
+
+            .subscription-purchase-option-aside {
+                align-items: flex-start;
+                min-width: 0;
+            }
+
+            .subscription-purchase-devices-main {
+                flex-direction: column;
+                align-items: stretch;
+            }
+
+            .subscription-purchase-devices-price {
+                align-items: flex-start;
             }
 
             .subscription-purchase-actions {
-                gap: 14px;
+                margin: 16px -16px -16px;
+                padding-bottom: calc(28px + env(safe-area-inset-bottom, 0));
             }
 
             .subscription-purchase-card .btn-primary {
                 min-height: 52px;
                 font-size: 16px;
+            }
+        }
+
+        @media (max-width: 360px) {
+            .card.subscription-purchase-card:not(.as-modal) .card-content {
+                padding: 0 12px 0;
+            }
+
+            .subscription-purchase-actions {
+                margin: 14px -12px -12px;
+                padding: 16px 12px calc(30px + env(safe-area-inset-bottom, 0));
+            }
+
+            .subscription-purchase-option-card,
+            .subscription-purchase-devices-card {
+                padding: 14px 16px;
             }
         }
 
@@ -4059,13 +4331,19 @@
                                     </div>
                                     <div class="subscription-purchase-section-meta" id="subscriptionPurchaseDevicesMeta"></div>
                                 </div>
-                                <div class="subscription-settings-stepper">
-                                    <button type="button" id="subscriptionPurchaseDevicesDecrease">−</button>
-                                    <div class="subscription-settings-stepper-value" id="subscriptionPurchaseDevicesValue">0</div>
-                                    <button type="button" id="subscriptionPurchaseDevicesIncrease">+</button>
+                                <div class="subscription-purchase-devices-card">
+                                    <div class="subscription-purchase-devices-main">
+                                        <div class="subscription-settings-stepper">
+                                            <button type="button" id="subscriptionPurchaseDevicesDecrease">−</button>
+                                            <div class="subscription-settings-stepper-value" id="subscriptionPurchaseDevicesValue">0</div>
+                                            <button type="button" id="subscriptionPurchaseDevicesIncrease">+</button>
+                                        </div>
+                                        <div class="subscription-purchase-devices-price">
+                                            <div class="subscription-settings-price-note" id="subscriptionPurchaseDevicesPrice"></div>
+                                        </div>
+                                    </div>
+                                    <div class="subscription-purchase-section-hint hidden" id="subscriptionPurchaseDevicesHint"></div>
                                 </div>
-                                <div class="subscription-settings-price-note" id="subscriptionPurchaseDevicesPrice"></div>
-                                <div class="subscription-purchase-section-hint hidden" id="subscriptionPurchaseDevicesHint"></div>
                             </div>
                             <div class="subscription-purchase-summary" id="subscriptionPurchaseSummary">
                                 <div class="subscription-purchase-summary-header">
@@ -13713,7 +13991,7 @@
 
                 const button = document.createElement('button');
                 button.type = 'button';
-                button.className = 'subscription-settings-toggle';
+                button.className = 'subscription-settings-toggle subscription-purchase-option-card subscription-purchase-option-card--traffic';
                 if (isSelected) {
                     button.classList.add('active');
                 }
@@ -13721,13 +13999,76 @@
                     button.classList.add('disabled');
                 }
 
+                const content = document.createElement('div');
+                content.className = 'subscription-purchase-option-content';
+
                 const labelContainer = document.createElement('div');
-                labelContainer.className = 'subscription-settings-toggle-label';
+                labelContainer.className = 'subscription-settings-toggle-label subscription-purchase-option-info';
 
                 const title = document.createElement('div');
                 title.className = 'subscription-settings-toggle-title';
                 title.textContent = formatPurchaseTrafficLabel(option);
                 labelContainer.appendChild(title);
+
+                const descriptionText = option.description || option.tagline || option.subtitle || option.detail || '';
+                if (descriptionText && String(descriptionText).trim().length) {
+                    const descriptionEl = document.createElement('div');
+                    descriptionEl.className = 'subscription-purchase-option-description';
+                    descriptionEl.textContent = String(descriptionText).trim();
+                    labelContainer.appendChild(descriptionEl);
+                }
+
+                const badges = [];
+                const seenBadges = new Set();
+                const pushBadge = badgeValue => {
+                    if (badgeValue == null) {
+                        return;
+                    }
+                    if (Array.isArray(badgeValue)) {
+                        badgeValue.forEach(pushBadge);
+                        return;
+                    }
+                    let text = '';
+                    if (typeof badgeValue === 'string' || typeof badgeValue === 'number') {
+                        text = String(badgeValue);
+                    } else if (typeof badgeValue === 'object') {
+                        text = badgeValue.label || badgeValue.title || badgeValue.text || badgeValue.name || '';
+                    }
+                    const normalized = typeof text === 'string' ? text.trim() : '';
+                    if (normalized && !seenBadges.has(normalized)) {
+                        seenBadges.add(normalized);
+                        badges.push(normalized);
+                    }
+                };
+
+                pushBadge(option.badges);
+                pushBadge(option.labels);
+                pushBadge(option.tags);
+                pushBadge(option.badge);
+                pushBadge(option.label_badge ?? option.labelBadge);
+                pushBadge(option.promo_group_labels ?? option.promoGroupLabels);
+                pushBadge(option.promo_offer_labels ?? option.promoOfferLabels);
+                pushBadge(option.highlight_labels ?? option.highlightLabels);
+                pushBadge(option.promo_group_label ?? option.promoGroupLabel);
+                pushBadge(option.promo_offer_label ?? option.promoOfferLabel);
+                pushBadge(option.discount_label ?? option.discountLabel);
+                pushBadge(option.highlight_label ?? option.highlightLabel);
+                pushBadge(option.benefit_label ?? option.benefitLabel);
+                pushBadge(option.ribbon ?? option.ribbon_label ?? option.ribbonLabel);
+
+                if (badges.length) {
+                    const badgesContainer = document.createElement('div');
+                    badgesContainer.className = 'subscription-purchase-option-badges';
+                    badges.forEach(text => {
+                        const badgeEl = document.createElement('span');
+                        badgeEl.className = 'subscription-purchase-option-badge';
+                        badgeEl.textContent = text;
+                        badgesContainer.appendChild(badgeEl);
+                    });
+                    labelContainer.appendChild(badgesContainer);
+                }
+
+                content.appendChild(labelContainer);
 
                 const priceInfo = resolvePurchasePrice(
                     [
@@ -13756,11 +14097,12 @@
                     null,
                 );
 
-                if (priceInfo.label || originalInfo.label) {
-                    const meta = document.createElement('div');
-                    meta.className = 'subscription-settings-toggle-meta';
+                const priceAside = document.createElement('div');
+                priceAside.className = 'subscription-purchase-option-aside';
+                let hasAsideContent = false;
 
-                    const priceWrapper = document.createElement('span');
+                if (priceInfo.label || originalInfo.label) {
+                    const priceWrapper = document.createElement('div');
                     priceWrapper.className = 'subscription-purchase-option-price';
 
                     if (originalInfo.label && originalInfo.label !== priceInfo.label) {
@@ -13777,18 +14119,33 @@
                         priceWrapper.appendChild(currentEl);
                     }
 
-                    meta.appendChild(priceWrapper);
-
-                    if (discountPercent) {
-                        const discountEl = document.createElement('span');
-                        discountEl.className = 'subscription-purchase-price-discount';
-                        discountEl.textContent = `-${discountPercent}%`;
-                        meta.appendChild(discountEl);
-                    }
-                    labelContainer.appendChild(meta);
+                    priceAside.appendChild(priceWrapper);
+                    hasAsideContent = true;
                 }
 
-                button.appendChild(labelContainer);
+                const priceNote = option.price_note ?? option.priceNote ?? option.note ?? '';
+                if (priceNote && String(priceNote).trim().length) {
+                    const noteEl = document.createElement('div');
+                    noteEl.className = 'subscription-purchase-option-note';
+                    noteEl.textContent = String(priceNote).trim();
+                    priceAside.appendChild(noteEl);
+                    hasAsideContent = true;
+                }
+
+                if (discountPercent) {
+                    const discountEl = document.createElement('div');
+                    discountEl.className = 'subscription-purchase-option-discount';
+                    discountEl.textContent = `-${discountPercent}%`;
+                    priceAside.appendChild(discountEl);
+                    hasAsideContent = true;
+                    button.classList.add('has-discount');
+                }
+
+                if (hasAsideContent) {
+                    content.appendChild(priceAside);
+                }
+
+                button.appendChild(content);
 
                 if (isAvailable && value !== undefined) {
                     button.addEventListener('click', () => {
