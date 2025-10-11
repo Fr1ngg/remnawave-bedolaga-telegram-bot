@@ -4288,6 +4288,7 @@
             display: flex;
             flex-direction: column;
             overflow: hidden;
+            min-height: 0;
         }
 
         .guide-modal-header {
@@ -4325,6 +4326,9 @@
             padding: 0 24px 24px;
             overflow-y: auto;
             flex: 1;
+            min-height: 0;
+            -webkit-overflow-scrolling: touch;
+            overscroll-behavior: contain;
         }
 
         .guide-modal-footer {
