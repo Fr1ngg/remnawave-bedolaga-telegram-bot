@@ -223,9 +223,19 @@ async def extend_subscription(
             if subscription.user:
                 subscription.user.has_had_paid_subscription = True
 
-    if subscription.status == SubscriptionStatus.EXPIRED.value and days > 0:
+    if (
+        subscription.status in {
+            SubscriptionStatus.EXPIRED.value,
+            SubscriptionStatus.DISABLED.value,
+        }
+        and days > 0
+    ):
+        previous_status = subscription.status
         subscription.status = SubscriptionStatus.ACTIVE.value
-        logger.info(f"🔄 Статус изменён с EXPIRED на ACTIVE")
+        logger.info(
+            "🔄 Статус изменён с %s на ACTIVE",
+            previous_status.upper(),
+        )
 
     if settings.RESET_TRAFFIC_ON_PAYMENT:
         subscription.traffic_used_gb = 0.0
