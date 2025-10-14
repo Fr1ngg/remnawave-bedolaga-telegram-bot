@@ -52,6 +52,11 @@ def webhook_server(monkeypatch: pytest.MonkeyPatch) -> Tuple[WebhookServer, Asyn
     monkeypatch.setattr("app.external.webhook_server.PaymentService", lambda *args, **kwargs: payment_mock)
     monkeypatch.setattr("app.services.payment_service.PaymentService", lambda *args, **kwargs: payment_mock)
 
+    # В актуальной реализации WebhookServer инициализирует PaymentService в __init__,
+    # поэтому принудительно подменяем инстанс на mock, чтобы избежать обращения к
+    # реальному сервису и зависимости от интерфейса настоящей БД в тестах.
+    server.payment_service = payment_mock
+
     server._verify_mulenpay_signature = lambda request, raw: True  # type: ignore[attr-defined]
 
     class DummyDB:

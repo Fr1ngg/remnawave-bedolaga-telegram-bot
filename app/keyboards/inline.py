@@ -1066,6 +1066,14 @@ def get_payment_methods_keyboard(amount_kopeks: int, language: str = DEFAULT_LAN
             )
         ])
 
+    if settings.is_wata_enabled():
+        keyboard.append([
+            InlineKeyboardButton(
+                text=texts.t("PAYMENT_CARD_WATA", "💳 Банковская карта (Wata)"),
+                callback_data=_build_callback("wata")
+            )
+        ])
+
     if settings.is_pal24_enabled():
         keyboard.append([
             InlineKeyboardButton(

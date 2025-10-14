@@ -17,42 +17,50 @@ logger = logging.getLogger(__name__)
 
 
 class WebhookServer:
-    
+
     def __init__(self, bot: Bot):
         self.bot = bot
         self.app = None
         self.runner = None
         self.site = None
         self.tribute_service = TributeService(bot)
-    
+        self.payment_service = PaymentService(bot)
+
     async def create_app(self) -> web.Application:
-        
+
         self.app = web.Application()
-        
+
         self.app.router.add_post(settings.TRIBUTE_WEBHOOK_PATH, self._tribute_webhook_handler)
 
         if settings.is_mulenpay_enabled():
             self.app.router.add_post(settings.MULENPAY_WEBHOOK_PATH, self._mulenpay_webhook_handler)
 
+        if settings.is_wata_enabled():
+            self.app.router.add_post(settings.WATA_WEBHOOK_PATH, self._wata_webhook_handler)
+
         if settings.is_cryptobot_enabled():
             self.app.router.add_post(settings.CRYPTOBOT_WEBHOOK_PATH, self._cryptobot_webhook_handler)
-        
+
         self.app.router.add_get('/health', self._health_check)
-        
+
         self.app.router.add_options(settings.TRIBUTE_WEBHOOK_PATH, self._options_handler)
         if settings.is_mulenpay_enabled():
             self.app.router.add_options(settings.MULENPAY_WEBHOOK_PATH, self._options_handler)
+        if settings.is_wata_enabled():
+            self.app.router.add_options(settings.WATA_WEBHOOK_PATH, self._options_handler)
         if settings.is_cryptobot_enabled():
             self.app.router.add_options(settings.CRYPTOBOT_WEBHOOK_PATH, self._options_handler)
-        
+
         logger.info(f"Webhook сервер настроен:")
         logger.info(f"  - Tribute webhook: POST {settings.TRIBUTE_WEBHOOK_PATH}")
         if settings.is_mulenpay_enabled():
             logger.info(f"  - Mulen Pay webhook: POST {settings.MULENPAY_WEBHOOK_PATH}")
+        if settings.is_wata_enabled():
+            logger.info(f"  - Wata webhook: POST {settings.WATA_WEBHOOK_PATH}")
         if settings.is_cryptobot_enabled():
             logger.info(f"  - CryptoBot webhook: POST {settings.CRYPTOBOT_WEBHOOK_PATH}")
         logger.info(f"  - Health check: GET /health")
-        
+
         return self.app
     
     async def start(self):
@@ -90,6 +98,13 @@ class WebhookServer:
                     settings.TRIBUTE_WEBHOOK_PORT,
                     settings.MULENPAY_WEBHOOK_PATH,
                 )
+            if settings.is_wata_enabled():
+                logger.info(
+                    "Wata webhook URL: http://%s:%s%s",
+                    settings.TRIBUTE_WEBHOOK_HOST,
+                    settings.TRIBUTE_WEBHOOK_PORT,
+                    settings.WATA_WEBHOOK_PATH,
+                )
             if settings.is_cryptobot_enabled():
                 logger.info(
                     "CryptoBot webhook URL: http://%s:%s%s",
@@ -122,7 +137,7 @@ class WebhookServer:
             headers={
                 'Access-Control-Allow-Origin': '*',
                 'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',
-                'Access-Control-Allow-Headers': 'Content-Type, trbt-signature, Crypto-Pay-API-Signature, X-MulenPay-Signature, Authorization',
+                'Access-Control-Allow-Headers': 'Content-Type, trbt-signature, Crypto-Pay-API-Signature, X-MulenPay-Signature, X-Signature, Authorization',
             }
         )
 
@@ -148,14 +163,12 @@ class WebhookServer:
                 logger.error(f"Ошибка парсинга Mulen Pay webhook: {error}")
                 return web.json_response({"status": "error", "reason": "invalid_json"}, status=400)
 
-            payment_service = PaymentService(self.bot)
-
             # Получаем соединение с БД
             db_generator = get_db()
             db = await db_generator.__anext__()
-            
+
             try:
-                success = await payment_service.process_mulenpay_callback(db, payload)
+                success = await self.payment_service.process_mulenpay_callback(db, payload)
                 if success:
                     return web.json_response({"status": "ok"}, status=200)
                 return web.json_response({"status": "error", "reason": "processing_failed"}, status=400)
@@ -171,6 +184,62 @@ class WebhookServer:
         except Exception as error:
             logger.error(f"Критическая ошибка Mulen Pay webhook: {error}", exc_info=True)
             return web.json_response({"status": "error", "reason": "internal_error", "message": str(error)}, status=500)
+
+    async def _wata_webhook_handler(self, request: web.Request) -> web.Response:
+        try:
+            logger.info("Получен Wata webhook: %s %s", request.method, request.path)
+            raw_body = await request.read()
+
+            if not raw_body:
+                logger.warning("Пустой Wata webhook")
+                return web.json_response({"status": "error", "reason": "empty_body"}, status=400)
+
+            signature = request.headers.get("X-Signature", "")
+            wata_service = getattr(self.payment_service, "wata_service", None)
+
+            if not wata_service:
+                logger.error("Wata service не настроен, но получен webhook")
+                return web.json_response({"status": "error", "reason": "service_not_configured"}, status=503)
+
+            is_valid = False
+            try:
+                is_valid = await wata_service.verify_signature(raw_body, signature)
+            except Exception as error:
+                logger.error("Ошибка проверки подписи Wata: %s", error)
+
+            if not is_valid:
+                logger.warning("Подпись Wata webhook не прошла проверку")
+                return web.json_response({"status": "error", "reason": "invalid_signature"}, status=401)
+
+            try:
+                payload = json.loads(raw_body.decode('utf-8'))
+            except json.JSONDecodeError as error:
+                logger.error("Ошибка парсинга Wata webhook: %s", error)
+                return web.json_response({"status": "error", "reason": "invalid_json"}, status=400)
+
+            db_generator = get_db()
+            db = await db_generator.__anext__()
+
+            try:
+                success = await self.payment_service.process_wata_webhook(db, payload)
+                if success:
+                    return web.json_response({"status": "ok"}, status=200)
+                return web.json_response({"status": "error", "reason": "processing_failed"}, status=400)
+            except Exception as error:
+                logger.error("Ошибка обработки Wata webhook: %s", error, exc_info=True)
+                return web.json_response({"status": "error", "reason": "internal_error"}, status=500)
+            finally:
+                try:
+                    await db_generator.__anext__()
+                except StopAsyncIteration:
+                    pass
+
+        except Exception as error:
+            logger.error("Критическая ошибка Wata webhook: %s", error, exc_info=True)
+            return web.json_response(
+                {"status": "error", "reason": "internal_error", "message": str(error)},
+                status=500,
+            )
 
     @staticmethod
     def _extract_mulenpay_header(request: web.Request, header_names: Iterable[str]) -> Optional[str]:

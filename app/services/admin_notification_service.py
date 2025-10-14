@@ -764,6 +764,7 @@ class AdminNotificationService:
             'yookassa': '💳 YooKassa (карта)',
             'tribute': '💎 Tribute (карта)',
             'mulenpay': '💳 Mulen Pay (карта)',
+            'wata': '💳 Wata (карта)',
             'pal24': '🏦 PayPalych (СБП)',
             'manual': '🛠️ Вручную (админ)',
             'balance': '💰 С баланса'

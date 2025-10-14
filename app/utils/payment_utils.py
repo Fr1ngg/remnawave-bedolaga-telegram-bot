@@ -54,6 +54,15 @@ def get_available_payment_methods() -> List[Dict[str, str]]:
             "callback": "topup_mulenpay"
         })
 
+    if settings.is_wata_enabled():
+        methods.append({
+            "id": "wata",
+            "name": "Банковская карта",
+            "icon": "💳",
+            "description": "через Wata",
+            "callback": "topup_wata"
+        })
+
     if settings.is_pal24_enabled():
         methods.append({
             "id": "pal24",
@@ -141,6 +150,8 @@ def is_payment_method_available(method_id: str) -> bool:
         return settings.TRIBUTE_ENABLED
     elif method_id == "mulenpay":
         return settings.is_mulenpay_enabled()
+    elif method_id == "wata":
+        return settings.is_wata_enabled()
     elif method_id == "pal24":
         return settings.is_pal24_enabled()
     elif method_id == "cryptobot":
@@ -159,6 +170,7 @@ def get_payment_method_status() -> Dict[str, bool]:
         "yookassa": settings.is_yookassa_enabled(),
         "tribute": settings.TRIBUTE_ENABLED,
         "mulenpay": settings.is_mulenpay_enabled(),
+        "wata": settings.is_wata_enabled(),
         "pal24": settings.is_pal24_enabled(),
         "cryptobot": settings.is_cryptobot_enabled(),
         "support": True
@@ -176,6 +188,8 @@ def get_enabled_payment_methods_count() -> int:
     if settings.TRIBUTE_ENABLED:
         count += 1
     if settings.is_mulenpay_enabled():
+        count += 1
+    if settings.is_wata_enabled():
         count += 1
     if settings.is_pal24_enabled():
         count += 1

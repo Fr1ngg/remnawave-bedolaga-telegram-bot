@@ -227,6 +227,19 @@ class Settings(BaseSettings):
     PAL24_SBP_BUTTON_TEXT: Optional[str] = None
     PAL24_CARD_BUTTON_TEXT: Optional[str] = None
 
+    WATA_ENABLED: bool = False
+    WATA_ACCESS_TOKEN: Optional[str] = None
+    WATA_BASE_URL: str = "https://api.wata.pro/api/h2h"
+    WATA_TIMEOUT_SECONDS: int = 60
+    WATA_DEFAULT_CURRENCY: str = "RUB"
+    WATA_LINK_TYPE: str = "OneTime"
+    WATA_SUCCESS_REDIRECT_URL: Optional[str] = None
+    WATA_FAIL_REDIRECT_URL: Optional[str] = None
+    WATA_MIN_AMOUNT_KOPEKS: int = 10000
+    WATA_MAX_AMOUNT_KOPEKS: int = 100000000
+    WATA_WEBHOOK_PATH: str = "/wata-webhook"
+    WATA_PUBLIC_KEY_CACHE_SECONDS: int = 3600
+
     MAIN_MENU_MODE: str = "default"
     CONNECT_BUTTON_MODE: str = "guide"
     MINIAPP_CUSTOM_URL: str = ""
@@ -726,6 +739,13 @@ class Settings(BaseSettings):
             and self.PAL24_API_TOKEN is not None
             and self.PAL24_SHOP_ID is not None
         )
+
+    def is_wata_enabled(self) -> bool:
+        return bool(self.WATA_ENABLED and self.WATA_ACCESS_TOKEN)
+
+    def get_wata_base_url(self) -> str:
+        base_url = (self.WATA_BASE_URL or "https://api.wata.pro/api/h2h").strip()
+        return base_url.rstrip("/") or "https://api.wata.pro/api/h2h"
 
     def get_cryptobot_base_url(self) -> str:
         if self.CRYPTOBOT_TESTNET:

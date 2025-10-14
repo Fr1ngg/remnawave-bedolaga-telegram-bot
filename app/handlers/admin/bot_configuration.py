@@ -224,6 +224,7 @@ def _get_group_status(group_key: str) -> Tuple[str, str]:
             "YooKassa": settings.is_yookassa_enabled(),
             "CryptoBot": settings.is_cryptobot_enabled(),
             "MulenPay": settings.is_mulenpay_enabled(),
+            "Wata": settings.is_wata_enabled(),
             "PAL24": settings.is_pal24_enabled(),
             "Tribute": settings.TRIBUTE_ENABLED,
             "Stars": settings.TELEGRAM_STARS_ENABLED,
