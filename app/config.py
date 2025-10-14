@@ -227,6 +227,19 @@ class Settings(BaseSettings):
     PAL24_SBP_BUTTON_TEXT: Optional[str] = None
     PAL24_CARD_BUTTON_TEXT: Optional[str] = None
 
+    WATA_ENABLED: bool = False
+    WATA_ACCESS_TOKEN: Optional[str] = None
+    WATA_BASE_URL: str = "https://api.wata.pro/api/h2h"
+    WATA_SUCCESS_REDIRECT_URL: Optional[str] = None
+    WATA_FAIL_REDIRECT_URL: Optional[str] = None
+    WATA_LINK_TYPE: str = "OneTime"
+    WATA_MIN_AMOUNT_KOPEKS: int = 10000
+    WATA_MAX_AMOUNT_KOPEKS: int = 100000000
+    WATA_REQUEST_TIMEOUT: int = 60
+    WATA_PUBLIC_KEY_CACHE_TTL_SECONDS: int = 3600
+    WATA_WEBHOOK_PATH: str = "/wata-webhook"
+    WATA_PAYMENT_DESCRIPTION: str = "Пополнение баланса"
+
     MAIN_MENU_MODE: str = "default"
     CONNECT_BUTTON_MODE: str = "guide"
     MINIAPP_CUSTOM_URL: str = ""
@@ -726,6 +739,24 @@ class Settings(BaseSettings):
             and self.PAL24_API_TOKEN is not None
             and self.PAL24_SHOP_ID is not None
         )
+
+    def is_wata_enabled(self) -> bool:
+        return self.WATA_ENABLED and self.WATA_ACCESS_TOKEN is not None
+
+    def get_wata_success_redirect_url(self) -> Optional[str]:
+        value = (self.WATA_SUCCESS_REDIRECT_URL or "").strip()
+        return value or None
+
+    def get_wata_fail_redirect_url(self) -> Optional[str]:
+        value = (self.WATA_FAIL_REDIRECT_URL or "").strip()
+        return value or None
+
+    def get_wata_link_type(self) -> str:
+        link_type = (self.WATA_LINK_TYPE or "OneTime").strip() or "OneTime"
+        normalized = link_type[0].upper() + link_type[1:].lower()
+        if normalized not in {"Onetime", "Manytime"}:
+            return "OneTime"
+        return "OneTime" if normalized == "Onetime" else "ManyTime"
 
     def get_cryptobot_base_url(self) -> str:
         if self.CRYPTOBOT_TESTNET:

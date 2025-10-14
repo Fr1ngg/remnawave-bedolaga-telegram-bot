@@ -11,6 +11,7 @@ from .tribute import TributePaymentMixin
 from .cryptobot import CryptoBotPaymentMixin
 from .mulenpay import MulenPayPaymentMixin
 from .pal24 import Pal24PaymentMixin
+from .wata import WataPaymentMixin
 
 __all__ = [
     "PaymentCommonMixin",
@@ -20,4 +21,5 @@ __all__ = [
     "CryptoBotPaymentMixin",
     "MulenPayPaymentMixin",
     "Pal24PaymentMixin",
+    "WataPaymentMixin",
 ]

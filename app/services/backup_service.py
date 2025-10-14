@@ -723,7 +723,7 @@ class BackupService:
             "discount_offers", "user_messages", "broadcast_history", "subscription_conversions",
             "referral_earnings", "promocode_uses",
             "yookassa_payments", "cryptobot_payments",
-            "mulenpay_payments", "pal24_payments",
+            "mulenpay_payments", "pal24_payments", "wata_payments",
             "transactions", "welcome_texts", "subscriptions",
             "promocodes", "users", "promo_groups",
             "server_squads", "squads", "service_rules",

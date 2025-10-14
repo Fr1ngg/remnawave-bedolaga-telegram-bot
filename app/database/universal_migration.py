@@ -706,6 +706,117 @@ async def create_pal24_payments_table():
         return False
 
 
+async def create_wata_payments_table():
+    table_exists = await check_table_exists('wata_payments')
+    if table_exists:
+        logger.info("Таблица wata_payments уже существует")
+        return True
+
+    try:
+        async with engine.begin() as conn:
+            db_type = await get_database_type()
+
+            if db_type == 'sqlite':
+                create_sql = """
+                CREATE TABLE wata_payments (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER NOT NULL,
+                    link_id VARCHAR(255) NOT NULL UNIQUE,
+                    order_id VARCHAR(255) NOT NULL,
+                    amount_kopeks INTEGER NOT NULL,
+                    currency VARCHAR(10) NOT NULL DEFAULT 'RUB',
+                    description TEXT NULL,
+                    link_status VARCHAR(50) NULL,
+                    transaction_uuid VARCHAR(255) NULL,
+                    transaction_status VARCHAR(50) NULL,
+                    is_paid BOOLEAN NOT NULL DEFAULT 0,
+                    paid_at DATETIME NULL,
+                    payment_url TEXT NULL,
+                    metadata_json JSON NULL,
+                    callback_payload JSON NULL,
+                    transaction_id INTEGER NULL,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (user_id) REFERENCES users(id),
+                    FOREIGN KEY (transaction_id) REFERENCES transactions(id)
+                );
+
+                CREATE INDEX idx_wata_link_id ON wata_payments(link_id);
+                CREATE INDEX idx_wata_order_id ON wata_payments(order_id);
+                CREATE INDEX idx_wata_transaction_uuid ON wata_payments(transaction_uuid);
+                """
+
+            elif db_type == 'postgresql':
+                create_sql = """
+                CREATE TABLE wata_payments (
+                    id SERIAL PRIMARY KEY,
+                    user_id INTEGER NOT NULL REFERENCES users(id),
+                    link_id VARCHAR(255) NOT NULL UNIQUE,
+                    order_id VARCHAR(255) NOT NULL,
+                    amount_kopeks INTEGER NOT NULL,
+                    currency VARCHAR(10) NOT NULL DEFAULT 'RUB',
+                    description TEXT NULL,
+                    link_status VARCHAR(50) NULL,
+                    transaction_uuid VARCHAR(255) NULL,
+                    transaction_status VARCHAR(50) NULL,
+                    is_paid BOOLEAN NOT NULL DEFAULT FALSE,
+                    paid_at TIMESTAMP NULL,
+                    payment_url TEXT NULL,
+                    metadata_json JSON NULL,
+                    callback_payload JSON NULL,
+                    transaction_id INTEGER NULL REFERENCES transactions(id),
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                );
+
+                CREATE INDEX idx_wata_link_id ON wata_payments(link_id);
+                CREATE INDEX idx_wata_order_id ON wata_payments(order_id);
+                CREATE INDEX idx_wata_transaction_uuid ON wata_payments(transaction_uuid);
+                """
+
+            elif db_type == 'mysql':
+                create_sql = """
+                CREATE TABLE wata_payments (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    user_id INT NOT NULL,
+                    link_id VARCHAR(255) NOT NULL UNIQUE,
+                    order_id VARCHAR(255) NOT NULL,
+                    amount_kopeks INT NOT NULL,
+                    currency VARCHAR(10) NOT NULL DEFAULT 'RUB',
+                    description TEXT NULL,
+                    link_status VARCHAR(50) NULL,
+                    transaction_uuid VARCHAR(255) NULL,
+                    transaction_status VARCHAR(50) NULL,
+                    is_paid BOOLEAN NOT NULL DEFAULT 0,
+                    paid_at DATETIME NULL,
+                    payment_url TEXT NULL,
+                    metadata_json JSON NULL,
+                    callback_payload JSON NULL,
+                    transaction_id INT NULL,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                    FOREIGN KEY (user_id) REFERENCES users(id),
+                    FOREIGN KEY (transaction_id) REFERENCES transactions(id)
+                );
+
+                CREATE INDEX idx_wata_link_id ON wata_payments(link_id);
+                CREATE INDEX idx_wata_order_id ON wata_payments(order_id);
+                CREATE INDEX idx_wata_transaction_uuid ON wata_payments(transaction_uuid);
+                """
+
+            else:
+                logger.error(f"Неподдерживаемый тип БД для таблицы wata_payments: {db_type}")
+                return False
+
+            await conn.execute(text(create_sql))
+            logger.info("Таблица wata_payments успешно создана")
+            return True
+
+    except Exception as e:
+        logger.error(f"Ошибка создания таблицы wata_payments: {e}")
+        return False
+
+
 async def create_discount_offers_table():
     table_exists = await check_table_exists('discount_offers')
     if table_exists:
@@ -2977,6 +3088,13 @@ async def run_universal_migration():
             logger.info("✅ Таблица Pal24 payments готова")
         else:
             logger.warning("⚠️ Проблемы с таблицей Pal24 payments")
+
+        logger.info("=== СОЗДАНИЕ ТАБЛИЦЫ WATA ===")
+        wata_created = await create_wata_payments_table()
+        if wata_created:
+            logger.info("✅ Таблица WATA payments готова")
+        else:
+            logger.warning("⚠️ Проблемы с таблицей WATA payments")
 
         logger.info("=== СОЗДАНИЕ ТАБЛИЦЫ DISCOUNT_OFFERS ===")
         discount_created = await create_discount_offers_table()

@@ -22,8 +22,10 @@ from app.services.payment import (
     TelegramStarsMixin,
     TributePaymentMixin,
     YooKassaPaymentMixin,
+    WataPaymentMixin,
 )
 from app.services.yookassa_service import YooKassaService
+from app.services.wata_service import WataService
 
 logger = logging.getLogger(__name__)
 
@@ -126,6 +128,41 @@ async def link_pal24_payment_to_transaction(*args, **kwargs):
     return await pal_crud.link_pal24_payment_to_transaction(*args, **kwargs)
 
 
+async def create_wata_payment(*args, **kwargs):
+    wata_crud = import_module("app.database.crud.wata")
+    return await wata_crud.create_wata_payment(*args, **kwargs)
+
+
+async def get_wata_payment_by_id(*args, **kwargs):
+    wata_crud = import_module("app.database.crud.wata")
+    return await wata_crud.get_wata_payment_by_id(*args, **kwargs)
+
+
+async def get_wata_payment_by_link_id(*args, **kwargs):
+    wata_crud = import_module("app.database.crud.wata")
+    return await wata_crud.get_wata_payment_by_link_id(*args, **kwargs)
+
+
+async def get_wata_payment_by_order_id(*args, **kwargs):
+    wata_crud = import_module("app.database.crud.wata")
+    return await wata_crud.get_wata_payment_by_order_id(*args, **kwargs)
+
+
+async def get_wata_payment_by_transaction_uuid(*args, **kwargs):
+    wata_crud = import_module("app.database.crud.wata")
+    return await wata_crud.get_wata_payment_by_transaction_uuid(*args, **kwargs)
+
+
+async def update_wata_payment_status(*args, **kwargs):
+    wata_crud = import_module("app.database.crud.wata")
+    return await wata_crud.update_wata_payment_status(*args, **kwargs)
+
+
+async def link_wata_payment_to_transaction(*args, **kwargs):
+    wata_crud = import_module("app.database.crud.wata")
+    return await wata_crud.link_wata_payment_to_transaction(*args, **kwargs)
+
+
 async def create_cryptobot_payment(*args, **kwargs):
     crypto_crud = import_module("app.database.crud.cryptobot")
     return await crypto_crud.create_cryptobot_payment(*args, **kwargs)
@@ -154,6 +191,7 @@ class PaymentService(
     CryptoBotPaymentMixin,
     MulenPayPaymentMixin,
     Pal24PaymentMixin,
+    WataPaymentMixin,
 ):
     """Основной интерфейс платежей, делегирующий работу специализированным mixin-ам."""
 
@@ -174,13 +212,15 @@ class PaymentService(
         self.pal24_service = (
             Pal24Service() if settings.is_pal24_enabled() else None
         )
+        self.wata_service = WataService() if settings.is_wata_enabled() else None
 
         logger.debug(
             "PaymentService инициализирован (YooKassa=%s, Stars=%s, CryptoBot=%s, "
-            "MulenPay=%s, Pal24=%s)",
+            "MulenPay=%s, Pal24=%s, WATA=%s)",
             bool(self.yookassa_service),
             bool(self.stars_service),
             bool(self.cryptobot_service),
             bool(self.mulenpay_service),
             bool(self.pal24_service),
+            bool(self.wata_service),
         )

@@ -16,6 +16,7 @@ from app.services.payment import (  # noqa: E402
     PaymentCommonMixin,
     TelegramStarsMixin,
     TributePaymentMixin,
+    WataPaymentMixin,
     YooKassaPaymentMixin,
 )
 from app.services.payment_service import PaymentService  # noqa: E402
@@ -31,6 +32,7 @@ def test_payment_service_mro_contains_all_mixins() -> None:
         CryptoBotPaymentMixin,
         MulenPayPaymentMixin,
         Pal24PaymentMixin,
+        WataPaymentMixin,
     }
     service_mro = set(PaymentService.__mro__)
     assert mixins.issubset(service_mro), "PaymentService должен содержать все mixin-классы"
@@ -46,6 +48,7 @@ def test_payment_service_mro_contains_all_mixins() -> None:
         "create_cryptobot_payment",
         "create_mulenpay_payment",
         "create_pal24_payment",
+        "create_wata_payment",
     ],
 )
 def test_payment_service_exposes_provider_methods(attribute: str) -> None:
