@@ -2530,6 +2530,7 @@ async def save_auto_sync_schedule(
         "REMNAWAVE_AUTO_SYNC_TIMES",
         normalized_value,
     )
+    await db.commit()
 
     status = remnawave_sync_service.get_status()
     view_text, keyboard = _build_auto_sync_view(status)
