@@ -2346,6 +2346,7 @@ async def toggle_auto_sync_setting(
         "REMNAWAVE_AUTO_SYNC_ENABLED",
         new_value,
     )
+    await db.commit()
 
     status = remnawave_sync_service.get_status()
     text, keyboard = _build_auto_sync_view(status)
