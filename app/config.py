@@ -71,6 +71,8 @@ class Settings(BaseSettings):
     REMNAWAVE_AUTH_TYPE: str = "api_key"
     REMNAWAVE_USER_DESCRIPTION_TEMPLATE: str = "Bot user: {full_name} {username}"
     REMNAWAVE_USER_DELETE_MODE: str = "delete"  # "delete" или "disable"
+    REMNAWAVE_AUTO_SYNC_ENABLED: bool = False
+    REMNAWAVE_AUTO_SYNC_TIMES: str = "03:00"
     
     TRIAL_DURATION_DAYS: int = 3
     TRIAL_TRAFFIC_LIMIT_GB: int = 10
@@ -512,6 +514,42 @@ class Settings(BaseSettings):
 
         description = re.sub(r'\s+', ' ', description).strip()
         return description
+
+    @staticmethod
+    def parse_daily_time_list(raw_value: Optional[str]) -> List[time]:
+        if not raw_value:
+            return []
+
+        segments = re.split(r"[\s,;]+", raw_value.strip())
+        seen: set[tuple[int, int]] = set()
+        parsed: List[time] = []
+
+        for segment in segments:
+            if not segment:
+                continue
+
+            try:
+                hours_str, minutes_str = segment.split(":", 1)
+                hours = int(hours_str)
+                minutes = int(minutes_str)
+            except (ValueError, AttributeError):
+                continue
+
+            if not (0 <= hours < 24 and 0 <= minutes < 60):
+                continue
+
+            key = (hours, minutes)
+            if key in seen:
+                continue
+
+            seen.add(key)
+            parsed.append(time(hour=hours, minute=minutes))
+
+        parsed.sort()
+        return parsed
+
+    def get_remnawave_auto_sync_times(self) -> List[time]:
+        return self.parse_daily_time_list(self.REMNAWAVE_AUTO_SYNC_TIMES)
 
     def get_display_name_banned_keywords(self) -> List[str]:
         raw_value = self.DISPLAY_NAME_BANNED_KEYWORDS

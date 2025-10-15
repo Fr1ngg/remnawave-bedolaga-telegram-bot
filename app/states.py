@@ -173,6 +173,10 @@ class SquadMigrationStates(StatesGroup):
     confirming = State()
 
 
+class RemnaWaveSyncStates(StatesGroup):
+    waiting_for_schedule = State()
+
+
 class AdminSubmenuStates(StatesGroup):
     in_users_submenu = State()
     in_promo_submenu = State()

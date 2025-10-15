@@ -20,6 +20,7 @@ from app.external.pal24_webhook import start_pal24_webhook_server, Pal24WebhookS
 from app.database.universal_migration import run_universal_migration
 from app.services.backup_service import backup_service
 from app.services.reporting_service import reporting_service
+from app.services.remnawave_sync_service import remnawave_sync_service
 from app.localization.loader import ensure_locale_templates
 from app.services.system_settings_service import bot_configuration_service
 from app.services.external_admin_service import ensure_external_admin_token
@@ -184,6 +185,29 @@ async def main():
             except Exception as e:
                 stage.warning(f"Ошибка запуска сервиса отчетов: {e}")
                 logger.error(f"❌ Ошибка запуска сервиса отчетов: {e}")
+
+        async with timeline.stage(
+            "Автосинхронизация RemnaWave",
+            "🔄",
+            success_message="Сервис автосинхронизации готов",
+        ) as stage:
+            try:
+                await remnawave_sync_service.initialize()
+                status = remnawave_sync_service.get_status()
+                if status.enabled:
+                    times_text = ", ".join(t.strftime("%H:%M") for t in status.times) or "—"
+                    if status.next_run:
+                        next_run_text = status.next_run.strftime("%d.%m.%Y %H:%M")
+                        stage.log(
+                            f"Активирована: расписание {times_text}, ближайший запуск {next_run_text}"
+                        )
+                    else:
+                        stage.log(f"Активирована: расписание {times_text}")
+                else:
+                    stage.log("Автосинхронизация отключена настройками")
+            except Exception as e:
+                stage.warning(f"Ошибка запуска автосинхронизации: {e}")
+                logger.error(f"❌ Ошибка запуска автосинхронизации RemnaWave: {e}")
 
         payment_service = PaymentService(bot)
 
@@ -458,6 +482,12 @@ async def main():
             await reporting_service.stop()
         except Exception as e:
             logger.error(f"Ошибка остановки сервиса отчетов: {e}")
+
+        logger.info("ℹ️ Остановка сервиса автосинхронизации RemnaWave...")
+        try:
+            await remnawave_sync_service.stop()
+        except Exception as e:
+            logger.error(f"Ошибка остановки автосинхронизации RemnaWave: {e}")
 
         logger.info("ℹ️ Остановка сервиса бекапов...")
         try:

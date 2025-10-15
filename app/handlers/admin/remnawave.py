@@ -1,8 +1,16 @@
 import logging
 import math
+from datetime import datetime
+from typing import Any, Dict, Optional
+
 from aiogram import Dispatcher, types, F
 from aiogram.fsm.context import FSMContext
-from app.states import SquadRenameStates, SquadCreateStates, SquadMigrationStates
+from app.states import (
+    RemnaWaveSyncStates,
+    SquadRenameStates,
+    SquadCreateStates,
+    SquadMigrationStates,
+)
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
@@ -19,6 +27,11 @@ from app.keyboards.admin import (
 )
 from app.localization.texts import get_texts
 from app.services.remnawave_service import RemnaWaveService, RemnaWaveConfigurationError
+from app.services.remnawave_sync_service import (
+    RemnaWaveAutoSyncStatus,
+    remnawave_sync_service,
+)
+from app.services.system_settings_service import bot_configuration_service
 from app.utils.decorators import admin_required, error_handler
 from app.utils.formatters import format_bytes, format_datetime
 
@@ -28,6 +41,149 @@ squad_inbound_selections = {}
 squad_create_data = {}
 
 MIGRATION_PAGE_SIZE = 8
+
+
+def _format_duration(seconds: float) -> str:
+    if seconds < 1:
+        return "<1с"
+
+    minutes, sec = divmod(int(seconds), 60)
+    if minutes:
+        if sec:
+            return f"{minutes} мин {sec} с"
+        return f"{minutes} мин"
+    return f"{sec} с"
+
+
+def _format_user_stats(stats: Optional[Dict[str, Any]]) -> str:
+    if not stats:
+        return "—"
+
+    created = stats.get("created", 0)
+    updated = stats.get("updated", 0)
+    deleted = stats.get("deleted", stats.get("deactivated", 0))
+    errors = stats.get("errors", 0)
+
+    return (
+        f"• Создано: {created}\n"
+        f"• Обновлено: {updated}\n"
+        f"• Деактивировано: {deleted}\n"
+        f"• Ошибок: {errors}"
+    )
+
+
+def _format_server_stats(stats: Optional[Dict[str, Any]]) -> str:
+    if not stats:
+        return "—"
+
+    created = stats.get("created", 0)
+    updated = stats.get("updated", 0)
+    removed = stats.get("removed", 0)
+    total = stats.get("total", 0)
+
+    return (
+        f"• Создано: {created}\n"
+        f"• Обновлено: {updated}\n"
+        f"• Удалено: {removed}\n"
+        f"• Всего в панели: {total}"
+    )
+
+
+def _build_auto_sync_view(status: RemnaWaveAutoSyncStatus) -> tuple[str, types.InlineKeyboardMarkup]:
+    times_text = ", ".join(t.strftime("%H:%M") for t in status.times) if status.times else "—"
+    next_run_text = format_datetime(status.next_run) if status.next_run else "—"
+
+    if status.last_run_finished_at:
+        finished_text = format_datetime(status.last_run_finished_at)
+        started_text = (
+            format_datetime(status.last_run_started_at)
+            if status.last_run_started_at
+            else "—"
+        )
+        duration = (
+            status.last_run_finished_at - status.last_run_started_at
+            if status.last_run_started_at
+            else None
+        )
+        duration_text = f" ({_format_duration(duration.total_seconds())})" if duration else ""
+        reason_map = {
+            "manual": "вручную",
+            "auto": "по расписанию",
+            "immediate": "при включении",
+        }
+        reason_text = reason_map.get(status.last_run_reason or "", "—")
+        result_icon = "✅" if status.last_run_success else "❌"
+        result_label = "успешно" if status.last_run_success else "с ошибками"
+        error_block = (
+            f"\n⚠️ Ошибка: {status.last_run_error}"
+            if status.last_run_error
+            else ""
+        )
+        last_run_text = (
+            f"{result_icon} {result_label}\n"
+            f"• Старт: {started_text}\n"
+            f"• Завершено: {finished_text}{duration_text}\n"
+            f"• Причина запуска: {reason_text}{error_block}"
+        )
+    elif status.last_run_started_at:
+        last_run_text = (
+            "⏳ Синхронизация началась, но еще не завершилась"
+            if status.is_running
+            else f"ℹ️ Последний запуск: {format_datetime(status.last_run_started_at)}"
+        )
+    else:
+        last_run_text = "—"
+
+    running_text = "⏳ Выполняется сейчас" if status.is_running else "Ожидание"
+    toggle_text = "❌ Отключить" if status.enabled else "✅ Включить"
+
+    text = f"""🔄 <b>Автосинхронизация RemnaWave</b>
+
+⚙️ <b>Статус:</b> {'✅ Включена' if status.enabled else '❌ Отключена'}
+🕒 <b>Расписание:</b> {times_text}
+📅 <b>Следующий запуск:</b> {next_run_text if status.enabled else '—'}
+⏱️ <b>Состояние:</b> {running_text}
+
+📊 <b>Последний запуск:</b>
+{last_run_text}
+
+👥 <b>Пользователи:</b>
+{_format_user_stats(status.last_user_stats)}
+
+🌐 <b>Серверы:</b>
+{_format_server_stats(status.last_server_stats)}
+"""
+
+    keyboard = types.InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                types.InlineKeyboardButton(
+                    text="🔁 Запустить сейчас",
+                    callback_data="remnawave_auto_sync_run",
+                )
+            ],
+            [
+                types.InlineKeyboardButton(
+                    text=toggle_text,
+                    callback_data="remnawave_auto_sync_toggle",
+                )
+            ],
+            [
+                types.InlineKeyboardButton(
+                    text="🕒 Изменить расписание",
+                    callback_data="remnawave_auto_sync_times",
+                )
+            ],
+            [
+                types.InlineKeyboardButton(
+                    text="⬅️ Назад",
+                    callback_data="admin_rw_sync",
+                )
+            ],
+        ]
+    )
+
+    return text, keyboard
 
 
 def _format_migration_server_label(texts, server) -> str:
@@ -2096,33 +2252,307 @@ async def show_sync_options(
     db_user: User,
     db: AsyncSession
 ):
-    text = """
-🔄 <b>Синхронизация с Remnawave</b>
+    status = remnawave_sync_service.get_status()
+    times_text = ", ".join(t.strftime("%H:%M") for t in status.times) if status.times else "—"
+    next_run_text = format_datetime(status.next_run) if status.next_run else "—"
+    last_result = "—"
 
-🔄 <b>Полная синхронизация выполняет:</b>
-• Создание новых пользователей из панели в боте
-• Обновление данных существующих пользователей  
-• Деактивация подписок пользователей, отсутствующих в панели
-• Сохранение балансов пользователей
-• ⏱️ Время выполнения: 2-5 минут
+    if status.last_run_finished_at:
+        result_icon = "✅" if status.last_run_success else "❌"
+        result_label = "успешно" if status.last_run_success else "с ошибками"
+        finished_text = format_datetime(status.last_run_finished_at)
+        last_result = f"{result_icon} {result_label} ({finished_text})"
+    elif status.last_run_started_at:
+        last_result = f"⏳ Запущено {format_datetime(status.last_run_started_at)}"
 
-⚠️ <b>Важно:</b>
-• Во время синхронизации не выполняйте другие операции
-• При полной синхронизации подписки пользователей, отсутствующих в панели, будут деактивированы
-• Рекомендуется делать полную синхронизацию ежедневно
-• Баланс пользователей НЕ удаляется
-"""
-    
-    keyboard = [
-        [types.InlineKeyboardButton(text="🔄 Запустить полную синхронизацию", callback_data="sync_all_users")],
-        [types.InlineKeyboardButton(text="⬅️ Назад", callback_data="admin_remnawave")]
+    status_lines = [
+        f"⚙️ Статус: {'✅ Включена' if status.enabled else '❌ Отключена'}",
+        f"🕒 Расписание: {times_text}",
+        f"📅 Следующий запуск: {next_run_text if status.enabled else '—'}",
+        f"📊 Последний запуск: {last_result}",
     ]
-    
+
+    text = (
+        "🔄 <b>Синхронизация с Remnawave</b>\n\n"
+        "🔄 <b>Полная синхронизация выполняет:</b>\n"
+        "• Создание новых пользователей из панели в боте\n"
+        "• Обновление данных существующих пользователей\n"
+        "• Деактивация подписок пользователей, отсутствующих в панели\n"
+        "• Сохранение балансов пользователей\n"
+        "• ⏱️ Время выполнения: 2-5 минут\n\n"
+        "⚠️ <b>Важно:</b>\n"
+        "• Во время синхронизации не выполняйте другие операции\n"
+        "• При полной синхронизации подписки пользователей, отсутствующих в панели, будут деактивированы\n"
+        "• Рекомендуется делать полную синхронизацию ежедневно\n"
+        "• Баланс пользователей НЕ удаляется\n\n"
+        + "\n".join(status_lines)
+    )
+
+    keyboard = [
+        [
+            types.InlineKeyboardButton(
+                text="🔄 Запустить полную синхронизацию",
+                callback_data="sync_all_users",
+            )
+        ],
+        [
+            types.InlineKeyboardButton(
+                text="⚙️ Настройки автосинхронизации",
+                callback_data="admin_rw_auto_sync",
+            )
+        ],
+        [types.InlineKeyboardButton(text="⬅️ Назад", callback_data="admin_remnawave")],
+    ]
+
     await callback.message.edit_text(
         text,
-        reply_markup=types.InlineKeyboardMarkup(inline_keyboard=keyboard)
+        reply_markup=types.InlineKeyboardMarkup(inline_keyboard=keyboard),
     )
     await callback.answer()
+
+
+@admin_required
+@error_handler
+async def show_auto_sync_settings(
+    callback: types.CallbackQuery,
+    db_user: User,
+    db: AsyncSession,
+    state: FSMContext,
+):
+    await state.clear()
+    status = remnawave_sync_service.get_status()
+    text, keyboard = _build_auto_sync_view(status)
+
+    await callback.message.edit_text(
+        text,
+        reply_markup=keyboard,
+        parse_mode="HTML",
+    )
+    await callback.answer()
+
+
+@admin_required
+@error_handler
+async def toggle_auto_sync_setting(
+    callback: types.CallbackQuery,
+    db_user: User,
+    db: AsyncSession,
+    state: FSMContext,
+):
+    await state.clear()
+    new_value = not bool(settings.REMNAWAVE_AUTO_SYNC_ENABLED)
+    await bot_configuration_service.set_value(
+        db,
+        "REMNAWAVE_AUTO_SYNC_ENABLED",
+        new_value,
+    )
+
+    status = remnawave_sync_service.get_status()
+    text, keyboard = _build_auto_sync_view(status)
+
+    await callback.message.edit_text(
+        text,
+        reply_markup=keyboard,
+        parse_mode="HTML",
+    )
+    await callback.answer(
+        f"Автосинхронизация {'включена' if new_value else 'отключена'}"
+    )
+
+
+@admin_required
+@error_handler
+async def prompt_auto_sync_schedule(
+    callback: types.CallbackQuery,
+    db_user: User,
+    db: AsyncSession,
+    state: FSMContext,
+):
+    status = remnawave_sync_service.get_status()
+    current_schedule = ", ".join(t.strftime("%H:%M") for t in status.times) if status.times else "—"
+
+    instructions = (
+        "🕒 <b>Настройка расписания автосинхронизации</b>\n\n"
+        "Укажите время запуска через запятую или с новой строки в формате HH:MM.\n"
+        f"Текущее расписание: <code>{current_schedule}</code>\n\n"
+        "Примеры: <code>03:00, 15:30</code> или <code>00:15\n06:00\n18:45</code>\n\n"
+        "Отправьте <b>отмена</b>, чтобы вернуться без изменений."
+    )
+
+    await state.set_state(RemnaWaveSyncStates.waiting_for_schedule)
+    await state.update_data(
+        auto_sync_message_id=callback.message.message_id,
+        auto_sync_message_chat_id=callback.message.chat.id,
+    )
+
+    await callback.message.edit_text(
+        instructions,
+        parse_mode="HTML",
+        reply_markup=types.InlineKeyboardMarkup(
+            inline_keyboard=[
+                [
+                    types.InlineKeyboardButton(
+                        text="❌ Отмена",
+                        callback_data="remnawave_auto_sync_cancel",
+                    )
+                ]
+            ]
+        ),
+    )
+    await callback.answer()
+
+
+@admin_required
+@error_handler
+async def cancel_auto_sync_schedule(
+    callback: types.CallbackQuery,
+    db_user: User,
+    db: AsyncSession,
+    state: FSMContext,
+):
+    await state.clear()
+    status = remnawave_sync_service.get_status()
+    text, keyboard = _build_auto_sync_view(status)
+
+    await callback.message.edit_text(
+        text,
+        reply_markup=keyboard,
+        parse_mode="HTML",
+    )
+    await callback.answer("Изменение расписания отменено")
+
+
+@admin_required
+@error_handler
+async def run_auto_sync_now(
+    callback: types.CallbackQuery,
+    db_user: User,
+    db: AsyncSession,
+    state: FSMContext,
+):
+    if remnawave_sync_service.get_status().is_running:
+        await callback.answer("Синхронизация уже выполняется", show_alert=True)
+        return
+
+    await state.clear()
+    await callback.message.edit_text(
+        "🔄 Запуск автосинхронизации...\n\nПодождите, это может занять несколько минут.",
+        parse_mode="HTML",
+    )
+    await callback.answer("Автосинхронизация запущена")
+
+    result = await remnawave_sync_service.run_sync_now(reason="manual")
+    status = remnawave_sync_service.get_status()
+    base_text, keyboard = _build_auto_sync_view(status)
+
+    if not result.get("started"):
+        await callback.message.edit_text(
+            "⚠️ <b>Синхронизация уже выполняется</b>\n\n" + base_text,
+            reply_markup=keyboard,
+            parse_mode="HTML",
+        )
+        return
+
+    if result.get("success"):
+        user_stats = result.get("user_stats") or {}
+        server_stats = result.get("server_stats") or {}
+        summary = (
+            "✅ <b>Синхронизация завершена</b>\n"
+            f"👥 Пользователи: создано {user_stats.get('created', 0)}, обновлено {user_stats.get('updated', 0)}, "
+            f"деактивировано {user_stats.get('deleted', user_stats.get('deactivated', 0))}, ошибок {user_stats.get('errors', 0)}\n"
+            f"🌐 Серверы: создано {server_stats.get('created', 0)}, обновлено {server_stats.get('updated', 0)}, удалено {server_stats.get('removed', 0)}\n\n"
+        )
+        final_text = summary + base_text
+        await callback.message.edit_text(
+            final_text,
+            reply_markup=keyboard,
+            parse_mode="HTML",
+        )
+    else:
+        error_text = result.get("error") or "Неизвестная ошибка"
+        summary = (
+            "❌ <b>Синхронизация завершилась с ошибкой</b>\n"
+            f"Причина: {error_text}\n\n"
+        )
+        await callback.message.edit_text(
+            summary + base_text,
+            reply_markup=keyboard,
+            parse_mode="HTML",
+        )
+
+
+@admin_required
+@error_handler
+async def save_auto_sync_schedule(
+    message: types.Message,
+    db_user: User,
+    db: AsyncSession,
+    state: FSMContext,
+):
+    text = (message.text or "").strip()
+    data = await state.get_data()
+
+    if text.lower() in {"отмена", "cancel"}:
+        await state.clear()
+        status = remnawave_sync_service.get_status()
+        view_text, keyboard = _build_auto_sync_view(status)
+        message_id = data.get("auto_sync_message_id")
+        chat_id = data.get("auto_sync_message_chat_id", message.chat.id)
+        if message_id:
+            await message.bot.edit_message_text(
+                view_text,
+                chat_id=chat_id,
+                message_id=message_id,
+                reply_markup=keyboard,
+                parse_mode="HTML",
+            )
+        else:
+            await message.answer(
+                view_text,
+                reply_markup=keyboard,
+                parse_mode="HTML",
+            )
+        await message.answer("Настройка расписания отменена")
+        return
+
+    parsed_times = settings.parse_daily_time_list(text)
+
+    if not parsed_times:
+        await message.answer(
+            "❌ Не удалось распознать время. Используйте формат HH:MM, например 03:00 или 18:45.",
+        )
+        return
+
+    normalized_value = ", ".join(t.strftime("%H:%M") for t in parsed_times)
+    await bot_configuration_service.set_value(
+        db,
+        "REMNAWAVE_AUTO_SYNC_TIMES",
+        normalized_value,
+    )
+
+    status = remnawave_sync_service.get_status()
+    view_text, keyboard = _build_auto_sync_view(status)
+    message_id = data.get("auto_sync_message_id")
+    chat_id = data.get("auto_sync_message_chat_id", message.chat.id)
+
+    if message_id:
+        await message.bot.edit_message_text(
+            view_text,
+            chat_id=chat_id,
+            message_id=message_id,
+            reply_markup=keyboard,
+            parse_mode="HTML",
+        )
+    else:
+        await message.answer(
+            view_text,
+            reply_markup=keyboard,
+            parse_mode="HTML",
+        )
+
+    await state.clear()
+    await message.answer("✅ Расписание автосинхронизации обновлено")
+
 
 @admin_required
 @error_handler
@@ -2688,6 +3118,11 @@ def register_handlers(dp: Dispatcher):
     dp.callback_query.register(manage_node, F.data.startswith("node_restart_"))
     dp.callback_query.register(restart_all_nodes, F.data == "admin_restart_all_nodes")
     dp.callback_query.register(show_sync_options, F.data == "admin_rw_sync")
+    dp.callback_query.register(show_auto_sync_settings, F.data == "admin_rw_auto_sync")
+    dp.callback_query.register(toggle_auto_sync_setting, F.data == "remnawave_auto_sync_toggle")
+    dp.callback_query.register(prompt_auto_sync_schedule, F.data == "remnawave_auto_sync_times")
+    dp.callback_query.register(cancel_auto_sync_schedule, F.data == "remnawave_auto_sync_cancel")
+    dp.callback_query.register(run_auto_sync_now, F.data == "remnawave_auto_sync_run")
     dp.callback_query.register(sync_all_users, F.data == "sync_all_users")
     dp.callback_query.register(show_squad_migration_menu, F.data == "admin_rw_migration")
     dp.callback_query.register(paginate_migration_source, F.data.startswith("admin_migration_source_page_"))
@@ -2716,13 +3151,19 @@ def register_handlers(dp: Dispatcher):
     dp.callback_query.register(finish_squad_creation, F.data == "create_squad_finish")
     
     dp.message.register(
-        process_squad_new_name, 
+        process_squad_new_name,
         SquadRenameStates.waiting_for_new_name,
         F.text
     )
-    
+
     dp.message.register(
         process_squad_name,
         SquadCreateStates.waiting_for_name,
         F.text
+    )
+
+    dp.message.register(
+        save_auto_sync_schedule,
+        RemnaWaveSyncStates.waiting_for_schedule,
+        F.text,
     )

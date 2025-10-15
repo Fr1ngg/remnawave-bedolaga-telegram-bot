@@ -248,6 +248,8 @@ class BotConfigurationService:
         "VERSION_CHECK_INTERVAL_HOURS": "VERSION",
         "TELEGRAM_STARS_RATE_RUB": "TELEGRAM",
         "REMNAWAVE_USER_DESCRIPTION_TEMPLATE": "REMNAWAVE",
+        "REMNAWAVE_AUTO_SYNC_ENABLED": "REMNAWAVE",
+        "REMNAWAVE_AUTO_SYNC_TIMES": "REMNAWAVE",
     }
 
     CATEGORY_PREFIX_OVERRIDES: Dict[str, str] = {
@@ -424,6 +426,20 @@ class BotConfigurationService:
             "example": "https://panel.remnawave.net",
             "warning": "Недоступный адрес приведет к ошибкам при управлении VPN-учетками.",
             "dependencies": "REMNAWAVE_API_KEY или REMNAWAVE_USERNAME/REMNAWAVE_PASSWORD",
+        },
+        "REMNAWAVE_AUTO_SYNC_ENABLED": {
+            "description": "Автоматически запускает синхронизацию пользователей и серверов с панелью RemnaWave.",
+            "format": "Булево значение.",
+            "example": "Включено при корректно настроенных API-ключах.",
+            "warning": "При включении без расписания синхронизация не будет выполнена.",
+            "dependencies": "REMNAWAVE_AUTO_SYNC_TIMES",
+        },
+        "REMNAWAVE_AUTO_SYNC_TIMES": {
+            "description": "Список времени в формате HH:MM, когда запускается автосинхронизация в течение суток.",
+            "format": "Перечислите время через запятую или с новой строки (например, 03:00, 15:00).",
+            "example": "03:00, 15:00",
+            "warning": "Минимальный интервал между запусками не ограничен, но слишком частые синхронизации нагружают панель.",
+            "dependencies": "REMNAWAVE_AUTO_SYNC_ENABLED",
         },
         "EXTERNAL_ADMIN_TOKEN": {
             "description": "Приватный токен, который использует внешняя админка для проверки запросов.",
@@ -964,6 +980,35 @@ class BotConfigurationService:
                 refresh_period_prices()
             elif key.startswith("PRICE_TRAFFIC_") or key == "TRAFFIC_PACKAGES_CONFIG":
                 refresh_traffic_prices()
+            elif key in {"REMNAWAVE_AUTO_SYNC_ENABLED", "REMNAWAVE_AUTO_SYNC_TIMES"}:
+                try:
+                    from app.services.remnawave_sync_service import remnawave_sync_service
+
+                    remnawave_sync_service.schedule_refresh(
+                        run_immediately=(key == "REMNAWAVE_AUTO_SYNC_ENABLED" and bool(value))
+                    )
+                except Exception as error:
+                    logger.error(
+                        "Не удалось обновить сервис автосинхронизации RemnaWave: %s",
+                        error,
+                    )
+            elif key in {
+                "REMNAWAVE_API_URL",
+                "REMNAWAVE_API_KEY",
+                "REMNAWAVE_SECRET_KEY",
+                "REMNAWAVE_USERNAME",
+                "REMNAWAVE_PASSWORD",
+                "REMNAWAVE_AUTH_TYPE",
+            }:
+                try:
+                    from app.services.remnawave_sync_service import remnawave_sync_service
+
+                    remnawave_sync_service.refresh_configuration()
+                except Exception as error:
+                    logger.error(
+                        "Не удалось обновить конфигурацию сервиса автосинхронизации RemnaWave: %s",
+                        error,
+                    )
         except Exception as error:
             logger.error("Не удалось применить значение %s=%s: %s", key, value, error)
 
