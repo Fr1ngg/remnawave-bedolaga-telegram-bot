@@ -245,6 +245,11 @@ class Settings(BaseSettings):
     WATA_MIN_AMOUNT_KOPEKS: int = 10000
     WATA_MAX_AMOUNT_KOPEKS: int = 100000000
     WATA_REQUEST_TIMEOUT: int = 30
+    WATA_WEBHOOK_PATH: str = "/wata-webhook"
+    WATA_WEBHOOK_HOST: str = "0.0.0.0"
+    WATA_WEBHOOK_PORT: int = 8085
+    WATA_PUBLIC_KEY_URL: Optional[str] = None
+    WATA_PUBLIC_KEY_CACHE_SECONDS: int = 3600
 
     MAIN_MENU_MODE: str = "default"
     CONNECT_BUTTON_MODE: str = "guide"

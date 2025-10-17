@@ -120,6 +120,99 @@ class WataPaymentMixin:
             "order_id": order_id,
         }
 
+    async def process_wata_webhook(
+        self,
+        db: AsyncSession,
+        payload: Dict[str, Any],
+    ) -> bool:
+        """Handles asynchronous webhook notifications from WATA."""
+
+        payment_module = import_module("app.services.payment_service")
+
+        if not isinstance(payload, dict):
+            logger.error("WATA webhook payload не является словарём: %s", payload)
+            return False
+
+        order_id_raw = payload.get("orderId")
+        payment_link_raw = payload.get("paymentLinkId") or payload.get("id")
+        transaction_status_raw = payload.get("transactionStatus")
+
+        order_id = str(order_id_raw) if order_id_raw else None
+        payment_link_id = str(payment_link_raw) if payment_link_raw else None
+        transaction_status = (transaction_status_raw or "").strip()
+
+        if not order_id and not payment_link_id:
+            logger.error(
+                "WATA webhook без orderId и paymentLinkId: %s",
+                payload,
+            )
+            return False
+
+        if not transaction_status:
+            logger.error("WATA webhook без статуса транзакции: %s", payload)
+            return False
+
+        payment = None
+        if order_id:
+            payment = await payment_module.get_wata_payment_by_order_id(db, order_id)
+        if not payment and payment_link_id:
+            payment = await payment_module.get_wata_payment_by_link_id(db, payment_link_id)
+
+        if not payment:
+            logger.error(
+                "WATA платеж не найден (order_id=%s, payment_link_id=%s)",
+                order_id,
+                payment_link_id,
+            )
+            return False
+
+        status_lower = transaction_status.lower()
+        metadata = dict(getattr(payment, "metadata_json", {}) or {})
+        metadata["last_webhook"] = payload
+        terminal_public_id = (
+            payload.get("terminalPublicId")
+            or payload.get("terminal_public_id")
+            or payload.get("terminalPublicID")
+        )
+
+        update_kwargs: Dict[str, Any] = {
+            "metadata": metadata,
+            "callback_payload": payload,
+            "terminal_public_id": terminal_public_id,
+        }
+
+        if transaction_status:
+            update_kwargs["status"] = transaction_status
+            update_kwargs["last_status"] = transaction_status
+
+        if status_lower != "paid" and not payment.is_paid:
+            update_kwargs["is_paid"] = False
+
+        payment = await payment_module.update_wata_payment_status(
+            db,
+            payment=payment,
+            **update_kwargs,
+        )
+
+        if status_lower == "paid":
+            if payment.is_paid:
+                logger.info(
+                    "WATA платеж %s уже помечен как оплачен",
+                    payment.payment_link_id,
+                )
+                return True
+
+            await self._finalize_wata_payment(db, payment, payload)
+            return True
+
+        if status_lower == "declined":
+            logger.info(
+                "WATA платеж %s отклонён",
+                payment.payment_link_id,
+            )
+
+        return True
+
     async def get_wata_payment_status(
         self,
         db: AsyncSession,
