@@ -47,6 +47,23 @@ class StubWataService:
         return self.response
 
 
+class DummyWataPayment:
+    def __init__(self) -> None:
+        self.id = 1
+        self.user_id = 42
+        self.payment_link_id = "link-123"
+        self.order_id = "order-123"
+        self.amount_kopeks = 15_000
+        self.currency = "RUB"
+        self.description = "Пополнение"
+        self.status = "Opened"
+        self.is_paid = False
+        self.metadata_json: Dict[str, Any] = {}
+        self.transaction_id: Optional[int] = None
+        self.callback_payload: Optional[Dict[str, Any]] = None
+        self.terminal_public_id: Optional[str] = None
+
+
 def _make_service(stub: Optional[StubWataService]) -> PaymentService:
     service = PaymentService.__new__(PaymentService)  # type: ignore[call-arg]
     service.bot = None
@@ -142,3 +159,197 @@ async def test_create_wata_payment_returns_none_without_service() -> None:
         description="Пополнение",
     )
     assert result is None
+
+
+@pytest.mark.anyio("asyncio")
+async def test_process_wata_webhook_updates_status(monkeypatch: pytest.MonkeyPatch) -> None:
+    service = _make_service(None)
+    db = DummySession()
+    payment = DummyWataPayment()
+    update_kwargs: Dict[str, Any] = {}
+    link_lookup_called = False
+
+    async def fake_get_by_order_id(db_arg: Any, order_id: str) -> DummyWataPayment:
+        assert db_arg is db
+        assert order_id == payment.order_id
+        return payment
+
+    async def fake_get_by_link_id(*_: Any, **__: Any) -> Optional[DummyWataPayment]:
+        nonlocal link_lookup_called
+        link_lookup_called = True
+        return None
+
+    async def fake_update_status(
+        db_arg: Any,
+        *,
+        payment: DummyWataPayment,
+        **kwargs: Any,
+    ) -> DummyWataPayment:
+        assert db_arg is db
+        update_kwargs.update(kwargs)
+        if "status" in kwargs:
+            payment.status = kwargs["status"]
+        if "is_paid" in kwargs:
+            payment.is_paid = kwargs["is_paid"]
+        if "metadata" in kwargs:
+            payment.metadata_json = kwargs["metadata"]
+        if "callback_payload" in kwargs:
+            payment.callback_payload = kwargs["callback_payload"]
+        if "terminal_public_id" in kwargs:
+            payment.terminal_public_id = kwargs["terminal_public_id"]
+        return payment
+
+    monkeypatch.setattr(
+        payment_service_module,
+        "get_wata_payment_by_order_id",
+        fake_get_by_order_id,
+        raising=False,
+    )
+    monkeypatch.setattr(
+        payment_service_module,
+        "get_wata_payment_by_link_id",
+        fake_get_by_link_id,
+        raising=False,
+    )
+    monkeypatch.setattr(
+        payment_service_module,
+        "update_wata_payment_status",
+        fake_update_status,
+        raising=False,
+    )
+
+    payload = {
+        "orderId": payment.order_id,
+        "transactionStatus": "Declined",
+        "terminalPublicId": "terminal-001",
+    }
+
+    processed = await service.process_wata_webhook(db, payload)
+
+    assert processed is True
+    assert link_lookup_called is False
+    assert payment.status == "Declined"
+    assert payment.is_paid is False
+    assert payment.metadata_json.get("last_webhook") == payload
+    assert payment.callback_payload == payload
+    assert payment.terminal_public_id == "terminal-001"
+    assert update_kwargs["status"] == "Declined"
+    assert update_kwargs["is_paid"] is False
+
+
+@pytest.mark.anyio("asyncio")
+async def test_process_wata_webhook_finalizes_paid(monkeypatch: pytest.MonkeyPatch) -> None:
+    service = _make_service(None)
+    db = DummySession()
+    payment = DummyWataPayment()
+    finalize_called = False
+
+    async def fake_get_by_order_id(*_: Any, **__: Any) -> DummyWataPayment:
+        return payment
+
+    async def fake_update_status(
+        db_arg: Any,
+        *,
+        payment: DummyWataPayment,
+        **kwargs: Any,
+    ) -> DummyWataPayment:
+        if "metadata" in kwargs:
+            payment.metadata_json = kwargs["metadata"]
+        if "callback_payload" in kwargs:
+            payment.callback_payload = kwargs["callback_payload"]
+        if "status" in kwargs:
+            payment.status = kwargs["status"]
+        return payment
+
+    async def fake_finalize(
+        db_arg: Any,
+        payment_arg: DummyWataPayment,
+        payload_arg: Dict[str, Any],
+    ) -> DummyWataPayment:
+        nonlocal finalize_called
+        finalize_called = True
+        payment_arg.is_paid = True
+        return payment_arg
+
+    monkeypatch.setattr(
+        payment_service_module,
+        "get_wata_payment_by_order_id",
+        fake_get_by_order_id,
+        raising=False,
+    )
+    monkeypatch.setattr(
+        payment_service_module,
+        "get_wata_payment_by_link_id",
+        lambda *args, **kwargs: None,
+        raising=False,
+    )
+    monkeypatch.setattr(
+        payment_service_module,
+        "update_wata_payment_status",
+        fake_update_status,
+        raising=False,
+    )
+    monkeypatch.setattr(
+        service,
+        "_finalize_wata_payment",
+        fake_finalize,
+        raising=False,
+    )
+
+    payload = {
+        "orderId": payment.order_id,
+        "transactionStatus": "Paid",
+        "transactionId": "tx-001",
+    }
+
+    processed = await service.process_wata_webhook(db, payload)
+
+    assert processed is True
+    assert finalize_called is True
+    assert payment.is_paid is True
+    assert payment.metadata_json.get("last_webhook") == payload
+
+
+@pytest.mark.anyio("asyncio")
+async def test_process_wata_webhook_returns_false_when_payment_missing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    service = _make_service(None)
+    db = DummySession()
+
+    async def fake_get_by_order_id(*_: Any, **__: Any) -> None:
+        return None
+
+    async def fake_get_by_link_id(*_: Any, **__: Any) -> None:
+        return None
+
+    async def fail_update(*_: Any, **__: Any) -> None:
+        pytest.fail("update_wata_payment_status should not be called")
+
+    monkeypatch.setattr(
+        payment_service_module,
+        "get_wata_payment_by_order_id",
+        fake_get_by_order_id,
+        raising=False,
+    )
+    monkeypatch.setattr(
+        payment_service_module,
+        "get_wata_payment_by_link_id",
+        fake_get_by_link_id,
+        raising=False,
+    )
+    monkeypatch.setattr(
+        payment_service_module,
+        "update_wata_payment_status",
+        fail_update,
+        raising=False,
+    )
+
+    payload = {
+        "orderId": "missing-order",
+        "transactionStatus": "Paid",
+    }
+
+    processed = await service.process_wata_webhook(db, payload)
+
+    assert processed is False

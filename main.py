@@ -17,6 +17,7 @@ from app.services.version_service import version_service
 from app.external.webhook_server import WebhookServer
 from app.external.yookassa_webhook import start_yookassa_webhook_server
 from app.external.pal24_webhook import start_pal24_webhook_server, Pal24WebhookServer
+from app.external.wata_webhook import start_wata_webhook_server
 from app.database.universal_migration import run_universal_migration
 from app.services.backup_service import backup_service
 from app.services.reporting_service import reporting_service
@@ -72,6 +73,7 @@ async def main():
     
     webhook_server = None
     yookassa_server_task = None
+    wata_server_task = None
     pal24_server: Pal24WebhookServer | None = None
     monitoring_task = None
     maintenance_task = None
@@ -286,6 +288,21 @@ async def main():
                 stage.skip("PayPalych отключен настройками")
 
         async with timeline.stage(
+            "WATA webhook",
+            "💳",
+            success_message="WATA webhook запущен",
+        ) as stage:
+            if settings.is_wata_enabled():
+                wata_server_task = asyncio.create_task(
+                    start_wata_webhook_server(payment_service)
+                )
+                stage.log(
+                    f"Endpoint: {settings.WEBHOOK_URL}:{settings.WATA_WEBHOOK_PORT}{settings.WATA_WEBHOOK_PATH}"
+                )
+            else:
+                stage.skip("WATA отключен настройками")
+
+        async with timeline.stage(
             "Служба мониторинга",
             "📈",
             success_message="Служба мониторинга запущена",
@@ -369,6 +386,10 @@ async def main():
             webhook_lines.append(
                 f"PayPalych: {settings.WEBHOOK_URL}:{settings.PAL24_WEBHOOK_PORT}{settings.PAL24_WEBHOOK_PATH}"
             )
+        if settings.is_wata_enabled():
+            webhook_lines.append(
+                f"WATA: {settings.WEBHOOK_URL}:{settings.WATA_WEBHOOK_PORT}{settings.WATA_WEBHOOK_PATH}"
+            )
 
         timeline.log_section(
             "Активные webhook endpoints",
@@ -399,7 +420,19 @@ async def main():
                         yookassa_server_task = asyncio.create_task(
                             start_yookassa_webhook_server(payment_service)
                         )
-                
+
+                if wata_server_task and wata_server_task.done():
+                    exception = wata_server_task.exception()
+                    if exception:
+                        logger.error(f"WATA webhook сервер завершился с ошибкой: {exception}")
+                        logger.info("🔄 Перезапуск WATA webhook сервера...")
+                        if settings.is_wata_enabled():
+                            wata_server_task = asyncio.create_task(
+                                start_wata_webhook_server(payment_service)
+                            )
+                        else:
+                            wata_server_task = None
+
                 if monitoring_task.done():
                     exception = monitoring_task.exception()
                     if exception:
@@ -446,7 +479,15 @@ async def main():
                 await yookassa_server_task
             except asyncio.CancelledError:
                 pass
-        
+
+        if wata_server_task and not wata_server_task.done():
+            logger.info("ℹ️ Остановка WATA webhook сервера...")
+            wata_server_task.cancel()
+            try:
+                await wata_server_task
+            except asyncio.CancelledError:
+                pass
+
         if monitoring_task and not monitoring_task.done():
             logger.info("ℹ️ Остановка службы мониторинга...")
             monitoring_service.stop_monitoring()
