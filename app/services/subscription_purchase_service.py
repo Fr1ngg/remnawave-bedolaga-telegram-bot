@@ -1175,5 +1175,38 @@ class MiniAppSubscriptionPurchaseService:
         }
 
 
+class SubscriptionPurchaseService:
+    """Service for handling simple subscription purchases with predefined parameters."""
+    
+    async def create_subscription_order(
+        self,
+        db: AsyncSession,
+        user_id: int,
+        period_days: int,
+        device_limit: int,
+        traffic_limit_gb: int,
+        squad_uuid: str,
+        payment_method: str,
+        total_price_kopeks: int
+    ):
+        """Creates a subscription order with predefined parameters."""
+        from app.database.crud.subscription import create_pending_subscription
+        from app.database.models import SubscriptionStatus
+        
+        # Create a pending subscription
+        subscription = await create_pending_subscription(
+            db=db,
+            user_id=user_id,
+            duration_days=period_days,
+            traffic_limit_gb=traffic_limit_gb,
+            device_limit=device_limit,
+            connected_squads=[squad_uuid] if squad_uuid else [],
+            payment_method=payment_method,
+            total_price_kopeks=total_price_kopeks
+        )
+        
+        return subscription
+
+
 purchase_service = MiniAppSubscriptionPurchaseService()
 

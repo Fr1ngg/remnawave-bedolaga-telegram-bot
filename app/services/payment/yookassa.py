@@ -217,12 +217,39 @@ class YooKassaPaymentMixin:
 
             payment_description = getattr(payment, "description", "YooKassa платеж")
 
+            payment_metadata: Dict[str, Any] = {}
+            try:
+                if hasattr(payment, "metadata_json") and payment.metadata_json:
+                    import json
+
+                    if isinstance(payment.metadata_json, str):
+                        payment_metadata = json.loads(payment.metadata_json)
+                    elif isinstance(payment.metadata_json, dict):
+                        payment_metadata = payment.metadata_json
+                    logger.info(f"Метаданные платежа: {payment_metadata}")
+            except Exception as parse_error:
+                logger.error(f"Ошибка парсинга метаданных платежа: {parse_error}")
+
+            payment_purpose = payment_metadata.get("payment_purpose", "")
+            is_simple_subscription = payment_purpose == "simple_subscription_purchase"
+
+            transaction_type = (
+                TransactionType.SUBSCRIPTION_PAYMENT
+                if is_simple_subscription
+                else TransactionType.DEPOSIT
+            )
+            transaction_description = (
+                f"Оплата подписки через YooKassa: {payment_description}"
+                if is_simple_subscription
+                else f"Пополнение через YooKassa: {payment_description}"
+            )
+
             transaction = await payment_module.create_transaction(
                 db=db,
                 user_id=payment.user_id,
-                type=TransactionType.DEPOSIT,
+                type=transaction_type,
                 amount_kopeks=payment.amount_kopeks,
-                description=f"Пополнение через YooKassa: {payment_description}",
+                description=transaction_description,
                 payment_method=PaymentMethod.YOOKASSA,
                 external_id=payment.yookassa_payment_id,
                 is_completed=True,
@@ -236,143 +263,257 @@ class YooKassaPaymentMixin:
 
             user = await payment_module.get_user_by_id(db, payment.user_id)
             if user:
-                old_balance = getattr(user, "balance_kopeks", 0)
-                was_first_topup = not getattr(user, "has_made_first_topup", False)
-
-                user.balance_kopeks += payment.amount_kopeks
-                user.updated_at = datetime.utcnow()
-
-                promo_group = getattr(user, "promo_group", None)
-                subscription = getattr(user, "subscription", None)
-                referrer_info = format_referrer_info(user)
-                topup_status = ("🆕 Первое пополнение" if was_first_topup else "🔄 Пополнение")
-
-                await db.commit()
-
-                try:
-                    from app.services.referral_service import process_referral_topup
-
-                    await process_referral_topup(
-                        db,
+                if is_simple_subscription:
+                    logger.info(
+                        "YooKassa платеж %s обработан как покупка подписки. Баланс пользователя %s не изменяется.",
+                        payment.yookassa_payment_id,
                         user.id,
-                        payment.amount_kopeks,
-                        getattr(self, "bot", None),
                     )
-                except Exception as error:
-                    logger.error(
-                        "Ошибка обработки реферального пополнения YooKassa: %s",
-                        error,
+                else:
+                    old_balance = getattr(user, "balance_kopeks", 0)
+                    was_first_topup = not getattr(user, "has_made_first_topup", False)
+
+                    user.balance_kopeks += payment.amount_kopeks
+                    user.updated_at = datetime.utcnow()
+
+                    promo_group = getattr(user, "promo_group", None)
+                    subscription = getattr(user, "subscription", None)
+                    referrer_info = format_referrer_info(user)
+                    topup_status = (
+                        "🆕 Первое пополнение" if was_first_topup else "🔄 Пополнение"
                     )
 
-                if was_first_topup and not getattr(user, "has_made_first_topup", False):
-                    user.has_made_first_topup = True
                     await db.commit()
 
-                await db.refresh(user)
-
-                # Отправляем уведомления админам
-                if getattr(self, "bot", None):
                     try:
-                        from app.services.admin_notification_service import (
-                            AdminNotificationService,
-                        )
+                        from app.services.referral_service import process_referral_topup
 
-                        notification_service = AdminNotificationService(self.bot)
-                        await notification_service.send_balance_topup_notification(
-                            user,
-                            transaction,
-                            old_balance,
-                            topup_status=topup_status,
-                            referrer_info=referrer_info,
-                            subscription=subscription,
-                            promo_group=promo_group,
-                            db=db,
-                        )
-                        logger.info("Уведомление админам о пополнении отправлено успешно")
-                    except Exception as error:
-                        logger.error(
-                            "Ошибка отправки уведомления админам о YooKassa пополнении: %s",
-                            error,
-                            exc_info=True  # Добавляем полный стек вызовов для отладки
-                        )
-
-                # Отправляем уведомление пользователю
-                if getattr(self, "bot", None):
-                    try:
-                        # Передаем только простые данные, чтобы избежать проблем с ленивой загрузкой
-                        await self._send_payment_success_notification(
-                            user.telegram_id,
+                        await process_referral_topup(
+                            db,
+                            user.id,
                             payment.amount_kopeks,
-                            user=None,  # Передаем None, чтобы _ensure_user_snapshot загрузил данные сам
-                            db=db,
-                            payment_method_title="Банковская карта (YooKassa)",
+                            getattr(self, "bot", None),
                         )
-                        logger.info("Уведомление пользователю о платеже отправлено успешно")
                     except Exception as error:
                         logger.error(
-                            "Ошибка отправки уведомления о платеже: %s", 
+                            "Ошибка обработки реферального пополнения YooKassa: %s",
                             error,
-                            exc_info=True  # Добавляем полный стек вызовов для отладки
                         )
 
-                # Проверяем наличие сохраненной корзины для возврата к оформлению подписки
-                # ВАЖНО: этот код должен выполняться даже при ошибках в уведомлениях
-                logger.info(f"Проверяем наличие сохраненной корзины для пользователя {user.id}")
-                from app.services.user_cart_service import user_cart_service
-                try:
-                    has_saved_cart = await user_cart_service.has_user_cart(user.id)
-                    logger.info(f"Результат проверки корзины для пользователя {user.id}: {has_saved_cart}")
-                    if has_saved_cart and getattr(self, "bot", None):
-                        # Если у пользователя есть сохраненная корзина, 
-                        # отправляем ему уведомление с кнопкой вернуться к оформлению
-                        from app.localization.texts import get_texts
-                        from aiogram import types
+                    if was_first_topup and not getattr(user, "has_made_first_topup", False):
+                        user.has_made_first_topup = True
+                        await db.commit()
+
+                    await db.refresh(user)
+
+                    # Отправляем уведомления админам
+                    if getattr(self, "bot", None):
+                        try:
+                            from app.services.admin_notification_service import (
+                                AdminNotificationService,
+                            )
+
+                            notification_service = AdminNotificationService(self.bot)
+                            await notification_service.send_balance_topup_notification(
+                                user,
+                                transaction,
+                                old_balance,
+                                topup_status=topup_status,
+                                referrer_info=referrer_info,
+                                subscription=subscription,
+                                promo_group=promo_group,
+                                db=db,
+                            )
+                            logger.info("Уведомление админам о пополнении отправлено успешно")
+                        except Exception as error:
+                            logger.error(
+                                "Ошибка отправки уведомления админам о YooKassa пополнении: %s",
+                                error,
+                                exc_info=True,  # Добавляем полный стек вызовов для отладки
+                            )
+
+                    # Отправляем уведомление пользователю
+                    if getattr(self, "bot", None):
+                        try:
+                            # Передаем только простые данные, чтобы избежать проблем с ленивой загрузкой
+                            await self._send_payment_success_notification(
+                                user.telegram_id,
+                                payment.amount_kopeks,
+                                user=None,  # Передаем None, чтобы _ensure_user_snapshot загрузил данные сам
+                                db=db,
+                                payment_method_title="Банковская карта (YooKassa)",
+                            )
+                            logger.info("Уведомление пользователю о платеже отправлено успешно")
+                        except Exception as error:
+                            logger.error(
+                                "Ошибка отправки уведомления о платеже: %s",
+                                error,
+                                exc_info=True,  # Добавляем полный стек вызовов для отладки
+                            )
+
+                    # Проверяем наличие сохраненной корзины для возврата к оформлению подписки
+                    # ВАЖНО: этот код должен выполняться даже при ошибках в уведомлениях
+                    logger.info(f"Проверяем наличие сохраненной корзины для пользователя {user.id}")
+                    from app.services.user_cart_service import user_cart_service
+                    try:
+                        has_saved_cart = await user_cart_service.has_user_cart(user.id)
+                        logger.info(f"Результат проверки корзины для пользователя {user.id}: {has_saved_cart}")
+                        if has_saved_cart and getattr(self, "bot", None):
+                            # Если у пользователя есть сохраненная корзина,
+                            # отправляем ему уведомление с кнопкой вернуться к оформлению
+                            from app.localization.texts import get_texts
+                            from aiogram import types
+
+                            texts = get_texts(user.language)
+                            cart_message = texts.BALANCE_TOPUP_CART_REMINDER_DETAILED.format(
+                                total_amount=settings.format_price(payment.amount_kopeks)
+                            )
+
+                            # Создаем клавиатуру с кнопками
+                            keyboard = types.InlineKeyboardMarkup(
+                                inline_keyboard=[
+                                    [
+                                        types.InlineKeyboardButton(
+                                            text=texts.RETURN_TO_SUBSCRIPTION_CHECKOUT,
+                                            callback_data="subscription_resume_checkout",
+                                        )
+                                    ],
+                                    [
+                                        types.InlineKeyboardButton(
+                                            text="💰 Мой баланс",
+                                            callback_data="menu_balance",
+                                        )
+                                    ],
+                                    [
+                                        types.InlineKeyboardButton(
+                                            text="🏠 Главное меню",
+                                            callback_data="back_to_menu",
+                                        )
+                                    ],
+                                ]
+                            )
+
+                            await self.bot.send_message(
+                                chat_id=user.telegram_id,
+                                text=f"✅ Баланс пополнен на {settings.format_price(payment.amount_kopeks)}!\n\n{cart_message}",
+                                reply_markup=keyboard,
+                            )
+                            logger.info(
+                                f"Отправлено уведомление с кнопкой возврата к оформлению подписки пользователю {user.id}"
+                            )
+                        else:
+                            logger.info(f"У пользователя {user.id} нет сохраненной корзины или бот недоступен")
+                    except Exception as e:
+                        logger.error(
+                            f"Критическая ошибка при работе с сохраненной корзиной для пользователя {user.id}: {e}",
+                            exc_info=True,
+                        )
+
+                if is_simple_subscription:
+                    logger.info(f"Обнаружен платеж простой покупки подписки для пользователя {user.id}")
+                    try:
+                        # Активируем подписку
+                        from app.services.subscription_service import SubscriptionService
+                        subscription_service = SubscriptionService()
                         
-                        texts = get_texts(user.language)
-                        cart_message = texts.BALANCE_TOPUP_CART_REMINDER_DETAILED.format(
-                            total_amount=settings.format_price(payment.amount_kopeks)
+                        # Получаем параметры подписки из метаданных
+                        subscription_period = int(payment_metadata.get("subscription_period", 30))
+                        order_id = payment_metadata.get("order_id")
+                        
+                        logger.info(f"Активация подписки: период={subscription_period} дней, заказ={order_id}")
+                        
+                        # Активируем pending подписку пользователя
+                        from app.database.crud.subscription import activate_pending_subscription
+                        subscription = await activate_pending_subscription(
+                            db=db,
+                            user_id=user.id,
+                            period_days=subscription_period
                         )
                         
-                        # Создаем клавиатуру с кнопками
-                        keyboard = types.InlineKeyboardMarkup(inline_keyboard=[
-                            [types.InlineKeyboardButton(
-                                text=texts.RETURN_TO_SUBSCRIPTION_CHECKOUT,
-                                callback_data="subscription_resume_checkout"
-                            )],
-                            [types.InlineKeyboardButton(
-                                text="💰 Мой баланс",
-                                callback_data="menu_balance"
-                            )],
-                            [types.InlineKeyboardButton(
-                                text="🏠 Главное меню",
-                                callback_data="back_to_menu"
-                            )]
-                        ])
-                        
-                        await self.bot.send_message(
-                            chat_id=user.telegram_id,
-                            text=f"✅ Баланс пополнен на {settings.format_price(payment.amount_kopeks)}!\n\n{cart_message}",
-                            reply_markup=keyboard
-                        )
-                        logger.info(f"Отправлено уведомление с кнопкой возврата к оформлению подписки пользователю {user.id}")
-                    else:
-                        logger.info(f"У пользователя {user.id} нет сохраненной корзины или бот недоступен")
-                except Exception as e:
-                    logger.error(f"Критическая ошибка при работе с сохраненной корзиной для пользователя {user.id}: {e}", exc_info=True)
+                        if subscription:
+                            logger.info(f"Подписка успешно активирована для пользователя {user.id}")
 
-            logger.info(
-                "Успешно обработан платеж YooKassa %s: пользователь %s получил %s₽",
-                payment.yookassa_payment_id,
-                payment.user_id,
-                payment.amount_kopeks / 100,
-            )
+                            # Обновляем данные подписки в RemnaWave, чтобы получить актуальные ссылки
+                            try:
+                                remnawave_user = await subscription_service.create_remnawave_user(db, subscription)
+                                if remnawave_user:
+                                    await db.refresh(subscription)
+                            except Exception as sync_error:
+                                logger.error(
+                                    "Ошибка синхронизации подписки с RemnaWave для пользователя %s: %s",
+                                    user.id,
+                                    sync_error,
+                                    exc_info=True,
+                                )
+                            
+                            # Отправляем уведомление пользователю об активации подписки
+                            if getattr(self, "bot", None):
+                                from app.localization.texts import get_texts
+                                from aiogram import types
+                                
+                                texts = get_texts(user.language)
+                                
+                                success_message = (
+                                    f"✅ <b>Подписка успешно активирована!</b>\n\n"
+                                    f"📅 Период: {subscription_period} дней\n"
+                                    f"📱 Устройства: 1\n"
+                                    f"📊 Трафик: Безлимит\n"
+                                    f"💳 Оплата: {settings.format_price(payment.amount_kopeks)} (YooKassa)\n\n"
+                                    f"🔗 Для подключения перейдите в раздел 'Моя подписка'"
+                                )
+                                
+                                keyboard = types.InlineKeyboardMarkup(inline_keyboard=[
+                                    [types.InlineKeyboardButton(text="📱 Моя подписка", callback_data="menu_subscription")],
+                                    [types.InlineKeyboardButton(text="🏠 Главное меню", callback_data="back_to_menu")]
+                                ])
+                                
+                                await self.bot.send_message(
+                                    chat_id=user.telegram_id,
+                                    text=success_message,
+                                    reply_markup=keyboard,
+                                    parse_mode="HTML"
+                                )
 
-            logger.info(
-                "Успешно обработан платеж YooKassa %s: пользователь %s получил %s₽",
-                payment.yookassa_payment_id,
-                payment.user_id,
-                payment.amount_kopeks / 100,
-            )
+                            if getattr(self, "bot", None):
+                                try:
+                                    from app.services.admin_notification_service import (
+                                        AdminNotificationService,
+                                    )
+
+                                    notification_service = AdminNotificationService(self.bot)
+                                    await notification_service.send_subscription_purchase_notification(
+                                        db,
+                                        user,
+                                        subscription,
+                                        transaction,
+                                        subscription_period,
+                                        was_trial_conversion=False,
+                                    )
+                                except Exception as admin_error:
+                                    logger.error(
+                                        "Ошибка отправки уведомления админам о покупке подписки через YooKassa: %s",
+                                        admin_error,
+                                        exc_info=True,
+                                    )
+                        else:
+                            logger.error(f"Ошибка активации подписки для пользователя {user.id}")
+                    except Exception as e:
+                        logger.error(f"Ошибка активации подписки для пользователя {user.id}: {e}", exc_info=True)
+
+            if is_simple_subscription:
+                logger.info(
+                    "Успешно обработан платеж YooKassa %s как покупка подписки: пользователь %s, сумма %s₽",
+                    payment.yookassa_payment_id,
+                    payment.user_id,
+                    payment.amount_kopeks / 100,
+                )
+            else:
+                logger.info(
+                    "Успешно обработан платеж YooKassa %s: пользователь %s пополнил баланс на %s₽",
+                    payment.yookassa_payment_id,
+                    payment.user_id,
+                    payment.amount_kopeks / 100,
+                )
 
             return True
 

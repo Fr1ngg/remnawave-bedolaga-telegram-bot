@@ -30,6 +30,7 @@ async def get_subscription_by_user_id(db: AsyncSession, user_id: int) -> Optiona
     subscription = result.scalar_one_or_none()
     
     if subscription:
+        logger.info(f"🔍 Загружена подписка {subscription.id} для пользователя {user_id}, статус: {subscription.status}")
         subscription = await check_and_update_subscription_status(db, subscription)
     
     return subscription
@@ -149,7 +150,7 @@ async def create_paid_subscription(
     await db.commit()
     await db.refresh(subscription)
     
-    logger.info(f"💎 Создана платная подписка для пользователя {user_id}")
+    logger.info(f"💎 Создана платная подписка для пользователя {user_id}, ID: {subscription.id}, статус: {subscription.status}")
 
     squad_uuids = list(connected_squads or [])
     if update_server_counters and squad_uuids:
@@ -223,6 +224,9 @@ async def extend_subscription(
             if subscription.user:
                 subscription.user.has_had_paid_subscription = True
 
+    # Логируем статус подписки перед проверкой
+    logger.info(f"🔄 Продление подписки {subscription.id}, текущий статус: {subscription.status}, дни: {days}")
+    
     if days > 0 and subscription.status in (
         SubscriptionStatus.EXPIRED.value,
         SubscriptionStatus.DISABLED.value,
@@ -233,6 +237,12 @@ async def extend_subscription(
             "🔄 Статус подписки %s изменён с %s на ACTIVE",
             subscription.id,
             previous_status,
+        )
+    elif days > 0 and subscription.status == SubscriptionStatus.PENDING.value:
+        logger.warning(
+            "⚠️ Попытка продлить PENDING подписку %s, дни: %s",
+            subscription.id,
+            days
         )
 
     if settings.RESET_TRAFFIC_ON_PAYMENT:
@@ -1117,6 +1127,8 @@ async def check_and_update_subscription_status(
     
     current_time = datetime.utcnow()
     
+    logger.info(f"🔍 Проверка статуса подписки {subscription.id}, текущий статус: {subscription.status}, дата окончания: {subscription.end_date}, текущее время: {current_time}")
+    
     if (subscription.status == SubscriptionStatus.ACTIVE.value and 
         subscription.end_date <= current_time):
         
@@ -1127,6 +1139,8 @@ async def check_and_update_subscription_status(
         await db.refresh(subscription)
         
         logger.info(f"⏰ Статус подписки пользователя {subscription.user_id} изменен на 'expired'")
+    elif subscription.status == SubscriptionStatus.PENDING.value:
+        logger.info(f"ℹ️ Проверка PENDING подписки {subscription.id}, статус остается без изменений")
     
     return subscription
 
@@ -1183,3 +1197,132 @@ async def create_subscription(
     
     logger.info(f"✅ Создана подписка для пользователя {user_id}")
     return subscription
+
+
+async def create_pending_subscription(
+    db: AsyncSession,
+    user_id: int,
+    duration_days: int,
+    traffic_limit_gb: int = 0,
+    device_limit: int = 1,
+    connected_squads: List[str] = None,
+    payment_method: str = "pending",
+    total_price_kopeks: int = 0
+) -> Subscription:
+    """Creates a pending subscription that will be activated after payment."""
+    
+    current_time = datetime.utcnow()
+    end_date = current_time + timedelta(days=duration_days)
+
+    existing_subscription = await get_subscription_by_user_id(db, user_id)
+
+    if existing_subscription:
+        if (
+            existing_subscription.status == SubscriptionStatus.ACTIVE.value
+            and existing_subscription.end_date > current_time
+        ):
+            logger.warning(
+                "⚠️ Попытка создать pending подписку для активного пользователя %s. Возвращаем существующую запись.",
+                user_id,
+            )
+            return existing_subscription
+
+        existing_subscription.status = SubscriptionStatus.PENDING.value
+        existing_subscription.is_trial = False
+        existing_subscription.start_date = current_time
+        existing_subscription.end_date = end_date
+        existing_subscription.traffic_limit_gb = traffic_limit_gb
+        existing_subscription.device_limit = device_limit
+        existing_subscription.connected_squads = connected_squads or []
+        existing_subscription.traffic_used_gb = 0.0
+        existing_subscription.updated_at = current_time
+
+        await db.commit()
+        await db.refresh(existing_subscription)
+
+        logger.info(
+            "♻️ Обновлена ожидающая подписка пользователя %s, ID: %s, метод оплаты: %s",
+            user_id,
+            existing_subscription.id,
+            payment_method,
+        )
+        return existing_subscription
+
+    subscription = Subscription(
+        user_id=user_id,
+        status=SubscriptionStatus.PENDING.value,
+        is_trial=False,
+        start_date=current_time,
+        end_date=end_date,
+        traffic_limit_gb=traffic_limit_gb,
+        device_limit=device_limit,
+        connected_squads=connected_squads or [],
+        autopay_enabled=settings.is_autopay_enabled_by_default(),
+        autopay_days_before=settings.DEFAULT_AUTOPAY_DAYS_BEFORE,
+    )
+    
+    db.add(subscription)
+    await db.commit()
+    await db.refresh(subscription)
+    
+    logger.info(
+        "💳 Создана ожидающая подписка для пользователя %s, ID: %s, метод оплаты: %s",
+        user_id,
+        subscription.id,
+        payment_method,
+    )
+    
+    return subscription
+
+
+async def activate_pending_subscription(
+    db: AsyncSession,
+    user_id: int,
+    period_days: int = None
+) -> Optional[Subscription]:
+    """Активирует pending подписку пользователя, меняя её статус на ACTIVE."""
+    from sqlalchemy import and_
+    
+    logger.info(f"Активация pending подписки: пользователь {user_id}, период {period_days} дней")
+    
+    # Находим pending подписку пользователя
+    result = await db.execute(
+        select(Subscription)
+        .where(
+            and_(
+                Subscription.user_id == user_id,
+                Subscription.status == SubscriptionStatus.PENDING.value
+            )
+        )
+    )
+    pending_subscription = result.scalar_one_or_none()
+    
+    if not pending_subscription:
+        logger.warning(f"Не найдена pending подписка для пользователя {user_id}")
+        return None
+    
+    logger.info(f"Найдена pending подписка {pending_subscription.id} для пользователя {user_id}, статус: {pending_subscription.status}")
+    
+    # Обновляем статус подписки на ACTIVE
+    current_time = datetime.utcnow()
+    pending_subscription.status = SubscriptionStatus.ACTIVE.value
+    
+    # Если указан период, обновляем дату окончания
+    if period_days is not None:
+        if pending_subscription.end_date <= current_time:
+            # Если текущая дата окончания уже прошла, устанавливаем новую
+            pending_subscription.end_date = current_time + timedelta(days=period_days)
+        else:
+            # Если дата окончания в будущем, продляем её
+            pending_subscription.end_date = pending_subscription.end_date + timedelta(days=period_days)
+    
+    # Обновляем дату начала, если она не установлена или в прошлом
+    if not pending_subscription.start_date or pending_subscription.start_date < current_time:
+        pending_subscription.start_date = current_time
+    
+    await db.commit()
+    await db.refresh(pending_subscription)
+    
+    logger.info(f"Подписка пользователя {user_id} активирована, ID: {pending_subscription.id}")
+    
+    return pending_subscription

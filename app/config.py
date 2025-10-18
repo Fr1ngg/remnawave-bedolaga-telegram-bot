@@ -182,6 +182,13 @@ class Settings(BaseSettings):
     YOOKASSA_MAX_AMOUNT_KOPEKS: int = 1000000
     YOOKASSA_QUICK_AMOUNT_SELECTION_ENABLED: bool = False
     DISABLE_TOPUP_BUTTONS: bool = False
+    
+    # Настройки простой покупки
+    SIMPLE_SUBSCRIPTION_ENABLED: bool = False
+    SIMPLE_SUBSCRIPTION_PERIOD_DAYS: int = 30
+    SIMPLE_SUBSCRIPTION_DEVICE_LIMIT: int = 1
+    SIMPLE_SUBSCRIPTION_TRAFFIC_GB: int = 0  # 0 означает безлимит
+    SIMPLE_SUBSCRIPTION_SQUAD_UUID: Optional[str] = None
     PAYMENT_BALANCE_DESCRIPTION: str = "Пополнение баланса"
     PAYMENT_SUBSCRIPTION_DESCRIPTION: str = "Оплата подписки"
     PAYMENT_SERVICE_NAME: str = "Интернет-сервис"

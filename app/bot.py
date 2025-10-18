@@ -19,6 +19,7 @@ from app.handlers import (
     start, menu, subscription, balance, promocode,
     referral, support, server_status, common, tickets
 )
+from app.handlers import simple_subscription
 from app.handlers.admin import (
     main as admin_main,
     users as admin_users,
@@ -162,7 +163,10 @@ async def setup_bot() -> tuple[Bot, Dispatcher]:
     admin_faq.register_handlers(dp)
     common.register_handlers(dp)
     register_stars_handlers(dp)
+    simple_subscription.register_simple_subscription_handlers(dp)
     logger.info("⭐ Зарегистрированы обработчики Telegram Stars платежей")
+    logger.info("⚡ Зарегистрированы обработчики простой покупки")
+    logger.info("⚡ Зарегистрированы обработчики простой подписки")
     
     try:
         await maintenance_service.start_monitoring()

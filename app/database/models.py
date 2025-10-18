@@ -54,6 +54,7 @@ class SubscriptionStatus(Enum):
     ACTIVE = "active"
     EXPIRED = "expired"
     DISABLED = "disabled"
+    PENDING = "pending"
 
 
 class TransactionType(Enum):

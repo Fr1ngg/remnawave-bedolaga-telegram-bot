@@ -153,7 +153,7 @@ async def show_main_menu(
     db_user.last_activity = datetime.utcnow()
     await db.commit()
 
-    has_active_subscription = bool(db_user.subscription)
+    has_active_subscription = bool(db_user.subscription and db_user.subscription.is_active)
     subscription_is_active = False
 
     if db_user.subscription:
@@ -892,7 +892,7 @@ async def handle_back_to_menu(
 
     texts = get_texts(db_user.language)
 
-    has_active_subscription = db_user.subscription is not None
+    has_active_subscription = bool(db_user.subscription and db_user.subscription.is_active)
     subscription_is_active = False
 
     if db_user.subscription:
@@ -946,64 +946,74 @@ async def handle_back_to_menu(
     await callback.answer()
 
 def _get_subscription_status(user: User, texts) -> str:
-    if not user.subscription:
+    subscription = getattr(user, "subscription", None)
+    if not subscription:
         return texts.t("SUB_STATUS_NONE", "❌ Отсутствует")
-    
-    subscription = user.subscription
+
     current_time = datetime.utcnow()
-    
-    if subscription.end_date <= current_time:
+    actual_status = (subscription.actual_status or "").lower()
+    end_date_text = subscription.end_date.strftime("%d.%m.%Y")
+    days_left = 0
+
+    if subscription.end_date > current_time:
+        days_left = (subscription.end_date - current_time).days
+
+    if actual_status == "pending":
+        return texts.t("SUBSCRIPTION_NONE", "❌ Нет активной подписки")
+
+    if actual_status == "disabled":
+        return texts.t("SUB_STATUS_DISABLED", "⚫ Отключена")
+
+    if actual_status == "expired":
         return texts.t(
             "SUB_STATUS_EXPIRED",
             "🔴 Истекла\n📅 {end_date}",
-        ).format(end_date=subscription.end_date.strftime('%d.%m.%Y'))
-    
-    days_left = (subscription.end_date - current_time).days
-    
-    if subscription.is_trial:
+        ).format(end_date=end_date_text)
+
+    if actual_status == "trial":
         if days_left > 1:
             return texts.t(
                 "SUB_STATUS_TRIAL_ACTIVE",
                 "🎁 Тестовая подписка\n📅 до {end_date} ({days} дн.)",
             ).format(
-                end_date=subscription.end_date.strftime('%d.%m.%Y'),
+                end_date=end_date_text,
                 days=days_left,
             )
-        elif days_left == 1:
+        if days_left == 1:
             return texts.t(
                 "SUB_STATUS_TRIAL_TOMORROW",
                 "🎁 Тестовая подписка\n⚠️ истекает завтра!",
             )
-        else:
-            return texts.t(
-                "SUB_STATUS_TRIAL_TODAY",
-                "🎁 Тестовая подписка\n⚠️ истекает сегодня!",
-            )
+        return texts.t(
+            "SUB_STATUS_TRIAL_TODAY",
+            "🎁 Тестовая подписка\n⚠️ истекает сегодня!",
+        )
 
-    else: 
+    if actual_status == "active":
         if days_left > 7:
             return texts.t(
                 "SUB_STATUS_ACTIVE_LONG",
                 "💎 Активна\n📅 до {end_date} ({days} дн.)",
             ).format(
-                end_date=subscription.end_date.strftime('%d.%m.%Y'),
+                end_date=end_date_text,
                 days=days_left,
             )
-        elif days_left > 1:
+        if days_left > 1:
             return texts.t(
                 "SUB_STATUS_ACTIVE_FEW_DAYS",
                 "💎 Активна\n⚠️ истекает через {days} дн.",
             ).format(days=days_left)
-        elif days_left == 1:
+        if days_left == 1:
             return texts.t(
                 "SUB_STATUS_ACTIVE_TOMORROW",
                 "💎 Активна\n⚠️ истекает завтра!",
             )
-        else:
-            return texts.t(
-                "SUB_STATUS_ACTIVE_TODAY",
-                "💎 Активна\n⚠️ истекает сегодня!",
-            )
+        return texts.t(
+            "SUB_STATUS_ACTIVE_TODAY",
+            "💎 Активна\n⚠️ истекает сегодня!",
+        )
+
+    return texts.t("SUB_STATUS_UNKNOWN", "❓ Неизвестно")
 
 
 def _insert_random_message(base_text: str, random_message: str, action_prompt: str) -> str:

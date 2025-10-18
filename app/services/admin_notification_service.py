@@ -217,9 +217,10 @@ class AdminNotificationService:
         db: AsyncSession,
         user: User,
         subscription: Subscription,
-        transaction: Transaction,
+        transaction: Optional[Transaction],
         period_days: int,
-        was_trial_conversion: bool = False
+        was_trial_conversion: bool = False,
+        amount_kopeks: Optional[int] = None,
     ) -> bool:
         if not self._is_enabled():
             return False
@@ -235,10 +236,13 @@ class AdminNotificationService:
                 user_status = "🆕 Первая покупка"
             
             servers_info = await self._get_servers_info(subscription.connected_squads)
-            payment_method = self._get_payment_method_display(transaction.payment_method)
+            payment_method = self._get_payment_method_display(transaction.payment_method) if transaction else "Баланс"
             referrer_info = await self._get_referrer_info(db, user.referred_by_id)
             promo_group = await self._get_user_promo_group(db, user)
             promo_block = self._format_promo_group_block(promo_group)
+
+            total_amount = amount_kopeks if amount_kopeks is not None else (transaction.amount_kopeks if transaction else 0)
+            transaction_id = transaction.id if transaction else "—"
 
             message = f"""💎 <b>{event_type}</b>
 
@@ -250,9 +254,9 @@ class AdminNotificationService:
 {promo_block}
 
 💰 <b>Платеж:</b>
-💵 Сумма: {settings.format_price(transaction.amount_kopeks)}
+💵 Сумма: {settings.format_price(total_amount)}
 💳 Способ: {payment_method}
-🆔 ID транзакции: {transaction.id}
+🆔 ID транзакции: {transaction_id}
 
 📱 <b>Параметры подписки:</b>
 📅 Период: {period_days} дней

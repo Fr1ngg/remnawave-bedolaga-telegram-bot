@@ -2,6 +2,7 @@ import logging
 from datetime import datetime, timedelta
 from typing import Optional
 from aiogram import Dispatcher, types, F
+from aiogram.exceptions import TelegramForbiddenError, TelegramBadRequest
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.fsm.context import FSMContext
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -1642,6 +1643,107 @@ async def start_balance_edit(
     
     await state.set_state(AdminStates.editing_user_balance)
     await callback.answer()
+
+
+@admin_required
+@error_handler
+async def start_send_user_message(
+    callback: types.CallbackQuery,
+    db_user: User,
+    state: FSMContext,
+    db: AsyncSession,
+):
+    user_id = int(callback.data.split('_')[-1])
+
+    target_user = await get_user_by_id(db, user_id)
+    if not target_user:
+        await callback.answer("❌ Пользователь не найден", show_alert=True)
+        return
+
+    await state.update_data(direct_message_user_id=user_id)
+
+    texts = get_texts(db_user.language)
+    prompt = (
+        texts.t("ADMIN_USER_SEND_MESSAGE_PROMPT",
+                 "✉️ <b>Отправка сообщения пользователю</b>\n\n"
+                 "Введите текст, который бот отправит пользователю."
+                 "\n\nВы можете отменить действие командой /cancel или кнопкой ниже." )
+    )
+
+    await callback.message.edit_text(
+        prompt,
+        reply_markup=types.InlineKeyboardMarkup(
+            inline_keyboard=[
+                [types.InlineKeyboardButton(text="❌ Отмена", callback_data=f"admin_user_manage_{user_id}")]
+            ]
+        ),
+        parse_mode="HTML",
+    )
+
+    await state.set_state(AdminStates.sending_user_message)
+    await callback.answer()
+
+
+@admin_required
+@error_handler
+async def process_send_user_message(
+    message: types.Message,
+    db_user: User,
+    state: FSMContext,
+    db: AsyncSession,
+):
+    texts = get_texts(db_user.language)
+    data = await state.get_data()
+    user_id = data.get("direct_message_user_id")
+
+    if not user_id:
+        await message.answer(texts.t("ADMIN_USER_SEND_MESSAGE_ERROR_NOT_FOUND", "❌ Пользователь для отправки сообщения не найден"))
+        await state.clear()
+        return
+
+    target_user = await get_user_by_id(db, int(user_id))
+    if not target_user:
+        await message.answer(texts.t("ADMIN_USER_SEND_MESSAGE_ERROR_NOT_FOUND", "❌ Пользователь не найден или был удалён"))
+        await state.clear()
+        return
+
+    text = (message.text or "").strip()
+    if not text:
+        await message.answer(texts.t("ADMIN_USER_SEND_MESSAGE_EMPTY", "❌ Пожалуйста, введите непустое сообщение"))
+        return
+
+    confirmation_keyboard = types.InlineKeyboardMarkup(
+        inline_keyboard=[[types.InlineKeyboardButton(text="👤 К пользователю", callback_data=f"admin_user_manage_{user_id}")]]
+    )
+
+    try:
+        await message.bot.send_message(target_user.telegram_id, text)
+        await message.answer(
+            texts.t("ADMIN_USER_SEND_MESSAGE_SUCCESS", "✅ Сообщение отправлено пользователю"),
+            reply_markup=confirmation_keyboard,
+        )
+    except TelegramForbiddenError:
+        await message.answer(
+            texts.t("ADMIN_USER_SEND_MESSAGE_FORBIDDEN", "⚠️ Пользователь заблокировал бота или не может получить сообщения."),
+            reply_markup=confirmation_keyboard,
+        )
+    except TelegramBadRequest as err:
+        logger.error("Ошибка отправки сообщения пользователю %s: %s", target_user.telegram_id, err)
+        await message.answer(
+            texts.t("ADMIN_USER_SEND_MESSAGE_BAD_REQUEST", "❌ Telegram отклонил сообщение. Проверьте текст и попробуйте ещё раз."),
+            reply_markup=confirmation_keyboard,
+        )
+        return
+    except Exception as err:
+        logger.error("Неожиданная ошибка отправки сообщения пользователю %s: %s", target_user.telegram_id, err)
+        await message.answer(
+            texts.t("ADMIN_USER_SEND_MESSAGE_ERROR", "❌ Не удалось отправить сообщение. Попробуйте позже."),
+            reply_markup=confirmation_keyboard,
+        )
+        await state.clear()
+        return
+
+    await state.clear()
 
 
 @admin_required
@@ -4014,10 +4116,20 @@ def register_handlers(dp: Dispatcher):
         start_balance_edit,
         F.data.startswith("admin_user_balance_")
     )
-    
+
     dp.message.register(
         process_balance_edit,
         AdminStates.editing_user_balance
+    )
+
+    dp.callback_query.register(
+        start_send_user_message,
+        F.data.startswith("admin_user_send_message_")
+    )
+
+    dp.message.register(
+        process_send_user_message,
+        AdminStates.sending_user_message
     )
     
     dp.callback_query.register(

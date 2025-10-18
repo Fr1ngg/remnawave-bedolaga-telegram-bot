@@ -527,9 +527,22 @@ async def start_subscription_purchase(
 ):
     texts = get_texts(db_user.language)
 
+    # Если включена простая покупка, показываем дополнительную кнопку
+    keyboard = get_subscription_period_keyboard(db_user.language)
+    
+    if settings.SIMPLE_SUBSCRIPTION_ENABLED:
+        # Добавляем кнопку простой подписки в начало клавиатуры
+        simple_subscription_button = [types.InlineKeyboardButton(
+            text="⚡ Простая покупка",
+            callback_data="simple_subscription_purchase"
+        )]
+        
+        # Вставляем кнопку в начало списка кнопок
+        keyboard.inline_keyboard.insert(0, simple_subscription_button)
+
     await callback.message.edit_text(
         await _build_subscription_period_prompt(db_user, texts, db),
-        reply_markup=get_subscription_period_keyboard(db_user.language),
+        reply_markup=keyboard,
         parse_mode="HTML",
     )
 
@@ -1999,7 +2012,7 @@ def register_handlers(dp: Dispatcher):
 
     dp.callback_query.register(
         start_subscription_purchase,
-        F.data.in_(["menu_buy", "subscription_upgrade"])
+        F.data.in_(["menu_buy", "subscription_upgrade", "subscription_purchase"])
     )
 
     dp.callback_query.register(
@@ -2264,3 +2277,162 @@ def register_handlers(dp: Dispatcher):
         show_device_connection_help,
         F.data == "device_connection_help"
     )
+    
+    # Регистрируем обработчик для простой покупки
+    dp.callback_query.register(
+        handle_simple_subscription_purchase,
+        F.data == "simple_subscription_purchase"
+    )
+
+
+async def handle_simple_subscription_purchase(
+    callback: types.CallbackQuery,
+    state: FSMContext,
+    db_user: User,
+    db: AsyncSession,
+):
+    """Обрабатывает простую покупку подписки."""
+    texts = get_texts(db_user.language)
+    
+    if not settings.SIMPLE_SUBSCRIPTION_ENABLED:
+        await callback.answer("❌ Простая покупка подписки временно недоступна", show_alert=True)
+        return
+    
+    # Проверяем, есть ли у пользователя активная подписка
+    from app.database.crud.subscription import get_subscription_by_user_id
+    current_subscription = await get_subscription_by_user_id(db, db_user.id)
+    
+    if current_subscription and current_subscription.is_active:
+        await callback.answer("❌ У вас уже есть активная подписка", show_alert=True)
+        return
+    
+    # Подготовим параметры простой подписки
+    subscription_params = {
+        "period_days": settings.SIMPLE_SUBSCRIPTION_PERIOD_DAYS,
+        "device_limit": settings.SIMPLE_SUBSCRIPTION_DEVICE_LIMIT,
+        "traffic_limit_gb": settings.SIMPLE_SUBSCRIPTION_TRAFFIC_GB,
+        "squad_uuid": settings.SIMPLE_SUBSCRIPTION_SQUAD_UUID
+    }
+    
+    # Сохраняем параметры в состояние
+    await state.update_data(subscription_params=subscription_params)
+    
+    # Проверяем баланс пользователя
+    user_balance_kopeks = getattr(db_user, "balance_kopeks", 0)
+    # Рассчитываем цену подписки
+    price_kopeks = _calculate_simple_subscription_price(subscription_params)
+    
+    if user_balance_kopeks >= price_kopeks:
+        # Если баланс достаточный, предлагаем оплатить с баланса
+        message_text = (
+            f"⚡ <b>Простая покупка подписки</b>\n\n"
+            f"📅 Период: {subscription_params['period_days']} дней\n"
+            f"📱 Устройства: {subscription_params['device_limit']}\n"
+            f"📊 Трафик: {'Безлимит' if subscription_params['traffic_limit_gb'] == 0 else f'{subscription_params['traffic_limit_gb']} ГБ'}\n"
+            f"🌍 Сервер: {'Любой доступный' if not subscription_params['squad_uuid'] else 'Выбранный'}\n\n"
+            f"💰 Стоимость: {settings.format_price(price_kopeks)}\n"
+            f"💳 Ваш баланс: {settings.format_price(user_balance_kopeks)}\n\n"
+            f"Вы можете оплатить подписку с баланса или выбрать другой способ оплаты."
+        )
+        
+        keyboard = types.InlineKeyboardMarkup(inline_keyboard=[
+            [types.InlineKeyboardButton(text="✅ Оплатить с баланса", callback_data="simple_subscription_pay_with_balance")],
+            [types.InlineKeyboardButton(text="💳 Другие способы оплаты", callback_data="simple_subscription_other_payment_methods")],
+            [types.InlineKeyboardButton(text=texts.BACK, callback_data="subscription_purchase")]
+        ])
+    else:
+        # Если баланс недостаточный, предлагаем внешние способы оплаты
+        message_text = (
+            f"⚡ <b>Простая покупка подписки</b>\n\n"
+            f"📅 Период: {subscription_params['period_days']} дней\n"
+            f"📱 Устройства: {subscription_params['device_limit']}\n"
+            f"📊 Трафик: {'Безлимит' if subscription_params['traffic_limit_gb'] == 0 else f'{subscription_params['traffic_limit_gb']} ГБ'}\n"
+            f"🌍 Сервер: {'Любой доступный' if not subscription_params['squad_uuid'] else 'Выбранный'}\n\n"
+            f"💰 Стоимость: {settings.format_price(price_kopeks)}\n"
+            f"💳 Ваш баланс: {settings.format_price(user_balance_kopeks)}\n\n"
+            f"Выберите способ оплаты:"
+        )
+        
+        keyboard = _get_simple_subscription_payment_keyboard(db_user.language)
+    
+    await callback.message.edit_text(
+        message_text,
+        reply_markup=keyboard,
+        parse_mode="HTML"
+    )
+    
+    await state.set_state(SubscriptionStates.waiting_for_simple_subscription_payment_method)
+    await callback.answer()
+
+    
+
+
+def _calculate_simple_subscription_price(params: dict) -> int:
+    """Рассчитывает цену простой подписки."""
+    period_days = params.get("period_days", 30)
+    
+    # Получаем цену для стандартного периода
+    if hasattr(settings, f'PRICE_{period_days}_DAYS'):
+        return getattr(settings, f'PRICE_{period_days}_DAYS')
+    else:
+        # Если нет цены для конкретного периода, используем базовую цену
+        return settings.BASE_SUBSCRIPTION_PRICE
+
+
+def _get_simple_subscription_payment_keyboard(language: str) -> types.InlineKeyboardMarkup:
+    """Создает клавиатуру с методами оплаты для простой подписки."""
+    texts = get_texts(language)
+    keyboard = []
+    
+    # Добавляем доступные методы оплаты
+    if settings.TELEGRAM_STARS_ENABLED:
+        keyboard.append([types.InlineKeyboardButton(
+            text="⭐ Telegram Stars",
+            callback_data="simple_subscription_stars"
+        )])
+    
+    if settings.is_yookassa_enabled():
+        yookassa_methods = []
+        if settings.YOOKASSA_SBP_ENABLED:
+            yookassa_methods.append(types.InlineKeyboardButton(
+                text="🏦 YooKassa (СБП)",
+                callback_data="simple_subscription_yookassa_sbp"
+            ))
+        yookassa_methods.append(types.InlineKeyboardButton(
+            text="💳 YooKassa (Карта)",
+            callback_data="simple_subscription_yookassa"
+        ))
+        if yookassa_methods:
+            keyboard.append(yookassa_methods)
+    
+    if settings.is_cryptobot_enabled():
+        keyboard.append([types.InlineKeyboardButton(
+            text="🪙 CryptoBot",
+            callback_data="simple_subscription_cryptobot"
+        )])
+    
+    if settings.is_mulenpay_enabled():
+        keyboard.append([types.InlineKeyboardButton(
+            text="💳 MulenPay",
+            callback_data="simple_subscription_mulenpay"
+        )])
+    
+    if settings.is_pal24_enabled():
+        keyboard.append([types.InlineKeyboardButton(
+            text="💳 PayPalych",
+            callback_data="simple_subscription_pal24"
+        )])
+    
+    if settings.is_wata_enabled():
+        keyboard.append([types.InlineKeyboardButton(
+            text="💳 WATA",
+            callback_data="simple_subscription_wata"
+        )])
+    
+    # Кнопка назад
+    keyboard.append([types.InlineKeyboardButton(
+        text=texts.BACK,
+        callback_data="subscription_purchase"
+    )])
+    
+    return types.InlineKeyboardMarkup(inline_keyboard=keyboard)

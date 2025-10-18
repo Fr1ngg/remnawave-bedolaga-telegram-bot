@@ -762,6 +762,13 @@ def get_user_management_keyboard(user_id: int, user_status: str, language: str =
         ]
     ]
 
+    keyboard.append([
+        InlineKeyboardButton(
+            text=_t(texts, "ADMIN_USER_SEND_MESSAGE", "✉️ Отправить сообщение"),
+            callback_data=f"admin_user_send_message_{user_id}"
+        )
+    ])
+
     if user_status == "active":
         keyboard.append([
             InlineKeyboardButton(
