@@ -684,7 +684,15 @@ async def handle_simple_subscription_payment_method(
     
     try:
         payment_service = PaymentService(callback.bot)
-        
+
+        resolved_squad_uuid = await _ensure_simple_subscription_squad_uuid(
+            db,
+            state,
+            subscription_params,
+            user_id=db_user.id,
+            state_data=data,
+        )
+
         if payment_method == "stars":
             # Оплата через Telegram Stars
             stars_count = settings.rubles_to_stars(settings.kopeks_to_rubles(price_kopeks))
@@ -719,7 +727,7 @@ async def handle_simple_subscription_payment_method(
             
             # Создаем заказ на подписку
             purchase_service = SubscriptionPurchaseService()
-            
+
             order = await purchase_service.create_subscription_order(
                 db=db,
                 user_id=db_user.id,
