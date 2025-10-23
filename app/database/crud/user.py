@@ -220,13 +220,14 @@ async def add_user_balance(
     description: str = "Пополнение баланса",
     create_transaction: bool = True,
     transaction_type: TransactionType = TransactionType.DEPOSIT,
-    bot = None
+    bot = None,
+    auto_commit: bool = True,
 ) -> bool:
     try:
         old_balance = user.balance_kopeks
         user.balance_kopeks += amount_kopeks
         user.updated_at = datetime.utcnow()
-        
+
         if create_transaction:
             from app.database.crud.transaction import create_transaction as create_trans
 
@@ -235,16 +236,19 @@ async def add_user_balance(
                 user_id=user.id,
                 type=transaction_type,
                 amount_kopeks=amount_kopeks,
-                description=description
+                description=description,
+                auto_commit=auto_commit,
             )
-        
-        await db.commit()
-        await db.refresh(user)
-        
-        
+
+        if auto_commit:
+            await db.commit()
+            await db.refresh(user)
+        else:
+            await db.flush()
+
         logger.info(f"💰 Баланс пользователя {user.telegram_id} изменен: {old_balance} → {user.balance_kopeks} (изменение: +{amount_kopeks})")
         return True
-        
+
     except Exception as e:
         logger.error(f"Ошибка изменения баланса пользователя {user.id}: {e}")
         await db.rollback()

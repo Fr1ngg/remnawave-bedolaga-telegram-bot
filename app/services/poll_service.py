@@ -8,6 +8,7 @@ from aiogram.exceptions import TelegramBadRequest
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.config import settings
 from app.database.crud.user import add_user_balance
@@ -168,30 +169,56 @@ async def reward_user_for_poll(
     db: AsyncSession,
     response: PollResponse,
 ) -> int:
-    poll = response.poll
+    result = await db.execute(
+        select(PollResponse)
+        .options(
+            selectinload(PollResponse.poll),
+            selectinload(PollResponse.user),
+        )
+        .where(PollResponse.id == response.id)
+        .with_for_update()
+    )
+
+    locked_response = result.scalar_one_or_none()
+    if not locked_response or not locked_response.poll:
+        return 0
+
+    poll = locked_response.poll
     if not poll.reward_enabled or poll.reward_amount_kopeks <= 0:
         return 0
 
-    if response.reward_given:
-        return response.reward_amount_kopeks
+    if locked_response.reward_given:
+        return locked_response.reward_amount_kopeks
 
-    user = response.user
     description = f"Награда за участие в опросе \"{poll.title}\""
 
     success = await add_user_balance(
         db,
-        user,
+        locked_response.user,
         poll.reward_amount_kopeks,
         description,
         transaction_type=TransactionType.POLL_REWARD,
+        auto_commit=False,
     )
 
     if not success:
+        await db.rollback()
         return 0
 
-    response.reward_given = True
-    response.reward_amount_kopeks = poll.reward_amount_kopeks
-    await db.commit()
+    locked_response.reward_given = True
+    locked_response.reward_amount_kopeks = poll.reward_amount_kopeks
+
+    try:
+        await db.commit()
+    except Exception as exc:
+        logger.error(
+            "Не удалось зафиксировать выдачу награды за опрос %s пользователю %s: %s",
+            poll.id,
+            locked_response.user.telegram_id if locked_response.user else "?",
+            exc,
+        )
+        await db.rollback()
+        return 0
 
     return poll.reward_amount_kopeks
 

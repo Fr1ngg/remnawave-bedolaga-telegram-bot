@@ -18,7 +18,8 @@ async def create_transaction(
     description: str,
     payment_method: Optional[PaymentMethod] = None,
     external_id: Optional[str] = None,
-    is_completed: bool = True
+    is_completed: bool = True,
+    auto_commit: bool = True,
 ) -> Transaction:
     
     transaction = Transaction(
@@ -33,23 +34,30 @@ async def create_transaction(
     )
     
     db.add(transaction)
-    await db.commit()
-    await db.refresh(transaction)
-    
-    logger.info(f"💳 Создана транзакция: {type.value} на {amount_kopeks/100}₽ для пользователя {user_id}")
 
-    try:
-        from app.services.promo_group_assignment import (
-            maybe_assign_promo_group_by_total_spent,
-        )
+    if auto_commit:
+        await db.commit()
+        await db.refresh(transaction)
+    else:
+        await db.flush()
 
-        await maybe_assign_promo_group_by_total_spent(db, user_id)
-    except Exception as exc:
-        logger.debug(
-            "Не удалось проверить автовыдачу промогруппы для пользователя %s: %s",
-            user_id,
-            exc,
-        )
+    logger.info(
+        f"💳 Создана транзакция: {type.value} на {amount_kopeks/100}₽ для пользователя {user_id}"
+    )
+
+    if auto_commit:
+        try:
+            from app.services.promo_group_assignment import (
+                maybe_assign_promo_group_by_total_spent,
+            )
+
+            await maybe_assign_promo_group_by_total_spent(db, user_id)
+        except Exception as exc:
+            logger.debug(
+                "Не удалось проверить автовыдачу промогруппы для пользователя %s: %s",
+                user_id,
+                exc,
+            )
 
     return transaction
 
