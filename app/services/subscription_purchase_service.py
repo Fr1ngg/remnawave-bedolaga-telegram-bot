@@ -1175,8 +1175,19 @@ class MiniAppSubscriptionPurchaseService:
         }
 
 
-class SubscriptionPurchaseService:
-    """Service for handling simple subscription purchases with predefined parameters."""
+class SubscriptionPurchaseService(MiniAppSubscriptionPurchaseService):
+    """High-level purchase service used across bot flows.
+
+    Historically this class only exposed :meth:`create_subscription_order` for
+    simple YooKassa purchases.  Automatic post-top-up purchases (and other
+    flows) expect it to provide the full mini-app purchase workflow, including
+    :meth:`submit_purchase`.  After refactoring the mini-app service this class
+    lost these methods which resulted in an ``AttributeError`` during the
+    automatic checkout pipeline.  Inheriting from
+    :class:`MiniAppSubscriptionPurchaseService` keeps a single implementation of
+    the purchase logic and guarantees that all consumers have access to the same
+    API surface.
+    """
     
     async def create_subscription_order(
         self,
