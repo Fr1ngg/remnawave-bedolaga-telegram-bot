@@ -13,6 +13,7 @@ from app.config import settings
 from app.database.models import PaymentMethod, TransactionType
 from app.services.subscription_auto_purchase_service import (
     auto_purchase_saved_cart_after_topup,
+    get_saved_cart_total_kopeks,
 )
 from app.utils.currency_converter import currency_converter
 from app.utils.user_utils import format_referrer_info
@@ -322,10 +323,21 @@ class CryptoBotPaymentMixin:
                         # Если у пользователя есть сохраненная корзина,
                         # отправляем ему уведомление с кнопкой вернуться к оформлению
                         from app.localization.texts import get_texts
-                        
+
                         texts = get_texts(user.language)
+                        cart_data = await user_cart_service.get_user_cart(user.id)
+                        cart_total = get_saved_cart_total_kopeks(
+                            cart_data, getattr(user, "balance_kopeks", None)
+                        )
+
+                        total_amount_label = (
+                            texts.format_price(cart_total)
+                            if cart_total
+                            else settings.format_price(payment.amount_kopeks)
+                        )
+
                         cart_message = texts.BALANCE_TOPUP_CART_REMINDER_DETAILED.format(
-                            total_amount=settings.format_price(payment.amount_kopeks)
+                            total_amount=total_amount_label
                         )
                         
                         # Создаем клавиатуру с кнопками

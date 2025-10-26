@@ -21,6 +21,7 @@ from app.database.models import PaymentMethod, TransactionType
 from app.external.telegram_stars import TelegramStarsService
 from app.services.subscription_auto_purchase_service import (
     auto_purchase_saved_cart_after_topup,
+    get_saved_cart_total_kopeks,
 )
 from app.utils.user_utils import format_referrer_info
 
@@ -268,14 +269,25 @@ class TelegramStarsMixin:
                     # Если у пользователя есть сохраненная корзина,
                     # отправляем ему уведомление с кнопкой вернуться к оформлению
                     from app.localization.texts import get_texts
-                    
+
                     texts = get_texts(user.language)
+                    cart_data = await user_cart_service.get_user_cart(user.id)
+                    cart_total = get_saved_cart_total_kopeks(
+                        cart_data, getattr(user, "balance_kopeks", None)
+                    )
+
+                    total_amount_label = (
+                        texts.format_price(cart_total)
+                        if cart_total
+                        else settings.format_price(amount_kopeks)
+                    )
+
                     cart_message = texts.t(
                         "BALANCE_TOPUP_CART_REMINDER_DETAILED",
                         "🛒 У вас есть неоформленный заказ.\n\n"
                         "Вы можете продолжить оформление с теми же параметрами."
-                    )
-                    
+                    ).format(total_amount=total_amount_label)
+
                     # Создаем клавиатуру с кнопками
                     keyboard = types.InlineKeyboardMarkup(inline_keyboard=[
                         [types.InlineKeyboardButton(

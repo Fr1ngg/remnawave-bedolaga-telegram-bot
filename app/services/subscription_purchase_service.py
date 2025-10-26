@@ -1177,7 +1177,28 @@ class MiniAppSubscriptionPurchaseService:
 
 class SubscriptionPurchaseService:
     """Service for handling simple subscription purchases with predefined parameters."""
-    
+
+    async def submit_purchase(
+        self,
+        db: AsyncSession,
+        context: PurchaseOptionsContext,
+        pricing: PurchasePricingResult,
+    ) -> Dict[str, Any]:
+        """Proxy purchase submission to the mini-app purchase flow.
+
+        The automatic purchase flow reuses the mini-app pricing logic to ensure that
+        the saved cart is processed with the same validations and side effects as a
+        manual checkout. Historically this method was available on
+        :class:`MiniAppSubscriptionPurchaseService` only, which caused attribute
+        errors when the auto-purchase routine attempted to delegate to this class.
+
+        By exposing the method here we keep backwards compatibility for the simpler
+        subscription flows while letting them reuse the battle-tested implementation.
+        """
+
+        delegate = MiniAppSubscriptionPurchaseService()
+        return await delegate.submit_purchase(db, context, pricing)
+
     async def create_subscription_order(
         self,
         db: AsyncSession,

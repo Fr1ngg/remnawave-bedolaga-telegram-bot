@@ -92,6 +92,47 @@ async def _prepare_auto_purchase(
     return AutoPurchaseContext(context=context, pricing=pricing, selection=selection)
 
 
+def get_saved_cart_total_kopeks(
+    cart_data: Optional[dict],
+    user_balance_kopeks: Optional[int],
+) -> int:
+    """Extracts the expected total purchase amount from saved cart data.
+
+    The cart stores the final total in ``total_price``. If it is absent (for
+    example, because the cart was saved at the moment of insufficient balance),
+    we approximate the target sum as the current balance plus the recorded
+    ``missing_amount``. Any parsing errors are treated as zero to avoid
+    propagating exceptions during notification flows.
+    """
+
+    if not cart_data:
+        return 0
+
+    try:
+        total = int(cart_data.get("total_price") or 0)
+    except (TypeError, ValueError):
+        total = 0
+
+    if total > 0:
+        return total
+
+    try:
+        missing = int(cart_data.get("missing_amount") or 0)
+    except (TypeError, ValueError):
+        missing = 0
+
+    if missing <= 0 or user_balance_kopeks is None:
+        return 0
+
+    try:
+        balance = int(user_balance_kopeks)
+    except (TypeError, ValueError):
+        balance = 0
+
+    estimated_total = balance + missing
+    return estimated_total if estimated_total > 0 else 0
+
+
 async def auto_purchase_saved_cart_after_topup(
     db: AsyncSession,
     user: User,
@@ -272,4 +313,4 @@ async def auto_purchase_saved_cart_after_topup(
     return True
 
 
-__all__ = ["auto_purchase_saved_cart_after_topup"]
+__all__ = ["auto_purchase_saved_cart_after_topup", "get_saved_cart_total_kopeks"]
