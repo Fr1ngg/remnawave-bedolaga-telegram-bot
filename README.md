@@ -1523,7 +1523,7 @@ docker compose up -d
 
 **Made with ❤️ by [@fringg](https://t.me/fringg) and amazing [contributors](https://github.com/Fr1ngg/remnawave-bedolaga-telegram-bot/graphs/contributors)**
 
-**Версия:** v2.5.2 | **Последнее обновление:** 2024
+**Версия:** v2.5.2 | **Последнее обновление:** 2025
 
 <div align="center">
 
