@@ -18,6 +18,52 @@ from app.utils.user_utils import format_referrer_info
 logger = logging.getLogger(__name__)
 
 
+def _extract_transaction_id(payment: Any, remote_link: Optional[Dict[str, Any]] = None) -> Optional[str]:
+    """Try to find the remote WATA transaction identifier from stored payloads."""
+
+    def _from_mapping(mapping: Any) -> Optional[str]:
+        if isinstance(mapping, str):
+            try:
+                import json
+
+                mapping = json.loads(mapping)
+            except Exception:  # pragma: no cover - defensive parsing
+                return None
+        if not isinstance(mapping, dict):
+            return None
+        for key in ("id", "transaction_id", "transactionId"):
+            value = mapping.get(key)
+            if not value:
+                continue
+            value_str = str(value)
+            if "-" in value_str:
+                return value_str
+        return None
+
+    candidate = None
+
+    if hasattr(payment, "callback_payload"):
+        candidate = _from_mapping(getattr(payment, "callback_payload"))
+        if candidate:
+            return candidate
+
+    metadata = getattr(payment, "metadata_json", None)
+    if isinstance(metadata, dict):
+        if "transaction" in metadata:
+            candidate = _from_mapping(metadata.get("transaction"))
+            if candidate:
+                return candidate
+        candidate = _from_mapping(metadata)
+        if candidate:
+            return candidate
+
+    candidate = _from_mapping(remote_link)
+    if candidate:
+        return candidate
+
+    return None
+
+
 class WataPaymentMixin:
     """Encapsulates creation and status handling for WATA payment links."""
 
@@ -226,6 +272,7 @@ class WataPaymentMixin:
 
         remote_link: Optional[Dict[str, Any]] = None
         transaction_payload: Optional[Dict[str, Any]] = None
+        transaction_id: Optional[str] = None
 
         if getattr(self, "wata_service", None) and payment.payment_link_id:
             try:
@@ -253,29 +300,84 @@ class WataPaymentMixin:
 
             remote_status_normalized = (remote_status or "").lower()
             if remote_status_normalized in {"closed", "paid"} and not payment.is_paid:
+                transaction_id = _extract_transaction_id(payment, remote_link)
+                if transaction_id:
+                    try:
+                        transaction_payload = await self.wata_service.get_transaction(  # type: ignore[union-attr]
+                            transaction_id
+                        )
+                    except WataAPIError as error:
+                        logger.error(
+                            "Ошибка получения WATA транзакции %s: %s",
+                            transaction_id,
+                            error,
+                        )
+                    except Exception as error:  # pragma: no cover - safety net
+                        logger.exception(
+                            "Непредвиденная ошибка при запросе WATA транзакции %s: %s",
+                            transaction_id,
+                            error,
+                        )
+                if not transaction_payload:
+                    try:
+                        tx_response = await self.wata_service.search_transactions(  # type: ignore[union-attr]
+                            order_id=payment.order_id,
+                            payment_link_id=payment.payment_link_id,
+                            status="Paid",
+                            limit=5,
+                        )
+                        items = tx_response.get("items") or []
+                        for item in items:
+                            if (item or {}).get("status") == "Paid":
+                                transaction_payload = item
+                                break
+                    except WataAPIError as error:
+                        logger.error(
+                            "Ошибка поиска WATA транзакций для %s: %s",
+                            payment.payment_link_id,
+                            error,
+                        )
+                    except Exception as error:  # pragma: no cover - safety net
+                        logger.exception("Непредвиденная ошибка при поиске WATA транзакции: %s", error)
+
+        if (
+            not transaction_payload
+            and not payment.is_paid
+            and getattr(self, "wata_service", None)
+        ):
+            fallback_transaction_id = transaction_id or _extract_transaction_id(payment)
+            if fallback_transaction_id:
                 try:
-                    tx_response = await self.wata_service.search_transactions(  # type: ignore[union-attr]
-                        order_id=payment.order_id,
-                        payment_link_id=payment.payment_link_id,
-                        status="Paid",
-                        limit=5,
+                    transaction_payload = await self.wata_service.get_transaction(  # type: ignore[union-attr]
+                        fallback_transaction_id
                     )
-                    items = tx_response.get("items") or []
-                    for item in items:
-                        if (item or {}).get("status") == "Paid":
-                            transaction_payload = item
-                            break
                 except WataAPIError as error:
                     logger.error(
-                        "Ошибка поиска WATA транзакций для %s: %s",
-                        payment.payment_link_id,
+                        "Ошибка повторного запроса WATA транзакции %s: %s",
+                        fallback_transaction_id,
                         error,
                     )
                 except Exception as error:  # pragma: no cover - safety net
-                    logger.exception("Непредвиденная ошибка при поиске WATA транзакции: %s", error)
+                    logger.exception(
+                        "Непредвиденная ошибка при повторном запросе WATA транзакции %s: %s",
+                        fallback_transaction_id,
+                        error,
+                    )
 
         if transaction_payload and not payment.is_paid:
-            payment = await self._finalize_wata_payment(db, payment, transaction_payload)
+            normalized_status = None
+            if isinstance(transaction_payload, dict):
+                raw_status = transaction_payload.get("status") or transaction_payload.get("statusName")
+                if raw_status:
+                    normalized_status = str(raw_status).lower()
+            if normalized_status == "paid":
+                payment = await self._finalize_wata_payment(db, payment, transaction_payload)
+            else:
+                logger.debug(
+                    "WATA транзакция %s в статусе %s, повторная обработка не требуется",
+                    transaction_id or getattr(payment, "payment_link_id", ""),
+                    normalized_status or "unknown",
+                )
 
         return {
             "payment": payment,
@@ -293,7 +395,22 @@ class WataPaymentMixin:
     ) -> Any:
         payment_module = import_module("app.services.payment_service")
 
-        paid_at = WataService._parse_datetime(transaction_payload.get("paymentTime"))
+        if isinstance(transaction_payload, dict):
+            paid_status = transaction_payload.get("status") or transaction_payload.get("statusName")
+        else:
+            paid_status = None
+        if paid_status and str(paid_status).lower() not in {"paid", "declined", "pending"}:
+            logger.debug(
+                "Неизвестный статус WATA транзакции %s: %s",
+                getattr(payment, "payment_link_id", ""),
+                paid_status,
+            )
+
+        paid_at = None
+        if isinstance(transaction_payload, dict):
+            paid_at = WataService._parse_datetime(transaction_payload.get("paymentTime"))
+        if not paid_at and getattr(payment, "paid_at", None):
+            paid_at = payment.paid_at
         existing_metadata = dict(getattr(payment, "metadata_json", {}) or {})
         existing_metadata["transaction"] = transaction_payload
 

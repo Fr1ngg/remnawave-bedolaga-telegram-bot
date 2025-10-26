@@ -207,6 +207,108 @@ class YooKassaPaymentMixin:
             logger.error("Ошибка создания платежа YooKassa СБП: %s", error)
             return None
 
+    async def get_yookassa_payment_status(
+        self,
+        db: AsyncSession,
+        local_payment_id: int,
+    ) -> Optional[Dict[str, Any]]:
+        """Запрашивает статус платежа в YooKassa и синхронизирует локальные данные."""
+
+        payment_module = import_module("app.services.payment_service")
+
+        payment = await payment_module.get_yookassa_payment_by_local_id(db, local_payment_id)
+        if not payment:
+            return None
+
+        remote_data: Optional[Dict[str, Any]] = None
+
+        if getattr(self, "yookassa_service", None):
+            try:
+                remote_data = await self.yookassa_service.get_payment_info(  # type: ignore[union-attr]
+                    payment.yookassa_payment_id
+                )
+            except Exception as error:  # pragma: no cover - defensive logging
+                logger.error(
+                    "Ошибка получения статуса YooKassa %s: %s",
+                    payment.yookassa_payment_id,
+                    error,
+                )
+
+        if remote_data:
+            status = remote_data.get("status") or payment.status
+            paid = bool(remote_data.get("paid", getattr(payment, "is_paid", False)))
+            captured_raw = remote_data.get("captured_at")
+            captured_at = None
+            if captured_raw:
+                try:
+                    captured_at = datetime.fromisoformat(
+                        str(captured_raw).replace("Z", "+00:00")
+                    ).replace(tzinfo=None)
+                except Exception as parse_error:  # pragma: no cover - diagnostic log
+                    logger.debug(
+                        "Не удалось распарсить captured_at %s: %s",
+                        captured_raw,
+                        parse_error,
+                    )
+                    captured_at = None
+
+            payment_method_type = remote_data.get("payment_method_type")
+
+            updated_payment = await payment_module.update_yookassa_payment_status(
+                db,
+                payment.yookassa_payment_id,
+                status=status,
+                is_paid=paid,
+                is_captured=paid and status == "succeeded",
+                captured_at=captured_at,
+                payment_method_type=payment_method_type,
+            )
+
+            if updated_payment:
+                payment = updated_payment
+
+        transaction_id = getattr(payment, "transaction_id", None)
+
+        if (
+            payment.status == "succeeded"
+            and getattr(payment, "is_paid", False)
+        ):
+            if not transaction_id:
+                try:
+                    await db.refresh(payment)
+                    transaction_id = getattr(payment, "transaction_id", None)
+                except Exception as refresh_error:  # pragma: no cover - defensive logging
+                    logger.warning(
+                        "Не удалось обновить состояние платежа YooKassa %s перед повторной обработкой: %s",
+                        payment.yookassa_payment_id,
+                        refresh_error,
+                        exc_info=True,
+                    )
+
+            if transaction_id:
+                logger.info(
+                    "Пропускаем повторную обработку платежа YooKassa %s: уже связан с транзакцией %s",
+                    payment.yookassa_payment_id,
+                    transaction_id,
+                )
+            else:
+                try:
+                    await self._process_successful_yookassa_payment(db, payment)
+                except Exception as process_error:  # pragma: no cover - defensive logging
+                    logger.error(
+                        "Ошибка обработки успешного платежа YooKassa %s: %s",
+                        payment.yookassa_payment_id,
+                        process_error,
+                        exc_info=True,
+                    )
+
+        return {
+            "payment": payment,
+            "status": payment.status,
+            "is_paid": getattr(payment, "is_paid", False),
+            "remote_data": remote_data,
+        }
+
     async def _process_successful_yookassa_payment(
         self,
         db: AsyncSession,
@@ -256,11 +358,16 @@ class YooKassaPaymentMixin:
                 is_completed=True,
             )
 
-            await payment_module.link_yookassa_payment_to_transaction(
+            linked_payment = await payment_module.link_yookassa_payment_to_transaction(
                 db,
                 payment.yookassa_payment_id,
                 transaction.id,
             )
+
+            if linked_payment:
+                payment.transaction_id = getattr(linked_payment, "transaction_id", transaction.id)
+                if hasattr(linked_payment, "transaction"):
+                    payment.transaction = linked_payment.transaction
 
             user = await payment_module.get_user_by_id(db, payment.user_id)
             if user:

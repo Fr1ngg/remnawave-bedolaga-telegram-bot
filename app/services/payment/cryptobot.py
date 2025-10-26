@@ -337,3 +337,83 @@ class CryptoBotPaymentMixin:
                 "Ошибка обработки CryptoBot webhook: %s", error, exc_info=True
             )
             return False
+
+    async def get_cryptobot_payment_status(
+        self,
+        db: AsyncSession,
+        local_payment_id: int,
+    ) -> Optional[Dict[str, Any]]:
+        """Запрашивает актуальный статус CryptoBot invoice и синхронизирует его."""
+
+        cryptobot_crud = import_module("app.database.crud.cryptobot")
+        payment = await cryptobot_crud.get_cryptobot_payment_by_id(db, local_payment_id)
+        if not payment:
+            logger.warning("CryptoBot платеж %s не найден", local_payment_id)
+            return None
+
+        if not self.cryptobot_service:
+            logger.warning("CryptoBot сервис не инициализирован для ручной проверки")
+            return {"payment": payment}
+
+        invoice_id = payment.invoice_id
+        try:
+            invoices = await self.cryptobot_service.get_invoices(
+                invoice_ids=[invoice_id]
+            )
+        except Exception as error:  # pragma: no cover - network errors
+            logger.error(
+                "Ошибка запроса статуса CryptoBot invoice %s: %s",
+                invoice_id,
+                error,
+            )
+            return {"payment": payment}
+
+        remote_invoice: Optional[Dict[str, Any]] = None
+        if invoices:
+            for item in invoices:
+                if str(item.get("invoice_id")) == str(invoice_id):
+                    remote_invoice = item
+                    break
+
+        if not remote_invoice:
+            logger.info(
+                "CryptoBot invoice %s не найден через API при ручной проверке",
+                invoice_id,
+            )
+            refreshed = await cryptobot_crud.get_cryptobot_payment_by_id(db, local_payment_id)
+            return {"payment": refreshed or payment}
+
+        status = (remote_invoice.get("status") or "").lower()
+        paid_at_str = remote_invoice.get("paid_at")
+        paid_at = None
+        if paid_at_str:
+            try:
+                paid_at = datetime.fromisoformat(paid_at_str.replace("Z", "+00:00")).replace(
+                    tzinfo=None
+                )
+            except Exception:  # pragma: no cover - defensive parsing
+                paid_at = None
+
+        if status == "paid":
+            webhook_payload = {
+                "update_type": "invoice_paid",
+                "payload": {
+                    "invoice_id": remote_invoice.get("invoice_id") or invoice_id,
+                    "amount": remote_invoice.get("amount") or payment.amount,
+                    "asset": remote_invoice.get("asset") or payment.asset,
+                    "paid_at": paid_at_str,
+                    "payload": remote_invoice.get("payload") or payment.payload,
+                },
+            }
+            await self.process_cryptobot_webhook(db, webhook_payload)
+        else:
+            if status and status != (payment.status or "").lower():
+                await cryptobot_crud.update_cryptobot_payment_status(
+                    db,
+                    invoice_id,
+                    status,
+                    paid_at,
+                )
+
+        refreshed = await cryptobot_crud.get_cryptobot_payment_by_id(db, local_payment_id)
+        return {"payment": refreshed or payment}

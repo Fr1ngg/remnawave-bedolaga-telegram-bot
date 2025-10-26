@@ -55,6 +55,11 @@ async def get_yookassa_payment_by_id(*args, **kwargs):
     return await yk_crud.get_yookassa_payment_by_id(*args, **kwargs)
 
 
+async def get_yookassa_payment_by_local_id(*args, **kwargs):
+    yk_crud = import_module("app.database.crud.yookassa")
+    return await yk_crud.get_yookassa_payment_by_local_id(*args, **kwargs)
+
+
 async def create_transaction(*args, **kwargs):
     transaction_crud = import_module("app.database.crud.transaction")
     return await transaction_crud.create_transaction(*args, **kwargs)

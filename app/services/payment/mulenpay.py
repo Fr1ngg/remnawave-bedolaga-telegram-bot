@@ -440,35 +440,59 @@ class MulenPayPaymentMixin:
                 response = await self.mulenpay_service.get_payment(
                     payment.mulen_payment_id
                 )
-                if response and response.get("success"):
-                    remote_data = response.get("payment")
-                    if isinstance(remote_data, dict):
-                        remote_status_code = remote_data.get("status")
-                        mapped_status = self._map_mulenpay_status(remote_status_code)
+                if response:
+                    if isinstance(response, dict) and response.get("success"):
+                        remote_data = response.get("payment")
+                    elif isinstance(response, dict) and "status" in response and "id" in response:
+                        remote_data = response
+                if not remote_data and getattr(self, "mulenpay_service", None):
+                    list_response = await self.mulenpay_service.list_payments(
+                        limit=100,
+                        uuid=payment.uuid,
+                    )
+                    items = []
+                    if isinstance(list_response, dict):
+                        items = list_response.get("items") or []
+                    if items:
+                        for candidate in items:
+                            if not isinstance(candidate, dict):
+                                continue
+                            candidate_id = candidate.get("id")
+                            candidate_uuid = candidate.get("uuid")
+                            if (
+                                (candidate_id is not None and candidate_id == payment.mulen_payment_id)
+                                or (candidate_uuid and candidate_uuid == payment.uuid)
+                            ):
+                                remote_data = candidate
+                                break
 
-                        if mapped_status == "success" and not payment.is_paid:
-                            await self.process_mulenpay_callback(
-                                db,
-                                {
-                                    "uuid": payment.uuid,
-                                    "payment_status": "success",
-                                    "id": remote_data.get("id"),
-                                    "amount": remote_data.get("amount"),
-                                },
-                            )
-                            payment = await payment_module.get_mulenpay_payment_by_local_id(
-                                db, local_payment_id
-                            )
-                        elif mapped_status and mapped_status != payment.status:
-                            await payment_module.update_mulenpay_payment_status(
-                                db,
-                                payment=payment,
-                                status=mapped_status,
-                                mulen_payment_id=remote_data.get("id"),
-                            )
-                            payment = await payment_module.get_mulenpay_payment_by_local_id(
-                                db, local_payment_id
-                            )
+                if isinstance(remote_data, dict):
+                    remote_status_code = remote_data.get("status")
+                    mapped_status = self._map_mulenpay_status(remote_status_code)
+
+                    if mapped_status == "success" and not payment.is_paid:
+                        await self.process_mulenpay_callback(
+                            db,
+                            {
+                                "uuid": payment.uuid,
+                                "payment_status": "success",
+                                "id": remote_data.get("id"),
+                                "amount": remote_data.get("amount"),
+                            },
+                        )
+                        payment = await payment_module.get_mulenpay_payment_by_local_id(
+                            db, local_payment_id
+                        )
+                    elif mapped_status and mapped_status != payment.status:
+                        await payment_module.update_mulenpay_payment_status(
+                            db,
+                            payment=payment,
+                            status=mapped_status,
+                            mulen_payment_id=remote_data.get("id"),
+                        )
+                        payment = await payment_module.get_mulenpay_payment_by_local_id(
+                            db, local_payment_id
+                        )
 
             return {
                 "payment": payment,

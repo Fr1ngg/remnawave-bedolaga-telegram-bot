@@ -18,6 +18,9 @@ DEFAULT_DISPLAY_NAME_BANNED_KEYWORDS = [
 ]
 
 
+logger = logging.getLogger(__name__)
+
+
 class Settings(BaseSettings):
 
     BOT_TOKEN: str
@@ -182,6 +185,8 @@ class Settings(BaseSettings):
     YOOKASSA_MAX_AMOUNT_KOPEKS: int = 1000000
     YOOKASSA_QUICK_AMOUNT_SELECTION_ENABLED: bool = False
     DISABLE_TOPUP_BUTTONS: bool = False
+    PAYMENT_VERIFICATION_AUTO_CHECK_ENABLED: bool = False
+    PAYMENT_VERIFICATION_AUTO_CHECK_INTERVAL_MINUTES: int = 10
     
     # Настройки простой покупки
     SIMPLE_SUBSCRIPTION_ENABLED: bool = False
@@ -838,6 +843,24 @@ class Settings(BaseSettings):
             and self.WATA_ACCESS_TOKEN is not None
             and self.WATA_TERMINAL_PUBLIC_ID is not None
         )
+
+    def is_payment_verification_auto_check_enabled(self) -> bool:
+        return self.PAYMENT_VERIFICATION_AUTO_CHECK_ENABLED
+
+    def get_payment_verification_auto_check_interval(self) -> int:
+        try:
+            minutes = int(self.PAYMENT_VERIFICATION_AUTO_CHECK_INTERVAL_MINUTES)
+        except (TypeError, ValueError):  # pragma: no cover - защитная проверка конфигурации
+            minutes = 10
+
+        if minutes <= 0:
+            logger.warning(
+                "Некорректный интервал автопроверки платежей: %s. Используется значение по умолчанию 10 минут.",
+                self.PAYMENT_VERIFICATION_AUTO_CHECK_INTERVAL_MINUTES,
+            )
+            return 10
+
+        return minutes
 
     def get_cryptobot_base_url(self) -> str:
         if self.CRYPTOBOT_TESTNET:

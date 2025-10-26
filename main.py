@@ -13,6 +13,14 @@ from app.database.database import init_db
 from app.services.monitoring_service import monitoring_service
 from app.services.maintenance_service import maintenance_service
 from app.services.payment_service import PaymentService
+from app.services.payment_verification_service import (
+    PENDING_MAX_AGE,
+    SUPPORTED_MANUAL_CHECK_METHODS,
+    auto_payment_verification_service,
+    get_enabled_auto_methods,
+    method_display_name,
+)
+from app.database.models import PaymentMethod
 from app.services.version_service import version_service
 from app.external.webhook_server import WebhookServer
 from app.external.heleket_webhook import start_heleket_webhook_server
@@ -214,6 +222,67 @@ async def main():
                 logger.error(f"❌ Ошибка запуска автосинхронизации RemnaWave: {e}")
 
         payment_service = PaymentService(bot)
+        auto_payment_verification_service.set_payment_service(payment_service)
+
+        verification_providers: list[str] = []
+        auto_verification_active = False
+        async with timeline.stage(
+            "Сервис проверки пополнений",
+            "💳",
+            success_message="Ручная проверка активна",
+        ) as stage:
+            for method in SUPPORTED_MANUAL_CHECK_METHODS:
+                if method == PaymentMethod.YOOKASSA and settings.is_yookassa_enabled():
+                    verification_providers.append("YooKassa")
+                elif method == PaymentMethod.MULENPAY and settings.is_mulenpay_enabled():
+                    verification_providers.append(settings.get_mulenpay_display_name())
+                elif method == PaymentMethod.PAL24 and settings.is_pal24_enabled():
+                    verification_providers.append("PayPalych")
+                elif method == PaymentMethod.WATA and settings.is_wata_enabled():
+                    verification_providers.append("WATA")
+                elif method == PaymentMethod.HELEKET and settings.is_heleket_enabled():
+                    verification_providers.append("Heleket")
+                elif method == PaymentMethod.CRYPTOBOT and settings.is_cryptobot_enabled():
+                    verification_providers.append("CryptoBot")
+
+            if verification_providers:
+                hours = int(PENDING_MAX_AGE.total_seconds() // 3600)
+                stage.log(
+                    "Ожидающие пополнения автоматически отбираются не старше "
+                    f"{hours}ч"
+                )
+                stage.log(
+                    "Доступна ручная проверка для: "
+                    + ", ".join(sorted(verification_providers))
+                )
+                stage.success(
+                    f"Активно провайдеров: {len(verification_providers)}"
+                )
+            else:
+                stage.skip("Нет активных провайдеров для ручной проверки")
+
+            if settings.is_payment_verification_auto_check_enabled():
+                auto_methods = get_enabled_auto_methods()
+                if auto_methods:
+                    interval_minutes = settings.get_payment_verification_auto_check_interval()
+                    auto_labels = ", ".join(
+                        sorted(method_display_name(method) for method in auto_methods)
+                    )
+                    stage.log(
+                        "Автопроверка каждые "
+                        f"{interval_minutes} мин: {auto_labels}"
+                    )
+                else:
+                    stage.log(
+                        "Автопроверка включена, но нет активных провайдеров"
+                    )
+            else:
+                stage.log("Автопроверка отключена настройками")
+
+            await auto_payment_verification_service.start()
+            auto_verification_active = auto_payment_verification_service.is_running()
+            if auto_verification_active:
+                stage.log("Фоновая автопроверка запущена")
 
         async with timeline.stage(
             "Внешняя админка",
@@ -423,6 +492,18 @@ async def main():
             f"Проверка версий: {'Включен' if version_check_task else 'Отключен'}",
             f"Отчеты: {'Включен' if reporting_service.is_running() else 'Отключен'}",
         ]
+        services_lines.append(
+            "Проверка пополнений: "
+            + ("Включена" if verification_providers else "Отключена")
+        )
+        services_lines.append(
+            "Автопроверка пополнений: "
+            + (
+                "Включена"
+                if auto_payment_verification_service.is_running()
+                else "Отключена"
+            )
+        )
         timeline.log_section("Активные фоновые сервисы", services_lines, icon="📄")
 
         timeline.log_summary()
@@ -484,7 +565,14 @@ async def main():
                         if settings.is_version_check_enabled():
                             logger.info("🔄 Перезапуск сервиса проверки версий...")
                             version_check_task = asyncio.create_task(version_service.start_periodic_check())
-                        
+
+                if auto_verification_active and not auto_payment_verification_service.is_running():
+                    logger.warning(
+                        "Сервис автопроверки пополнений остановился, пробуем перезапустить..."
+                    )
+                    await auto_payment_verification_service.start()
+                    auto_verification_active = auto_payment_verification_service.is_running()
+
                 if polling_task.done():
                     exception = polling_task.exception()
                     if exception:
@@ -503,7 +591,15 @@ async def main():
             timeline.log_summary()
             summary_logged = True
         logger.info("🛑 Начинается корректное завершение работы...")
-        
+
+        logger.info("ℹ️ Остановка сервиса автопроверки пополнений...")
+        try:
+            await auto_payment_verification_service.stop()
+        except Exception as error:
+            logger.error(
+                f"Ошибка остановки сервиса автопроверки пополнений: {error}"
+            )
+
         if yookassa_server_task and not yookassa_server_task.done():
             logger.info("ℹ️ Остановка YooKassa webhook сервера...")
             yookassa_server_task.cancel()

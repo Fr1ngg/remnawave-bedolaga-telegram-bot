@@ -214,3 +214,21 @@ class MulenPayService:
 
     async def get_payment(self, payment_id: int) -> Optional[Dict[str, Any]]:
         return await self._request("GET", f"/v2/payments/{payment_id}")
+
+    async def list_payments(
+        self,
+        *,
+        offset: int = 0,
+        limit: int = 100,
+        uuid: Optional[str] = None,
+        status: Optional[int] = None,
+    ) -> Optional[Dict[str, Any]]:
+        params = {
+            "offset": max(0, offset),
+            "limit": max(1, min(limit, 1000)),
+        }
+        if uuid:
+            params["uuid"] = uuid
+        if status is not None:
+            params["status"] = status
+        return await self._request("GET", "/v2/payments", params=params)
