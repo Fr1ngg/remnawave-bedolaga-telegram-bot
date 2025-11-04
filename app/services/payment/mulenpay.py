@@ -270,11 +270,24 @@ class MulenPayPaymentMixin:
                     user.has_made_first_topup = True
                     await db.commit()
 
-                await db.refresh(user)
+                # После коммита отношения пользователя могли быть сброшены, поэтому
+                # повторно загружаем пользователя с предзагрузкой зависимостей
+                user = await payment_module.get_user_by_id(db, user.id)
+                if not user:
+                    logger.error(
+                        "Пользователь %s не найден при повторной загрузке после %s",
+                        payment.user_id,
+                        display_name,
+                    )
+                    return False
 
                 # Используем предзагруженные значения для избежания lazy-загрузки
-                promo_group = user.promo_group if hasattr(user, 'promo_group') and user.promo_group else None
-                subscription = user.subscription if hasattr(user, 'subscription') and user.subscription else None
+                promo_group = (
+                    user.promo_group if hasattr(user, "promo_group") and user.promo_group else None
+                )
+                subscription = (
+                    user.subscription if hasattr(user, "subscription") and user.subscription else None
+                )
                 referrer_info = format_referrer_info(user)
                 topup_status = (
                     "🆕 Первое пополнение" if was_first_topup else "🔄 Пополнение"
