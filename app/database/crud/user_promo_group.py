@@ -1,5 +1,6 @@
 """CRUD операции для связи пользователей с промогруппами (Many-to-Many)."""
 import logging
+from datetime import datetime
 from typing import List, Optional
 
 from sqlalchemy import select, and_, desc
@@ -9,6 +10,39 @@ from sqlalchemy.orm import selectinload
 from app.database.models import UserPromoGroup, PromoGroup, User
 
 logger = logging.getLogger(__name__)
+
+
+async def _sync_user_primary_promo_group(
+    db: AsyncSession,
+    user_id: int,
+) -> None:
+    """Синхронизирует колонку users.promo_group_id с primary промогруппой."""
+
+    try:
+        result = await db.execute(
+            select(UserPromoGroup.promo_group_id)
+            .join(PromoGroup, UserPromoGroup.promo_group_id == PromoGroup.id)
+            .where(UserPromoGroup.user_id == user_id)
+            .order_by(desc(PromoGroup.priority), PromoGroup.id)
+        )
+
+        first = result.first()
+        new_primary_id = first[0] if first else None
+
+        user = await db.get(User, user_id)
+        if not user:
+            return
+
+        if user.promo_group_id != new_primary_id:
+            user.promo_group_id = new_primary_id
+            user.updated_at = datetime.utcnow()
+
+    except Exception as error:
+        logger.error(
+            "Ошибка синхронизации primary промогруппы пользователя %s: %s",
+            user_id,
+            error,
+        )
 
 
 async def add_user_to_promo_group(
@@ -40,9 +74,13 @@ async def add_user_to_promo_group(
         user_promo_group = UserPromoGroup(
             user_id=user_id,
             promo_group_id=promo_group_id,
-            assigned_by=assigned_by
+            assigned_by=assigned_by,
         )
         db.add(user_promo_group)
+        await db.flush()
+
+        await _sync_user_primary_promo_group(db, user_id)
+
         await db.commit()
         await db.refresh(user_promo_group)
 
@@ -87,6 +125,10 @@ async def remove_user_from_promo_group(
             return False
 
         await db.delete(user_promo_group)
+        await db.flush()
+
+        await _sync_user_primary_promo_group(db, user_id)
+
         await db.commit()
 
         logger.info(f"У пользователя {user_id} удалена промогруппа {promo_group_id}")

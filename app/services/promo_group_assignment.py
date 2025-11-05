@@ -138,6 +138,8 @@ async def maybe_assign_promo_group_by_total_spent(
                 user.telegram_id,
                 target_group.name,
             )
+            if user.promo_group_id != target_group.id:
+                user.promo_group_id = target_group.id
             if target_threshold > previous_threshold:
                 user.auto_promo_group_threshold_kopeks = target_threshold
                 user.updated_at = datetime.utcnow()
