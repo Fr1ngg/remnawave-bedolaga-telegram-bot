@@ -136,8 +136,7 @@ logger.debug(f"Webhook payload: {webhook_data}")
 # Открыть только необходимые порты
 ufw allow 80/tcp   # HTTP (redirect to HTTPS)
 ufw allow 443/tcp  # HTTPS
-ufw deny 8081/tcp  # Webhook порты (только через reverse proxy)
-ufw deny 8082/tcp
+ufw deny 8080/tcp  # Unified FastAPI сервер доступен только из внутренней сети
 ```
 
 ### 📊 Мониторинг безопасности
@@ -283,7 +282,7 @@ services:
     
     # Не пробрасывайте порты наружу без необходимости
     ports:
-      - "127.0.0.1:8081:8081"  # Только localhost
+      - "127.0.0.1:8080:8080"  # Только localhost
     
     # Read-only root filesystem
     read_only: true
