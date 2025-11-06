@@ -122,35 +122,67 @@ docker compose logs
 
 ---
 
-## 🌐 Настройка обратного прокси и доменов
+## 🌐 Настройка webhook-режима и обратного прокси
 
-> Этот раздел описывает полноценную ручную настройку обратного прокси для **двух разных доменов**: отдельный домен для вебхуков (`hooks.example.com`) и отдельный домен для мини-приложения (`miniapp.example.com`). Оба прокси-сервера (Caddy или nginx) должны работать в одной Docker-сети с ботом, чтобы обращаться к сервису по внутреннему имени `remnawave_bot` без проброса портов наружу.
+> Встроенный FastAPI-сервер теперь обслуживает Telegram webhook, платежные webhooks, административное API и статические файлы миниапки на **одном порту 8080**. Снаружи вы публикуете только HTTPS-прокси, которое проксирует весь трафик на этот порт.
 
-### 1. Планирование доменов и переменных окружения
+### ♻️ Миграция со старой схемы (несколько портов)
 
-1. Добавьте в DNS по **A/AAAA-записи** для обоих доменов на IP сервера, где запущен бот.
-2. Убедитесь, что входящий трафик на **80/tcp и 443/tcp** открыт (брандмауэр, облачный фаервол).
-3. В `.env` пропишите корректные URL, чтобы бот формировал ссылки с HTTPS-доменами:
-   ```env
-   WEBHOOK_URL=https://hooks.example.com
-   WEB_API_ENABLED=true
-   WEB_API_ALLOWED_ORIGINS=https://miniapp.example.com
-   MINIAPP_CUSTOM_URL=https://miniapp.example.com
-   ```
+Если бот уже развернут в режиме polling или с отдельными контейнерами для `payments-webhook`, выполните переход на единую схему:
 
-### 2. Общая Docker-сеть для бота и прокси
+1. **Обновите `.env`:** установите `BOT_RUN_MODE=webhook` (или `both` для гибридного режима), задайте `WEBHOOK_URL`, `WEBHOOK_PATH` и обязательно сгенерируйте собственный `WEBHOOK_SECRET_TOKEN`.
+2. **Проверьте `docker-compose.*`:** оставьте публикацию только порта `8080` у сервиса `bot`. Все значения `*_WEBHOOK_PORT` теперь используются лишь для обратной совместимости и могут быть удалены.
+3. **Обновите прокси:** перенаправляйте *все* пути (`/webhook`, `/yookassa-webhook`, `/cryptobot-webhook`, `/miniapp/static`, `/app-config.json` и т.д.) на один upstream `remnawave_bot:8080`. Примеры Caddy/nginx ниже можно адаптировать к текущей инфраструктуре.
+4. **Перезапустите сервисы:** `docker compose up -d --force-recreate bot` и затем перезагрузите прокси. После запуска бот автоматически зарегистрирует новый webhook.
+5. **Проверьте здоровье:** `curl http://localhost:8080/health` и `curl http://localhost:8080/health/telegram-webhook`. Убедитесь, что в логах нет ошибок регистрации webhook.
 
-`docker-compose.yml` бота создаёт сеть `bot_network`. Чтобы внешний прокси видел сервис `remnawave_bot`, нужно:
+После миграции старые контейнеры/сервисы для отдельных вебхуков можно удалить.
+
+### 1. Выбор режима запуска
+
+| `BOT_RUN_MODE` | Что делает | Когда использовать |
+|----------------|------------|---------------------|
+| `polling` | Бот опрашивает Telegram через long polling. HTTP-сервер можно не поднимать. | Локальная отладка или отсутствие внешнего HTTPS. |
+| `webhook` | Aiogram получает апдейты только через вебхук. | Продакшн и серверы за HTTPS-прокси. |
+| `both` | Одновременно работают polling и webhook. | Миграция с polling на webhook или повышенная отказоустойчивость. |
+
+### 2. Переменные окружения для webhook
+
+```env
+BOT_RUN_MODE=webhook
+WEBHOOK_URL=https://bot.example.com
+WEBHOOK_PATH=/telegram/webhook
+WEBHOOK_SECRET_TOKEN=super-secret-token
+WEBHOOK_DROP_PENDING_UPDATES=true
+WEBHOOK_MAX_QUEUE_SIZE=1024
+WEBHOOK_WORKERS=4
+WEBHOOK_ENQUEUE_TIMEOUT=0.1
+WEBHOOK_WORKER_SHUTDOWN_TIMEOUT=30.0
+
+WEB_API_ENABLED=true
+WEB_API_HOST=0.0.0.0
+WEB_API_PORT=8080
+WEB_API_ALLOWED_ORIGINS=https://bot.example.com
+MINIAPP_CUSTOM_URL=https://bot.example.com/miniapp
+```
+
+* `WEBHOOK_URL` — публичный HTTPS-домен прокси. К нему автоматически добавится путь из `WEBHOOK_PATH`.
+* `WEBHOOK_SECRET_TOKEN` — защитный токен Telegram, обязательно задайте своё значение.
+* Очередь можно тюнить через `WEBHOOK_MAX_QUEUE_SIZE`, `WEBHOOK_WORKERS`, `WEBHOOK_ENQUEUE_TIMEOUT` и `WEBHOOK_WORKER_SHUTDOWN_TIMEOUT`.
+* Если миниапка или админка доступны по другим доменам, перечислите их через запятую в `WEB_API_ALLOWED_ORIGINS`.
+
+После изменения `.env` перезапустите сервис: `docker compose up -d remnawave_bot`.
+
+### 3. Подготовка Docker-сети
+
+`docker-compose.yml` создаёт сеть `bot_network`. Прокси должен находиться в той же сети, чтобы обращаться к контейнеру по имени `remnawave_bot`.
 
 ```bash
-# Убедиться, что сеть существует
 docker network ls | grep bot_network || docker network create bot_network
-
-# Подключить прокси (если контейнер уже запущен отдельно)
 docker network connect bot_network <proxy_container_name>
 ```
 
-Если прокси запускается через **собственный docker-compose**, в файле нужно объявить ту же сеть как внешнюю:
+Если прокси стартует отдельным compose-файлом, объявите сеть внешней:
 
 ```yaml
 networks:
@@ -158,178 +190,139 @@ networks:
     external: true
 ```
 
-### 3. Ручная установка Caddy в Docker
+### 4. Проверка здоровья
 
-1. Создайте каталог для конфигурации:
-   ```bash
-   mkdir -p ~/caddy
-   cd ~/caddy
-   ```
+Статические файлы миниапки автоматически монтируются из каталога `MINIAPP_STATIC_PATH` (по умолчанию `miniapp/`) и доступны по пути `/miniapp/static`.
 
-2. Сохраните docker-compose-файл `docker-compose.caddy.yml`:
-   ```yaml
-   services:
-     caddy:
-       image: caddy:2-alpine
-       container_name: remnawave_caddy
-       restart: unless-stopped
-       ports:
-         - "80:80"
-         - "443:443"
-       volumes:
-         - ./Caddyfile:/etc/caddy/Caddyfile
-         - caddy_data:/data
-         - caddy_config:/config
-         - /root/remnawave-bedolaga-telegram-bot/miniapp:/miniapp:ro
-         - /root/remnawave-bedolaga-telegram-bot/miniapp/redirect:/miniapp/redirect:ro
-       networks:
-         - bot_network
+Проверьте, что единый сервер отвечает:
 
-   volumes:
-     caddy_data:
-     caddy_config:
+```bash
+curl -s https://bot.example.com/health | jq
+```
 
-   networks:
-     bot_network:
-       external: true
-   ```
+Полезные диагностические endpoints:
 
-3. Создайте `Caddyfile` с двумя виртуальными хостами:
-   ```caddy
-   webhook.domain.com {
-       handle /tribute-webhook* {
-           reverse_proxy remnawave_bot:8081
-       }
-       
-       handle /cryptobot-webhook* {
-           reverse_proxy remnawave_bot:8081
-       }
-       
-       handle /mulenpay-webhook* {
-           reverse_proxy remnawave_bot:8081
-       }
-       
-       handle /pal24-webhook* {
-           reverse_proxy remnawave_bot:8084
-       }
-       
-       handle /wata-webhook* {
-           reverse_proxy remnawave_bot:8081
-       }
-       
-       handle /yookassa-webhook* {
-           reverse_proxy remnawave_bot:8082
-       }
-       
-       handle /health {
-           reverse_proxy remnawave_bot:8081/health
-       }
-   }
-   
-   miniapp.domain.com {
-       encode gzip zstd
-       root * /miniapp
-       file_server
-       
-       @config path /app-config.json
-       header @config Access-Control-Allow-Origin "*"
-       
-       reverse_proxy /miniapp/* remnawave_bot:8080 {
-           header_up Host {host}
-           header_up X-Real-IP {remote_host}
-       }
-   }
-   ```
+- `/health` — агрегированный статус (режим бота, очередь Telegram, наличие миниапки и платежей).
+- `/health/telegram-webhook` — состояние очереди Telegram webhook.
+- `/health/payment-webhooks` — какие платёжные интеграции активированы.
 
-4. Запустите прокси:
-   ```bash
-   docker compose -f docker-compose.caddy.yml up -d
-   ```
+### 5. Swagger и документация
 
-### 4. Ручная настройка nginx в Docker
+- Включите `WEB_API_DOCS_ENABLED=true`, если нужно открыть Swagger UI и OpenAPI. После перезапуска сервиса станут доступны эндпоинты `/docs`, `/doc` (редирект для обратной совместимости), `/redoc` и `/openapi.json`.
+- Не забудьте проксировать эти пути через внешний HTTPS-прокси вместе с остальными эндпоинтами бота.
+- В продакшене держите `WEB_API_DOCS_ENABLED=false`, чтобы документация не была публичной. При необходимости включайте временно или защищайте прокси базовой авторизацией/IP-фильтрацией.
 
-1. Создайте каталог `/opt/nginx-remnawave` и поместите туда `docker-compose.nginx.yml`:
-   ```yaml
-   services:
-     nginx:
-       image: nginx:1.25-alpine
-       container_name: remnawave_nginx
-       restart: unless-stopped
-       ports:
-         - "80:80"
-         - "443:443"
-       volumes:
-         - ./nginx.conf:/etc/nginx/nginx.conf:ro
-         - ./certs:/etc/ssl/private:ro
-         - ./miniapp:/var/www/remnawave-miniapp:ro
-       networks:
-         - bot_network
+### 6. Пример Caddy-конфига
 
-   networks:
-     bot_network:
-       external: true
-   ```
+```yaml
+services:
+  caddy:
+    image: caddy:2-alpine
+    container_name: remnawave_caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      - bot_network
 
-2. Пример `nginx.conf`:
-   ```nginx
-   events {}
+volumes:
+  caddy_data:
+  caddy_config:
 
-   http {
-     include /etc/nginx/mime.types;
-     sendfile on;
-     tcp_nopush on;
-     tcp_nodelay on;
-     keepalive_timeout 65;
+networks:
+  bot_network:
+    external: true
+```
 
-     upstream remnawave_bot_hooks {
-       server remnawave_bot:8081;
-     }
+`Caddyfile`:
 
-     upstream remnawave_bot_yookassa {
-       server remnawave_bot:8082;
-     }
+```caddy
+bot.example.com {
+    encode gzip zstd
 
-     upstream remnawave_bot_api {
-       server remnawave_bot:8080;
-     }
+    @config path /app-config.json
+    header @config Access-Control-Allow-Origin "*"
 
-     server {
-       listen 80;
-       listen 443 ssl http2;
-       server_name hooks.example.com;
+    reverse_proxy remnawave_bot:8080 {
+        header_up Host {host}
+        header_up X-Real-IP {remote_host}
+        header_up X-Forwarded-Proto {scheme}
+        transport http {
+            read_buffer 0
+        }
+    }
+}
+```
 
-       ssl_certificate /etc/ssl/private/hooks.fullchain.pem;
-       ssl_certificate_key /etc/ssl/private/hooks.privkey.pem;
+### 6. Пример nginx-конфига
 
-       location = /webhook { proxy_pass http://remnawave_bot_hooks; }
-       location /tribute-webhook { proxy_pass http://remnawave_bot_hooks; }
-       location /cryptobot-webhook { proxy_pass http://remnawave_bot_hooks; }
-       location /mulenpay-webhook { proxy_pass http://remnawave_bot_hooks; }
-       location /wata-webhook { proxy_pass http://remnawave_bot_hooks; }
-       location /pal24-webhook { proxy_pass http://remnawave_bot:8084; }
-       location /yookassa-webhook { proxy_pass http://remnawave_bot_yookassa; }
+```yaml
+services:
+  nginx:
+    image: nginx:1.25-alpine
+    container_name: remnawave_nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    networks:
+      - bot_network
 
-       proxy_set_header Host $host;
-       proxy_set_header X-Real-IP $remote_addr;
-     }
+networks:
+  bot_network:
+    external: true
+```
 
-     server {
-       listen 80;
-       listen 443 ssl http2;
-       server_name miniapp.example.com;
+`nginx.conf`:
 
-       ssl_certificate /etc/ssl/private/miniapp.fullchain.pem;
-       ssl_certificate_key /etc/ssl/private/miniapp.privkey.pem;
+```nginx
+events {}
 
-       root /var/www/remnawave-miniapp;
-       index index.html;
+http {
+  include /etc/nginx/mime.types;
+  sendfile on;
 
-       location /miniapp/ {
-         proxy_pass http://remnawave_bot_api/miniapp/;
-       }
-     }
-   }
-   ```
+  upstream remnawave_bot_unified {
+    server remnawave_bot:8080;
+  }
+
+  server {
+    listen 80;
+    listen 443 ssl http2;
+    server_name bot.example.com;
+
+    ssl_certificate /etc/ssl/private/bot.fullchain.pem;
+    ssl_certificate_key /etc/ssl/private/bot.privkey.pem;
+
+    client_max_body_size 32m;
+
+    location / {
+      proxy_pass http://remnawave_bot_unified;
+      proxy_set_header Host $host;
+      proxy_set_header X-Real-IP $remote_addr;
+      proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+      proxy_set_header X-Forwarded-Proto $scheme;
+      proxy_read_timeout 120s;
+      proxy_send_timeout 120s;
+      proxy_buffering off;
+      proxy_request_buffering off;
+    }
+  }
+}
+```
+
+Рекомендации:
+
+- Откройте входящие 80/443 в фаерволе.
+- Если используете Cloudflare/анти-DDoS, разрешите методы `POST` и заголовок `X-Telegram-Bot-Api-Secret-Token`.
+- После развёртывания перезапустите бот (`make reload`), чтобы он заново зарегистрировал webhook.
 
 ---
 
@@ -349,9 +342,21 @@ networks:
 
 Подробное пошаговое руководство по запуску административного веб-API и подключению внешней панели находится в [docs/web-admin-integration.md](docs/web-admin-integration.md).
 
+### 🤖 Режимы запуска бота
+
+- `BOT_RUN_MODE` — определяет способ приёма обновлений: `polling`, `webhook` или `both`, чтобы одновременно использовать оба режима.
+- `WEBHOOK_SECRET_TOKEN` — секрет для проверки заголовка `X-Telegram-Bot-Api-Secret-Token` при работе через вебхуки.
+- `WEBHOOK_DROP_PENDING_UPDATES` — управляет очисткой очереди сообщений при установке вебхука.
+- `WEBHOOK_MAX_QUEUE_SIZE` — ограничивает длину очереди входящих обновлений, чтобы защищаться от перегрузок.
+- `WEBHOOK_WORKERS` — количество фоновых воркеров, параллельно обрабатывающих обновления Telegram.
+- `WEBHOOK_ENQUEUE_TIMEOUT` — сколько секунд ждать свободного места в очереди перед отказом (0 — немедленный отказ).
+- `WEBHOOK_WORKER_SHUTDOWN_TIMEOUT` — таймаут корректного завершения воркеров при остановке приложения.
+
 ### 📱 Telegram Mini App ЛК
 
 Инструкция по развёртыванию мини-приложения, публикации статической страницы и настройке reverse-proxy доступна в [docs/miniapp-setup.md](docs/miniapp-setup.md).
+
+Путь к статическим файлам мини-приложения можно переопределить через переменную `MINIAPP_STATIC_PATH`.
 
 ### 📊 Статус серверов в главном меню
 
@@ -947,9 +952,9 @@ ADMIN_NOTIFICATIONS_TICKET_TOPIC_ID=126      # ID топика для тикет
 ## 🐛 Устранение неполадок
 
 ### 🏥 Health Checks
-- **Основной**: `http://localhost:8081/health`
-- **YooKassa**: `http://localhost:8082/health`
-- **Pal24**: `http://localhost:8084/health`
+- **Unified сервер**: `http://localhost:8080/health`
+- **Telegram webhook**: `http://localhost:8080/health/telegram-webhook`
+- **Платёжные webhooks**: `http://localhost:8080/health/payment-webhooks`
 
 ### 🔧 Полезные команды
 ```bash
@@ -984,7 +989,7 @@ docker system prune
 |----------|-------------|---------|
 | **Бот не отвечает** | `docker logs remnawave_bot` | Проверь `BOT_TOKEN` и интернет |
 | **Ошибки БД** | `docker compose ps postgres` | Проверь статус PostgreSQL |
-| **Webhook не работает** | Проверь порты 8081/8082/8084 | Настрой прокси-сервер |
+| **Webhook не работает** | `curl http://localhost:8080/health/telegram-webhook` | Проверь `WEBHOOK_URL`, прокси и секрет |
 | **API недоступен** | Проверь логи бота | Проверь `REMNAWAVE_API_URL` |
 | **Корзина не сохраняется** | `docker compose ps redis` | Проверь статус Redis |
 | **Платежи не проходят** | Проверь webhook'и | Настрой URL в платежных системах |
@@ -1272,7 +1277,7 @@ docker compose ps
 docker compose logs -f bot
 
 # Проверка здоровья
-curl http://localhost:8081/health
+curl http://localhost:8080/health
 
 # Использование ресурсов
 docker stats

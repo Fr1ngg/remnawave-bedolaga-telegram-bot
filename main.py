@@ -22,11 +22,8 @@ from app.services.payment_verification_service import (
 )
 from app.database.models import PaymentMethod
 from app.services.version_service import version_service
-from app.external.webhook_server import WebhookServer
-from app.external.heleket_webhook import start_heleket_webhook_server
-from app.external.yookassa_webhook import start_yookassa_webhook_server
-from app.external.pal24_webhook import start_pal24_webhook_server, Pal24WebhookServer
-from app.external.wata_webhook import start_wata_webhook_server
+from app.webapi.server import WebAPIServer
+from app.webserver.unified_app import create_unified_app
 from app.database.universal_migration import run_universal_migration
 from app.services.backup_service import backup_service
 from app.services.reporting_service import reporting_service
@@ -97,17 +94,16 @@ async def main():
     signal.signal(signal.SIGINT, killer.exit_gracefully)
     signal.signal(signal.SIGTERM, killer.exit_gracefully)
     
-    webhook_server = None
-    yookassa_server_task = None
-    wata_server_task = None
-    heleket_server_task = None
-    pal24_server: Pal24WebhookServer | None = None
+    web_app = None
     monitoring_task = None
     maintenance_task = None
     version_check_task = None
     polling_task = None
     web_api_server = None
-    
+    telegram_webhook_enabled = False
+    polling_enabled = True
+    payment_webhooks_enabled = False
+
     summary_logged = False
 
     try:
@@ -320,92 +316,86 @@ async def main():
                 stage.warning(f"Ошибка подготовки внешней админки: {error}")
                 logger.error("❌ Ошибка подготовки внешней админки: %s", error)
 
-        webhook_needed = (
-            settings.TRIBUTE_ENABLED
-            or settings.is_cryptobot_enabled()
-            or settings.is_mulenpay_enabled()
+        bot_run_mode = settings.get_bot_run_mode()
+        polling_enabled = bot_run_mode in {"polling", "both"}
+        telegram_webhook_enabled = bot_run_mode in {"webhook", "both"}
+
+        payment_webhooks_enabled = any(
+            [
+                settings.TRIBUTE_ENABLED,
+                settings.is_cryptobot_enabled(),
+                settings.is_mulenpay_enabled(),
+                settings.is_yookassa_enabled(),
+                settings.is_pal24_enabled(),
+                settings.is_wata_enabled(),
+                settings.is_heleket_enabled(),
+            ]
         )
 
         async with timeline.stage(
-            "Webhook сервисы",
+            "Единый веб-сервер",
             "🌐",
-            success_message="Webhook сервера настроены",
+            success_message="Веб-сервер запущен",
         ) as stage:
-            if webhook_needed:
-                enabled_services = []
-                if settings.TRIBUTE_ENABLED:
-                    enabled_services.append("Tribute")
-                if settings.is_mulenpay_enabled():
-                    enabled_services.append(settings.get_mulenpay_display_name())
-                if settings.is_cryptobot_enabled():
-                    enabled_services.append("CryptoBot")
+            should_start_web_app = (
+                settings.is_web_api_enabled()
+                or telegram_webhook_enabled
+                or payment_webhooks_enabled
+                or settings.get_miniapp_static_path().exists()
+            )
 
-                webhook_server = WebhookServer(bot)
-                await webhook_server.start()
-                stage.log(f"Активированы: {', '.join(enabled_services)}")
-                stage.success("Webhook сервера запущены")
-            else:
-                stage.skip(
-                    f"Tribute, {settings.get_mulenpay_display_name()} и CryptoBot отключены"
+            if should_start_web_app:
+                web_app = create_unified_app(
+                    bot,
+                    dp,
+                    payment_service,
+                    enable_telegram_webhook=telegram_webhook_enabled,
                 )
 
-        async with timeline.stage(
-            "YooKassa webhook",
-            "💳",
-            success_message="YooKassa webhook запущен",
-        ) as stage:
-            if settings.is_yookassa_enabled():
-                yookassa_server_task = asyncio.create_task(
-                    start_yookassa_webhook_server(payment_service)
-                )
-                stage.log(
-                    f"Endpoint: {settings.WEBHOOK_URL}:{settings.YOOKASSA_WEBHOOK_PORT}{settings.YOOKASSA_WEBHOOK_PATH}"
-                )
-            else:
-                stage.skip("YooKassa отключена настройками")
+                web_api_server = WebAPIServer(app=web_app)
+                await web_api_server.start()
 
-        async with timeline.stage(
-            "PayPalych webhook",
-            "💳",
-            success_message="PayPalych webhook запущен",
-        ) as stage:
-            if settings.is_pal24_enabled():
-                pal24_server = await start_pal24_webhook_server(payment_service)
-                stage.log(
-                    f"Endpoint: {settings.WEBHOOK_URL}:{settings.PAL24_WEBHOOK_PORT}{settings.PAL24_WEBHOOK_PATH}"
-                )
+                base_url = settings.WEBHOOK_URL or f"http://{settings.WEB_API_HOST}:{settings.WEB_API_PORT}"
+                stage.log(f"Базовый URL: {base_url}")
+
+                features: list[str] = []
+                if settings.is_web_api_enabled():
+                    features.append("админка")
+                if payment_webhooks_enabled:
+                    features.append("платежные webhook-и")
+                if telegram_webhook_enabled:
+                    features.append("Telegram webhook")
+                if settings.get_miniapp_static_path().exists():
+                    features.append("статические файлы миниаппа")
+
+                if features:
+                    stage.log("Активные сервисы: " + ", ".join(features))
+                stage.success("HTTP-сервисы активны")
             else:
-                stage.skip("PayPalych отключен настройками")
+                stage.skip("HTTP-сервисы отключены настройками")
 
         async with timeline.stage(
-            "WATA webhook",
-            "💳",
-            success_message="WATA webhook запущен",
+            "Telegram webhook",
+            "🤖",
+            success_message="Telegram webhook настроен",
         ) as stage:
-            if settings.is_wata_enabled():
-                wata_server_task = asyncio.create_task(
-                    start_wata_webhook_server(payment_service)
-                )
-                stage.log(
-                    f"Endpoint: {settings.WEBHOOK_URL}:{settings.WATA_WEBHOOK_PORT}{settings.WATA_WEBHOOK_PATH}"
-                )
+            if telegram_webhook_enabled:
+                webhook_url = settings.get_telegram_webhook_url()
+                if not webhook_url:
+                    stage.warning("WEBHOOK_URL не задан, пропускаем настройку webhook")
+                else:
+                    allowed_updates = dp.resolve_used_update_types()
+                    await bot.set_webhook(
+                        url=webhook_url,
+                        secret_token=settings.WEBHOOK_SECRET_TOKEN,
+                        drop_pending_updates=settings.WEBHOOK_DROP_PENDING_UPDATES,
+                        allowed_updates=allowed_updates,
+                    )
+                    stage.log(f"Webhook установлен: {webhook_url}")
+                    stage.log(f"Allowed updates: {', '.join(sorted(allowed_updates)) if allowed_updates else 'all'}")
+                    stage.success("Telegram webhook активен")
             else:
-                stage.skip("WATA отключен настройками")
-
-        async with timeline.stage(
-            "Heleket webhook",
-            "🪙",
-            success_message="Heleket webhook запущен",
-        ) as stage:
-            if settings.is_heleket_enabled():
-                heleket_server_task = asyncio.create_task(
-                    start_heleket_webhook_server(payment_service)
-                )
-                stage.log(
-                    f"Endpoint: {settings.WEBHOOK_URL}:{settings.HELEKET_WEBHOOK_PORT}{settings.HELEKET_WEBHOOK_PATH}"
-                )
-            else:
-                stage.skip("Heleket отключен настройками")
+                stage.skip("Режим webhook отключен")
 
         async with timeline.stage(
             "Служба мониторинга",
@@ -448,60 +438,42 @@ async def main():
                 stage.skip("Проверка версий отключена настройками")
 
         async with timeline.stage(
-            "Административное веб-API",
-            "🌐",
-            success_message="Веб-API запущено",
-        ) as stage:
-            if settings.is_web_api_enabled():
-                try:
-                    from app.webapi import WebAPIServer
-
-                    web_api_server = WebAPIServer()
-                    await web_api_server.start()
-                    stage.success(
-                        f"Доступно на http://{settings.WEB_API_HOST}:{settings.WEB_API_PORT}"
-                    )
-                except Exception as error:
-                    stage.warning(f"Не удалось запустить веб-API: {error}")
-                    logger.error(f"❌ Не удалось запустить веб-API: {error}")
-            else:
-                stage.skip("Веб-API отключено")
-
-        async with timeline.stage(
             "Запуск polling",
             "🤖",
             success_message="Aiogram polling запущен",
         ) as stage:
-            polling_task = asyncio.create_task(dp.start_polling(bot, skip_updates=True))
-            stage.log("skip_updates=True")
+            if polling_enabled:
+                polling_task = asyncio.create_task(dp.start_polling(bot, skip_updates=True))
+                stage.log("skip_updates=True")
+            else:
+                polling_task = None
+                stage.skip("Polling отключен режимом работы")
 
-        webhook_lines = []
-        if webhook_needed:
-            if settings.TRIBUTE_ENABLED:
-                webhook_lines.append(
-                    f"Tribute: {settings.WEBHOOK_URL}:{settings.TRIBUTE_WEBHOOK_PORT}{settings.TRIBUTE_WEBHOOK_PATH}"
-                )
-            if settings.is_mulenpay_enabled():
-                webhook_lines.append(
-                    f"{settings.get_mulenpay_display_name()}: "
-                    f"{settings.WEBHOOK_URL}:{settings.TRIBUTE_WEBHOOK_PORT}{settings.MULENPAY_WEBHOOK_PATH}"
-                )
-            if settings.is_cryptobot_enabled():
-                webhook_lines.append(
-                    f"CryptoBot: {settings.WEBHOOK_URL}:{settings.TRIBUTE_WEBHOOK_PORT}{settings.CRYPTOBOT_WEBHOOK_PATH}"
-                )
+        webhook_lines: list[str] = []
+        base_url = settings.WEBHOOK_URL or f"http://{settings.WEB_API_HOST}:{settings.WEB_API_PORT}"
+
+        def _fmt(path: str) -> str:
+            return f"{base_url}{path if path.startswith('/') else '/' + path}"
+
+        telegram_webhook_url = settings.get_telegram_webhook_url()
+        if telegram_webhook_enabled and telegram_webhook_url:
+            webhook_lines.append(f"Telegram: {telegram_webhook_url}")
+        if settings.TRIBUTE_ENABLED:
+            webhook_lines.append(f"Tribute: {_fmt(settings.TRIBUTE_WEBHOOK_PATH)}")
+        if settings.is_mulenpay_enabled():
+            webhook_lines.append(
+                f"{settings.get_mulenpay_display_name()}: {_fmt(settings.MULENPAY_WEBHOOK_PATH)}"
+            )
+        if settings.is_cryptobot_enabled():
+            webhook_lines.append(f"CryptoBot: {_fmt(settings.CRYPTOBOT_WEBHOOK_PATH)}")
         if settings.is_yookassa_enabled():
-            webhook_lines.append(
-                f"YooKassa: {settings.WEBHOOK_URL}:{settings.YOOKASSA_WEBHOOK_PORT}{settings.YOOKASSA_WEBHOOK_PATH}"
-            )
+            webhook_lines.append(f"YooKassa: {_fmt(settings.YOOKASSA_WEBHOOK_PATH)}")
         if settings.is_pal24_enabled():
-            webhook_lines.append(
-                f"PayPalych: {settings.WEBHOOK_URL}:{settings.PAL24_WEBHOOK_PORT}{settings.PAL24_WEBHOOK_PATH}"
-            )
+            webhook_lines.append(f"PayPalych: {_fmt(settings.PAL24_WEBHOOK_PATH)}")
         if settings.is_wata_enabled():
-            webhook_lines.append(
-                f"WATA: {settings.WEBHOOK_URL}:{settings.WATA_WEBHOOK_PORT}{settings.WATA_WEBHOOK_PATH}"
-            )
+            webhook_lines.append(f"WATA: {_fmt(settings.WATA_WEBHOOK_PATH)}")
+        if settings.is_heleket_enabled():
+            webhook_lines.append(f"Heleket: {_fmt(settings.HELEKET_WEBHOOK_PATH)}")
 
         timeline.log_section(
             "Активные webhook endpoints",
@@ -536,39 +508,6 @@ async def main():
             while not killer.exit:
                 await asyncio.sleep(1)
                 
-                if yookassa_server_task and yookassa_server_task.done():
-                    exception = yookassa_server_task.exception()
-                    if exception:
-                        logger.error(f"YooKassa webhook сервер завершился с ошибкой: {exception}")
-                        logger.info("🔄 Перезапуск YooKassa webhook сервера...")
-                        yookassa_server_task = asyncio.create_task(
-                            start_yookassa_webhook_server(payment_service)
-                        )
-
-                if wata_server_task and wata_server_task.done():
-                    exception = wata_server_task.exception()
-                    if exception:
-                        logger.error(f"WATA webhook сервер завершился с ошибкой: {exception}")
-                        logger.info("🔄 Перезапуск WATA webhook сервера...")
-                        if settings.is_wata_enabled():
-                            wata_server_task = asyncio.create_task(
-                                start_wata_webhook_server(payment_service)
-                            )
-                        else:
-                            wata_server_task = None
-
-                if heleket_server_task and heleket_server_task.done():
-                    exception = heleket_server_task.exception()
-                    if exception:
-                        logger.error(f"Heleket webhook сервер завершился с ошибкой: {exception}")
-                        logger.info("🔄 Перезапуск Heleket webhook сервера...")
-                        if settings.is_heleket_enabled():
-                            heleket_server_task = asyncio.create_task(
-                                start_heleket_webhook_server(payment_service)
-                            )
-                        else:
-                            heleket_server_task = None
-
                 if monitoring_task.done():
                     exception = monitoring_task.exception()
                     if exception:
@@ -596,7 +535,7 @@ async def main():
                     await auto_payment_verification_service.start()
                     auto_verification_active = auto_payment_verification_service.is_running()
 
-                if polling_task.done():
+                if polling_task and polling_task.done():
                     exception = polling_task.exception()
                     if exception:
                         logger.error(f"Polling завершился с ошибкой: {exception}")
@@ -623,30 +562,6 @@ async def main():
                 f"Ошибка остановки сервиса автопроверки пополнений: {error}"
             )
 
-        if yookassa_server_task and not yookassa_server_task.done():
-            logger.info("ℹ️ Остановка YooKassa webhook сервера...")
-            yookassa_server_task.cancel()
-            try:
-                await yookassa_server_task
-            except asyncio.CancelledError:
-                pass
-
-        if wata_server_task and not wata_server_task.done():
-            logger.info("ℹ️ Остановка WATA webhook сервера...")
-            wata_server_task.cancel()
-            try:
-                await wata_server_task
-            except asyncio.CancelledError:
-                pass
-
-        if heleket_server_task and not heleket_server_task.done():
-            logger.info("ℹ️ Остановка Heleket webhook сервера...")
-            heleket_server_task.cancel()
-            try:
-                await heleket_server_task
-            except asyncio.CancelledError:
-                pass
-
         if monitoring_task and not monitoring_task.done():
             logger.info("ℹ️ Остановка службы мониторинга...")
             monitoring_service.stop_monitoring()
@@ -656,10 +571,6 @@ async def main():
             except asyncio.CancelledError:
                 pass
 
-        if pal24_server:
-            logger.info("ℹ️ Остановка PayPalych webhook сервера...")
-            await asyncio.get_running_loop().run_in_executor(None, pal24_server.stop)
-        
         if maintenance_task and not maintenance_task.done():
             logger.info("ℹ️ Остановка службы техработ...")
             await maintenance_service.stop_monitoring()
@@ -703,9 +614,13 @@ async def main():
             except asyncio.CancelledError:
                 pass
         
-        if webhook_server:
-            logger.info("ℹ️ Остановка webhook сервера...")
-            await webhook_server.stop()
+        if telegram_webhook_enabled and 'bot' in locals():
+            logger.info("ℹ️ Снятие Telegram webhook...")
+            try:
+                await bot.delete_webhook(drop_pending_updates=False)
+                logger.info("✅ Telegram webhook удалён")
+            except Exception as error:
+                logger.error(f"Ошибка удаления Telegram webhook: {error}")
 
         if web_api_server:
             try:

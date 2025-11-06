@@ -17,8 +17,8 @@ logger = logging.getLogger(__name__)
 class WebAPIServer:
     """Асинхронный uvicorn-сервер для административного API."""
 
-    def __init__(self) -> None:
-        self._app = create_web_api_app()
+    def __init__(self, app: Optional[object] = None) -> None:
+        self._app = app or create_web_api_app()
 
         workers = max(1, int(settings.WEB_API_WORKERS or 1))
         if workers > 1:
@@ -46,6 +46,7 @@ class WebAPIServer:
                 await self._server.serve()
             except Exception as error:  # pragma: no cover - логируем ошибки сервера
                 logger.exception("❌ Ошибка работы веб-API: %s", error)
+                raise
 
         logger.info(
             "🌐 Запуск административного API на %s:%s",
