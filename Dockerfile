@@ -45,7 +45,7 @@ ENV PYTHONPATH=/app \
     BUILD_DATE=${BUILD_DATE} \
     VCS_REF=${VCS_REF}
 
-EXPOSE 8080 8081 8082 
+EXPOSE 8080
 
 LABEL org.opencontainers.image.title="Bedolaga RemnaWave Bot" \
       org.opencontainers.image.description="Telegram bot for RemnaWave VPN service" \
@@ -57,6 +57,6 @@ LABEL org.opencontainers.image.title="Bedolaga RemnaWave Bot" \
       org.opencontainers.image.vendor="fr1ngg"
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
-    CMD wget --no-verbose --tries=1 --spider http://localhost:8081/health || exit 1
+    CMD wget --no-verbose --tries=1 --spider http://localhost:8080/health || exit 1
 
 CMD ["python", "main.py"]

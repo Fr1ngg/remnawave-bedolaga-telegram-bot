@@ -291,6 +291,7 @@ class Settings(BaseSettings):
     MAIN_MENU_MODE: str = "default"
     CONNECT_BUTTON_MODE: str = "guide"
     MINIAPP_CUSTOM_URL: str = ""
+    MINIAPP_STATIC_PATH: str = "miniapp"
     MINIAPP_PURCHASE_URL: str = ""
     MINIAPP_SERVICE_NAME_EN: str = "Bedolaga VPN"
     MINIAPP_SERVICE_NAME_RU: str = "Bedolaga VPN"
@@ -319,6 +320,13 @@ class Settings(BaseSettings):
     DEBUG: bool = False
     WEBHOOK_URL: Optional[str] = None
     WEBHOOK_PATH: str = "/webhook"
+    WEBHOOK_SECRET_TOKEN: Optional[str] = None
+    WEBHOOK_DROP_PENDING_UPDATES: bool = True
+    WEBHOOK_MAX_QUEUE_SIZE: int = 1024
+    WEBHOOK_WORKERS: int = 4
+    WEBHOOK_ENQUEUE_TIMEOUT: float = 0.1
+    WEBHOOK_WORKER_SHUTDOWN_TIMEOUT: float = 30.0
+    BOT_RUN_MODE: str = "polling"
 
     WEB_API_ENABLED: bool = False
     WEB_API_HOST: str = "0.0.0.0"
@@ -1423,7 +1431,62 @@ class Settings(BaseSettings):
     
     def is_support_contact_enabled(self) -> bool:
         return self.get_support_system_mode() in {"contact", "both"}
-    
+
+    def get_bot_run_mode(self) -> str:
+        mode = (self.BOT_RUN_MODE or "polling").strip().lower()
+        if mode not in {"polling", "webhook", "both"}:
+            return "polling"
+        return mode
+
+    def get_telegram_webhook_path(self) -> str:
+        raw_path = (self.WEBHOOK_PATH or "/webhook").strip()
+        if not raw_path:
+            raw_path = "/webhook"
+        if not raw_path.startswith("/"):
+            raw_path = "/" + raw_path
+        return raw_path
+
+    def get_webhook_queue_maxsize(self) -> int:
+        try:
+            size = int(self.WEBHOOK_MAX_QUEUE_SIZE)
+        except (TypeError, ValueError):
+            size = 1024
+        return max(1, size)
+
+    def get_webhook_worker_count(self) -> int:
+        try:
+            workers = int(self.WEBHOOK_WORKERS)
+        except (TypeError, ValueError):
+            workers = 1
+        return max(1, workers)
+
+    def get_webhook_enqueue_timeout(self) -> float:
+        try:
+            timeout = float(self.WEBHOOK_ENQUEUE_TIMEOUT)
+        except (TypeError, ValueError):
+            timeout = 0.0
+        return max(0.0, timeout)
+
+    def get_webhook_shutdown_timeout(self) -> float:
+        try:
+            timeout = float(self.WEBHOOK_WORKER_SHUTDOWN_TIMEOUT)
+        except (TypeError, ValueError):
+            timeout = 30.0
+        return max(1.0, timeout)
+
+    def get_telegram_webhook_url(self) -> Optional[str]:
+        base_url = (self.WEBHOOK_URL or "").strip()
+        if not base_url:
+            return None
+        path = self.get_telegram_webhook_path()
+        return f"{base_url.rstrip('/')}{path}"
+
+    def get_miniapp_static_path(self) -> Path:
+        raw_path = (self.MINIAPP_STATIC_PATH or "miniapp").strip()
+        if not raw_path:
+            raw_path = "miniapp"
+        return Path(raw_path)
+
     model_config = {
         "env_file": ".env",
         "env_file_encoding": "utf-8",
