@@ -38,7 +38,12 @@ def _get_route(router, path: str, method: str = "POST"):
     raise AssertionError(f"Route {path} with method {method} not found")
 
 
-def _build_request(path: str, body: bytes, headers: dict[str, str]) -> Request:
+def _build_request(
+    path: str,
+    body: bytes,
+    headers: dict[str, str],
+    client_ip: str | None = "185.71.76.1",
+) -> Request:
     scope = {
         "type": "http",
         "asgi": {"version": "3.0"},
@@ -46,6 +51,9 @@ def _build_request(path: str, body: bytes, headers: dict[str, str]) -> Request:
         "path": path,
         "headers": [(k.lower().encode("latin-1"), v.encode("latin-1")) for k, v in headers.items()],
     }
+
+    if client_ip is not None:
+        scope["client"] = (client_ip, 12345)
 
     async def receive() -> dict:
         return {"type": "http.request", "body": body, "more_body": False}
@@ -92,38 +100,12 @@ async def test_tribute_webhook_success(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.mark.anyio
-async def test_yookassa_invalid_signature(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_yookassa_unknown_ip(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(settings, "YOOKASSA_ENABLED", True, raising=False)
-    monkeypatch.setattr(settings, "YOOKASSA_WEBHOOK_SECRET", "secret", raising=False)
 
-    class StubHandler:
-        @staticmethod
-        def verify_webhook_signature(body: str, signature: str, secret: str) -> bool:  # noqa: D401
-            return False
+    service = SimpleNamespace(process_yookassa_webhook=AsyncMock())
 
-    monkeypatch.setattr("app.webserver.payments.YooKassaWebhookHandler", StubHandler)
-
-    router = create_payment_router(DummyBot(), SimpleNamespace())
-    assert router is not None
-
-    route = _get_route(router, settings.YOOKASSA_WEBHOOK_PATH)
-    request = _build_request(
-        settings.YOOKASSA_WEBHOOK_PATH,
-        body=json.dumps({"event": "payment.succeeded"}).encode("utf-8"),
-        headers={"Signature": "bad"},
-    )
-
-    response = await route.endpoint(request)
-
-    assert response.status_code == 401
-
-
-@pytest.mark.anyio
-async def test_yookassa_missing_signature(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(settings, "YOOKASSA_ENABLED", True, raising=False)
-    monkeypatch.setattr(settings, "YOOKASSA_WEBHOOK_SECRET", "secret", raising=False)
-
-    router = create_payment_router(DummyBot(), SimpleNamespace())
+    router = create_payment_router(DummyBot(), service)
     assert router is not None
 
     route = _get_route(router, settings.YOOKASSA_WEBHOOK_PATH)
@@ -131,13 +113,129 @@ async def test_yookassa_missing_signature(monkeypatch: pytest.MonkeyPatch) -> No
         settings.YOOKASSA_WEBHOOK_PATH,
         body=json.dumps({"event": "payment.succeeded"}).encode("utf-8"),
         headers={},
+        client_ip=None,
     )
 
     response = await route.endpoint(request)
 
-    assert response.status_code == 401
+    assert response.status_code == 403
     payload = json.loads(response.body.decode("utf-8"))
-    assert payload["reason"] == "missing_signature"
+    assert payload["reason"] == "unknown_ip"
+    service.process_yookassa_webhook.assert_not_awaited()
+
+
+@pytest.mark.anyio
+async def test_yookassa_forbidden_ip(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(settings, "YOOKASSA_ENABLED", True, raising=False)
+
+    service = SimpleNamespace(process_yookassa_webhook=AsyncMock())
+
+    router = create_payment_router(DummyBot(), service)
+    assert router is not None
+
+    route = _get_route(router, settings.YOOKASSA_WEBHOOK_PATH)
+    request = _build_request(
+        settings.YOOKASSA_WEBHOOK_PATH,
+        body=json.dumps({"event": "payment.succeeded"}).encode("utf-8"),
+        headers={},
+        client_ip="8.8.8.8",
+    )
+
+    response = await route.endpoint(request)
+
+    assert response.status_code == 403
+    payload = json.loads(response.body.decode("utf-8"))
+    assert payload["reason"] == "forbidden_ip"
+    assert payload["ip"] == "8.8.8.8"
+    service.process_yookassa_webhook.assert_not_awaited()
+
+
+@pytest.mark.anyio
+async def test_yookassa_forbidden_ip_ignores_spoofed_header(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(settings, "YOOKASSA_ENABLED", True, raising=False)
+
+    service = SimpleNamespace(process_yookassa_webhook=AsyncMock())
+
+    router = create_payment_router(DummyBot(), service)
+    assert router is not None
+
+    route = _get_route(router, settings.YOOKASSA_WEBHOOK_PATH)
+    request = _build_request(
+        settings.YOOKASSA_WEBHOOK_PATH,
+        body=json.dumps({"event": "payment.succeeded"}).encode("utf-8"),
+        headers={"X-Forwarded-For": "185.71.76.10"},
+        client_ip="8.8.8.8",
+    )
+
+    response = await route.endpoint(request)
+
+    assert response.status_code == 403
+    payload = json.loads(response.body.decode("utf-8"))
+    assert payload["reason"] == "forbidden_ip"
+    assert payload["ip"] == "8.8.8.8"
+    service.process_yookassa_webhook.assert_not_awaited()
+
+
+@pytest.mark.anyio
+async def test_yookassa_allowed_ip(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(settings, "YOOKASSA_ENABLED", True, raising=False)
+
+    async def fake_get_db():
+        yield SimpleNamespace()
+
+    monkeypatch.setattr("app.webserver.payments.get_db", fake_get_db)
+
+    process_mock = AsyncMock(return_value=True)
+    service = SimpleNamespace(process_yookassa_webhook=process_mock)
+
+    router = create_payment_router(DummyBot(), service)
+    assert router is not None
+
+    route = _get_route(router, settings.YOOKASSA_WEBHOOK_PATH)
+    request = _build_request(
+        settings.YOOKASSA_WEBHOOK_PATH,
+        body=json.dumps({"event": "payment.succeeded"}).encode("utf-8"),
+        headers={},
+        client_ip="185.71.76.10",
+    )
+
+    response = await route.endpoint(request)
+
+    assert response.status_code == 200
+    payload = json.loads(response.body.decode("utf-8"))
+    assert payload["status"] == "ok"
+    process_mock.assert_awaited_once()
+
+
+@pytest.mark.anyio
+async def test_yookassa_allowed_via_forwarded_header_when_proxy(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(settings, "YOOKASSA_ENABLED", True, raising=False)
+
+    async def fake_get_db():
+        yield SimpleNamespace()
+
+    monkeypatch.setattr("app.webserver.payments.get_db", fake_get_db)
+
+    process_mock = AsyncMock(return_value=True)
+    service = SimpleNamespace(process_yookassa_webhook=process_mock)
+
+    router = create_payment_router(DummyBot(), service)
+    assert router is not None
+
+    route = _get_route(router, settings.YOOKASSA_WEBHOOK_PATH)
+    request = _build_request(
+        settings.YOOKASSA_WEBHOOK_PATH,
+        body=json.dumps({"event": "payment.succeeded"}).encode("utf-8"),
+        headers={"X-Forwarded-For": "185.71.76.10"},
+        client_ip="10.0.0.5",
+    )
+
+    response = await route.endpoint(request)
+
+    assert response.status_code == 200
+    payload = json.loads(response.body.decode("utf-8"))
+    assert payload["status"] == "ok"
+    process_mock.assert_awaited_once()
 
 
 @pytest.mark.anyio
