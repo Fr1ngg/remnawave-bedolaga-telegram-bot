@@ -4,15 +4,82 @@ import json
 import hashlib
 import hmac
 import base64
-from typing import Optional, Dict, Any
+from ipaddress import (
+    IPv4Address,
+    IPv4Network,
+    IPv6Address,
+    IPv6Network,
+    ip_address,
+    ip_network,
+)
+from typing import Iterable, Optional, Dict, Any, List, Union
 from aiohttp import web
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.services.payment_service import PaymentService
 from app.database.database import get_db
 
 logger = logging.getLogger(__name__)
+
+
+IPAddress = Union[IPv4Address, IPv6Address]
+IPNetwork = Union[IPv4Network, IPv6Network]
+
+YOOKASSA_ALLOWED_IP_NETWORKS: tuple[IPNetwork, ...] = (
+    ip_network("185.71.76.0/27"),
+    ip_network("185.71.77.0/27"),
+    ip_network("77.75.153.0/25"),
+    ip_network("77.75.154.128/25"),
+    ip_network("77.75.156.11/32"),
+    ip_network("77.75.156.35/32"),
+    ip_network("2a02:5180::/32"),
+)
+
+
+def collect_yookassa_ip_candidates(*values: Optional[str]) -> List[str]:
+    candidates: List[str] = []
+    for value in values:
+        if not value:
+            continue
+        for part in value.split(","):
+            normalized = part.strip()
+            if normalized:
+                candidates.append(normalized)
+    return candidates
+
+
+def _parse_candidate_ip(candidate: str) -> Optional[IPAddress]:
+    value = candidate.strip()
+    if not value:
+        return None
+
+    if value.startswith("[") and "]" in value:
+        value = value[1:value.index("]")]
+
+    if "%" in value:
+        value = value.split("%", 1)[0]
+
+    if value.count(":") == 1 and "." in value:
+        host, _, port = value.rpartition(":")
+        if port.isdigit():
+            value = host
+
+    try:
+        return ip_address(value)
+    except ValueError:
+        return None
+
+
+def resolve_yookassa_ip(candidates: Iterable[str]) -> Optional[IPAddress]:
+    for candidate in candidates:
+        ip_object = _parse_candidate_ip(candidate)
+        if ip_object is not None:
+            return ip_object
+    return None
+
+
+def is_yookassa_ip_allowed(ip_object: IPAddress) -> bool:
+    return any(ip_object in network for network in YOOKASSA_ALLOWED_IP_NETWORKS)
 
 
 class YooKassaWebhookHandler:
@@ -87,38 +154,43 @@ class YooKassaWebhookHandler:
         self.payment_service = payment_service
     
     async def handle_webhook(self, request: web.Request) -> web.Response:
-        
+
         try:
             logger.info(f"📥 Получен YooKassa webhook: {request.method} {request.path}")
             logger.info(f"📋 Headers: {dict(request.headers)}")
-            
+
+            ip_candidates = collect_yookassa_ip_candidates(
+                request.headers.get("X-Forwarded-For"),
+                request.headers.get("X-Real-IP"),
+                request.remote,
+            )
+            client_ip = resolve_yookassa_ip(ip_candidates)
+
+            if client_ip is None:
+                logger.warning(
+                    "🚫 Не удалось определить IP-адрес отправителя YooKassa webhook. Кандидаты: %s",
+                    ip_candidates,
+                )
+                return web.Response(status=403, text="Forbidden")
+
+            if not is_yookassa_ip_allowed(client_ip):
+                logger.warning(
+                    "🚫 YooKassa webhook отклонён: IP %s не входит в доверенные диапазоны (%s)",
+                    client_ip,
+                    ", ".join(str(network) for network in YOOKASSA_ALLOWED_IP_NETWORKS),
+                )
+                return web.Response(status=403, text="Forbidden")
+
+            logger.info("🌐 IP-адрес YooKassa подтверждён: %s", client_ip)
+
             body = await request.text()
-            
+
             if not body:
                 logger.warning("⚠️ Получен пустой webhook от YooKassa")
                 return web.Response(status=400, text="Empty body")
-            
+
             logger.info(f"📄 Body: {body}")
-            
-            signature = request.headers.get('Signature') or request.headers.get('X-YooKassa-Signature')
-            
-            if settings.YOOKASSA_WEBHOOK_SECRET and signature:
-                logger.info(f"🔐 Получена подпись: {signature}")
-                
-                if not YooKassaWebhookHandler.verify_webhook_signature(body, signature, settings.YOOKASSA_WEBHOOK_SECRET):
-                    logger.warning("❌ Подпись не совпала, но продолжаем обработку (режим отладки)")
-                else:
-                    logger.info("✅ Подпись webhook проверена успешно")
-                    
-            elif settings.YOOKASSA_WEBHOOK_SECRET and not signature:
-                logger.warning("⚠️ Webhook без подписи, но секрет настроен")
-                
-            elif signature and not settings.YOOKASSA_WEBHOOK_SECRET:
-                logger.info("ℹ️ Подпись получена, но проверка отключена (YOOKASSA_WEBHOOK_SECRET не настроен)")
-                
-            else:
-                logger.info("ℹ️ Проверка подписи отключена")
-            
+
             try:
                 webhook_data = json.loads(body)
             except json.JSONDecodeError as e:
