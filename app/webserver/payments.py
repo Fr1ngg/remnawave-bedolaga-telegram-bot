@@ -15,7 +15,7 @@ from aiogram import Bot
 from app.config import settings
 from app.database.database import get_db
 from app.external.tribute import TributeService as TributeAPI
-from app.external.yookassa_webhook import YooKassaWebhookHandler
+from app.external import yookassa_webhook as yookassa_webhook_module
 from app.external.wata_webhook import WataWebhookHandler
 from app.external.heleket_webhook import HeleketWebhookHandler
 from app.external.pal24_client import Pal24APIError
@@ -322,7 +322,6 @@ def create_payment_router(bot: Bot, payment_service: PaymentService) -> APIRoute
         routes_registered = True
 
     if settings.is_yookassa_enabled():
-        yookassa_secret = settings.YOOKASSA_WEBHOOK_SECRET or ""
 
         @router.options(settings.YOOKASSA_WEBHOOK_PATH)
         async def yookassa_options() -> Response:
@@ -347,6 +346,36 @@ def create_payment_router(bot: Bot, payment_service: PaymentService) -> APIRoute
 
         @router.post(settings.YOOKASSA_WEBHOOK_PATH)
         async def yookassa_webhook(request: Request) -> JSONResponse:
+            header_ip_candidates = yookassa_webhook_module.collect_yookassa_ip_candidates(
+                request.headers.get("X-Forwarded-For"),
+                request.headers.get("X-Real-IP"),
+            )
+            remote_ip = request.client.host if request.client else None
+            client_ip = yookassa_webhook_module.resolve_yookassa_ip(
+                header_ip_candidates,
+                remote=remote_ip,
+            )
+
+            if client_ip is None:
+                return JSONResponse(
+                    {
+                        "status": "error",
+                        "reason": "unknown_ip",
+                        "candidates": header_ip_candidates + ([remote_ip] if remote_ip else []),
+                    },
+                    status_code=status.HTTP_403_FORBIDDEN,
+                )
+
+            if not yookassa_webhook_module.is_yookassa_ip_allowed(client_ip):
+                return JSONResponse(
+                    {
+                        "status": "error",
+                        "reason": "forbidden_ip",
+                        "ip": str(client_ip),
+                    },
+                    status_code=status.HTTP_403_FORBIDDEN,
+                )
+
             body_bytes = await request.body()
             if not body_bytes:
                 return JSONResponse({"status": "error", "reason": "empty_body"}, status_code=status.HTTP_400_BAD_REQUEST)
@@ -354,18 +383,27 @@ def create_payment_router(bot: Bot, payment_service: PaymentService) -> APIRoute
             body = body_bytes.decode("utf-8")
 
             signature = request.headers.get("Signature") or request.headers.get("X-YooKassa-Signature")
-            if yookassa_secret:
+
+            if settings.YOOKASSA_WEBHOOK_SECRET:
                 if not signature:
+                    logger.warning("⚠️ YooKassa webhook без подписи при настроенном секрете")
                     return JSONResponse(
                         {"status": "error", "reason": "missing_signature"},
                         status_code=status.HTTP_401_UNAUTHORIZED,
                     )
 
-                if not YooKassaWebhookHandler.verify_webhook_signature(body, signature, yookassa_secret):
+                if not yookassa_webhook_module.YooKassaWebhookHandler.verify_webhook_signature(
+                    body,
+                    signature,
+                    settings.YOOKASSA_WEBHOOK_SECRET,
+                ):
+                    logger.warning("❌ Неверная подпись YooKassa webhook")
                     return JSONResponse(
                         {"status": "error", "reason": "invalid_signature"},
                         status_code=status.HTTP_401_UNAUTHORIZED,
                     )
+            elif signature:
+                logger.info("ℹ️ Получена подпись YooKassa, но проверка отключена (YOOKASSA_WEBHOOK_SECRET не настроен)")
 
             try:
                 webhook_data = json.loads(body)
