@@ -85,6 +85,8 @@ class Settings(BaseSettings):
     TRIAL_TRAFFIC_LIMIT_GB: int = 10
     TRIAL_DEVICE_LIMIT: int = 2
     TRIAL_ADD_REMAINING_DAYS_TO_PAID: bool = False
+    TRIAL_PAYMENT_ENABLED: bool = False
+    TRIAL_ACTIVATION_PRICE: int = 0
     DEFAULT_TRAFFIC_LIMIT_GB: int = 100
     DEFAULT_DEVICE_LIMIT: int = 1
     TRIAL_SQUAD_UUID: Optional[str] = None
@@ -883,6 +885,24 @@ class Settings(BaseSettings):
 
     def get_disabled_mode_device_limit(self) -> Optional[int]:
         return self.get_devices_selection_disabled_amount()
+
+    def is_trial_paid_activation_enabled(self) -> bool:
+        return bool(self.TRIAL_PAYMENT_ENABLED)
+
+    def get_trial_activation_price(self) -> int:
+        try:
+            value = int(self.TRIAL_ACTIVATION_PRICE)
+        except (TypeError, ValueError):
+            logger.warning(
+                "Некорректное значение TRIAL_ACTIVATION_PRICE: %s",
+                self.TRIAL_ACTIVATION_PRICE,
+            )
+            return 0
+
+        if value < 0:
+            return 0
+
+        return value
     
     def is_yookassa_enabled(self) -> bool:
         return (self.YOOKASSA_ENABLED and 

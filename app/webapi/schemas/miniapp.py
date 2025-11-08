@@ -465,8 +465,11 @@ class MiniAppSubscriptionResponse(BaseModel):
     trial_available: bool = False
     trial_duration_days: Optional[int] = None
     trial_status: Optional[str] = None
+    trial_payment_required: bool = Field(default=False, alias="trialPaymentRequired")
+    trial_price_kopeks: Optional[int] = Field(default=None, alias="trialPriceKopeks")
+    trial_price_label: Optional[str] = Field(default=None, alias="trialPriceLabel")
 
-    model_config = ConfigDict(extra="allow")
+    model_config = ConfigDict(extra="allow", populate_by_name=True)
 
 
 class MiniAppSubscriptionServerOption(BaseModel):
@@ -736,6 +739,10 @@ class MiniAppSubscriptionTrialResponse(BaseModel):
     subscription_id: Optional[int] = Field(default=None, alias="subscriptionId")
     trial_status: Optional[str] = Field(default=None, alias="trialStatus")
     trial_duration_days: Optional[int] = Field(default=None, alias="trialDurationDays")
+    charged_amount_kopeks: Optional[int] = Field(default=None, alias="chargedAmountKopeks")
+    charged_amount_label: Optional[str] = Field(default=None, alias="chargedAmountLabel")
+    balance_kopeks: Optional[int] = Field(default=None, alias="balanceKopeks")
+    balance_label: Optional[str] = Field(default=None, alias="balanceLabel")
 
     model_config = ConfigDict(populate_by_name=True)
 
