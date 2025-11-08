@@ -238,7 +238,6 @@ REMNAWAVE_API_KEY=your_api_key
 ADMIN_IDS=123456789,987654321
 
 # Webhook секреты - генерируйте случайные значения
-YOOKASSA_WEBHOOK_SECRET=random_secret_here
 TRIBUTE_WEBHOOK_SECRET=another_random_secret
 CRYPTOBOT_WEBHOOK_SECRET=yet_another_secret
 ```

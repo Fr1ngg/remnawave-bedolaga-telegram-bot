@@ -1,6 +1,4 @@
 import base64
-import hashlib
-import hmac
 import json
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
@@ -14,16 +12,6 @@ from app.webserver.payments import create_payment_router
 
 class DummyBot:
     pass
-
-
-def _generate_yookassa_signature(body: str, secret: str) -> str:
-    payment_id = "test-payment"
-    timestamp = "2024-01-01T00:00:00.000Z"
-    payload = f"{payment_id}.{timestamp}.{body}".encode("utf-8")
-    digest = hmac.new(secret.encode("utf-8"), payload, hashlib.sha256).digest()
-    return f"v1 {payment_id} {timestamp} {base64.b64encode(digest).decode('utf-8')}"
-
-
 @pytest.fixture(autouse=True)
 def reset_settings(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(settings, "TRIBUTE_ENABLED", False, raising=False)
@@ -36,7 +24,6 @@ def reset_settings(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(settings, "CRYPTOBOT_WEBHOOK_SECRET", None, raising=False)
     monkeypatch.setattr(settings, "YOOKASSA_ENABLED", False, raising=False)
     monkeypatch.setattr(settings, "YOOKASSA_WEBHOOK_PATH", "/yookassa", raising=False)
-    monkeypatch.setattr(settings, "YOOKASSA_WEBHOOK_SECRET", None, raising=False)
     monkeypatch.setattr(settings, "YOOKASSA_SHOP_ID", "shop", raising=False)
     monkeypatch.setattr(settings, "YOOKASSA_SECRET_KEY", "key", raising=False)
     monkeypatch.setattr(settings, "YOOKASSA_TRUSTED_PROXY_NETWORKS", "", raising=False)
@@ -341,59 +328,8 @@ async def test_yookassa_allowed_via_trusted_public_proxy(monkeypatch: pytest.Mon
 
 
 @pytest.mark.anyio
-async def test_yookassa_missing_signature_when_secret_configured(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_yookassa_webhook_success(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(settings, "YOOKASSA_ENABLED", True, raising=False)
-    monkeypatch.setattr(settings, "YOOKASSA_WEBHOOK_SECRET", "secret", raising=False)
-
-    service = SimpleNamespace(process_yookassa_webhook=AsyncMock())
-
-    router = create_payment_router(DummyBot(), service)
-    assert router is not None
-
-    route = _get_route(router, settings.YOOKASSA_WEBHOOK_PATH)
-    request = _build_request(
-        settings.YOOKASSA_WEBHOOK_PATH,
-        body=json.dumps({"event": "payment.succeeded"}).encode("utf-8"),
-        headers={},
-    )
-
-    response = await route.endpoint(request)
-
-    assert response.status_code == 401
-    payload = json.loads(response.body.decode("utf-8"))
-    assert payload["reason"] == "missing_signature"
-    service.process_yookassa_webhook.assert_not_awaited()
-
-
-@pytest.mark.anyio
-async def test_yookassa_invalid_signature(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(settings, "YOOKASSA_ENABLED", True, raising=False)
-    monkeypatch.setattr(settings, "YOOKASSA_WEBHOOK_SECRET", "secret", raising=False)
-
-    service = SimpleNamespace(process_yookassa_webhook=AsyncMock())
-
-    router = create_payment_router(DummyBot(), service)
-    assert router is not None
-
-    route = _get_route(router, settings.YOOKASSA_WEBHOOK_PATH)
-    request = _build_request(
-        settings.YOOKASSA_WEBHOOK_PATH,
-        body=json.dumps({"event": "payment.succeeded"}).encode("utf-8"),
-        headers={"Signature": "v1 test invalid"},
-    )
-
-    response = await route.endpoint(request)
-
-    assert response.status_code == 401
-    payload = json.loads(response.body.decode("utf-8"))
-    assert payload["reason"] == "invalid_signature"
-    service.process_yookassa_webhook.assert_not_awaited()
-
-
-@pytest.mark.anyio
-async def test_yookassa_valid_signature(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(settings, "YOOKASSA_ENABLED", True, raising=False)
-    monkeypatch.setattr(settings, "YOOKASSA_WEBHOOK_SECRET", "secret", raising=False)
 
     async def fake_get_db():
         yield SimpleNamespace()
@@ -409,11 +345,42 @@ async def test_yookassa_valid_signature(monkeypatch: pytest.MonkeyPatch) -> None
     route = _get_route(router, settings.YOOKASSA_WEBHOOK_PATH)
     payload = {"event": "payment.succeeded"}
     body = json.dumps(payload).encode("utf-8")
-    signature = _generate_yookassa_signature(body.decode("utf-8"), settings.YOOKASSA_WEBHOOK_SECRET)
     request = _build_request(
         settings.YOOKASSA_WEBHOOK_PATH,
         body=body,
-        headers={"Signature": signature},
+        headers={},
+    )
+
+    response = await route.endpoint(request)
+
+    assert response.status_code == 200
+    payload = json.loads(response.body.decode("utf-8"))
+    assert payload["status"] == "ok"
+    process_mock.assert_awaited_once()
+
+
+@pytest.mark.anyio
+async def test_yookassa_webhook_with_signature(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(settings, "YOOKASSA_ENABLED", True, raising=False)
+
+    async def fake_get_db():
+        yield SimpleNamespace()
+
+    monkeypatch.setattr("app.webserver.payments.get_db", fake_get_db)
+
+    process_mock = AsyncMock(return_value=True)
+    service = SimpleNamespace(process_yookassa_webhook=process_mock)
+
+    router = create_payment_router(DummyBot(), service)
+    assert router is not None
+
+    route = _get_route(router, settings.YOOKASSA_WEBHOOK_PATH)
+    payload = {"event": "payment.succeeded"}
+    body = json.dumps(payload).encode("utf-8")
+    request = _build_request(
+        settings.YOOKASSA_WEBHOOK_PATH,
+        body=body,
+        headers={"Signature": "dummy"},
     )
 
     response = await route.endpoint(request)

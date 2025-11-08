@@ -1,9 +1,6 @@
 import asyncio
 import logging
 import json
-import hashlib
-import hmac
-import base64
 from ipaddress import (
     IPv4Address,
     IPv4Network,
@@ -33,6 +30,13 @@ YOOKASSA_ALLOWED_IP_NETWORKS: tuple[IPNetwork, ...] = (
     ip_network("77.75.156.11/32"),
     ip_network("77.75.156.35/32"),
     ip_network("2a02:5180::/32"),
+)
+
+
+YOOKASSA_ALLOWED_EVENTS: tuple[str, ...] = (
+    "payment.succeeded",
+    "payment.waiting_for_capture",
+    "payment.canceled",
 )
 
 
@@ -163,72 +167,6 @@ def is_yookassa_ip_allowed(ip_object: IPAddress) -> bool:
 
 
 class YooKassaWebhookHandler:
-
-    @staticmethod
-    def verify_webhook_signature(body: str, signature: str, secret: str) -> bool:
-        try:
-            signature_parts = signature.strip().split(' ')
-            
-            if len(signature_parts) < 4:
-                logger.error(f"Неверный формат подписи YooKassa: {signature}")
-                return False
-            
-            version = signature_parts[0] 
-            payment_id = signature_parts[1] 
-            timestamp = signature_parts[2]  
-            received_signature = signature_parts[3]
-            
-            if version != "v1":
-                logger.error(f"Неподдерживаемая версия подписи: {version}")
-                return False
-            
-            logger.info(f"Проверка подписи v1 для платежа {payment_id}, timestamp: {timestamp}")
-            
-            
-            expected_signature_1 = hmac.new(
-                secret.encode('utf-8'),
-                body.encode('utf-8'),
-                hashlib.sha256
-            ).digest()
-            expected_signature_1_b64 = base64.b64encode(expected_signature_1).decode('utf-8')
-            
-            signed_payload_2 = f"{payment_id}.{timestamp}.{body}"
-            expected_signature_2 = hmac.new(
-                secret.encode('utf-8'),
-                signed_payload_2.encode('utf-8'),
-                hashlib.sha256
-            ).digest()
-            expected_signature_2_b64 = base64.b64encode(expected_signature_2).decode('utf-8')
-            
-            signed_payload_3 = f"{timestamp}.{body}"
-            expected_signature_3 = hmac.new(
-                secret.encode('utf-8'),
-                signed_payload_3.encode('utf-8'),
-                hashlib.sha256
-            ).digest()
-            expected_signature_3_b64 = base64.b64encode(expected_signature_3).decode('utf-8')
-            
-            logger.debug(f"Получена подпись: {received_signature}")
-            logger.debug(f"Ожидаемая подпись (вариант 1): {expected_signature_1_b64}")
-            logger.debug(f"Ожидаемая подпись (вариант 2): {expected_signature_2_b64}")
-            logger.debug(f"Ожидаемая подпись (вариант 3): {expected_signature_3_b64}")
-            
-            is_valid = (
-                hmac.compare_digest(received_signature, expected_signature_1_b64) or
-                hmac.compare_digest(received_signature, expected_signature_2_b64) or  
-                hmac.compare_digest(received_signature, expected_signature_3_b64)
-            )
-            
-            if is_valid:
-                logger.info("✅ Подпись YooKassa webhook проверена успешно")
-            else:
-                logger.warning("⚠️ Подпись YooKassa webhook не совпадает ни с одним вариантом")
-            
-            return is_valid
-            
-        except Exception as e:
-            logger.error(f"Ошибка проверки подписи YooKassa: {e}")
-            return False
     
     def __init__(self, payment_service: PaymentService):
         self.payment_service = payment_service
@@ -274,25 +212,8 @@ class YooKassaWebhookHandler:
             logger.info(f"📄 Body: {body}")
 
             signature = request.headers.get('Signature') or request.headers.get('X-YooKassa-Signature')
-
-            if settings.YOOKASSA_WEBHOOK_SECRET:
-                if not signature:
-                    logger.warning("⚠️ Webhook без подписи, но секрет настроен")
-                    return web.Response(status=401, text="Missing signature")
-
-                logger.info(f"🔐 Получена подпись: {signature}")
-
-                if not YooKassaWebhookHandler.verify_webhook_signature(
-                    body,
-                    signature,
-                    settings.YOOKASSA_WEBHOOK_SECRET,
-                ):
-                    logger.warning("❌ Неверная подпись YooKassa webhook")
-                    return web.Response(status=401, text="Invalid signature")
-            elif signature:
-                logger.info("ℹ️ Подпись получена, но проверка отключена (YOOKASSA_WEBHOOK_SECRET не настроен)")
-            else:
-                logger.info("ℹ️ Проверка подписи отключена")
+            if signature:
+                logger.info("ℹ️ Получена подпись YooKassa: %s", signature)
 
             try:
                 webhook_data = json.loads(body)
@@ -308,7 +229,7 @@ class YooKassaWebhookHandler:
                 logger.warning("⚠️ Webhook YooKassa без типа события")
                 return web.Response(status=400, text="No event type")
             
-            if event_type not in ["payment.succeeded", "payment.waiting_for_capture"]:
+            if event_type not in YOOKASSA_ALLOWED_EVENTS:
                 logger.info(f"ℹ️ Игнорируем событие YooKassa: {event_type}")
                 return web.Response(status=200, text="OK")
             

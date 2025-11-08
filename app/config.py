@@ -187,7 +187,6 @@ class Settings(BaseSettings):
     YOOKASSA_WEBHOOK_PATH: str = "/yookassa-webhook"
     YOOKASSA_WEBHOOK_HOST: str = "0.0.0.0"
     YOOKASSA_WEBHOOK_PORT: int = 8082
-    YOOKASSA_WEBHOOK_SECRET: Optional[str] = None
     YOOKASSA_TRUSTED_PROXY_NETWORKS: str = ""
     YOOKASSA_MIN_AMOUNT_KOPEKS: int = 5000
     YOOKASSA_MAX_AMOUNT_KOPEKS: int = 1000000

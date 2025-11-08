@@ -30,6 +30,66 @@ if TYPE_CHECKING:
 class YooKassaPaymentMixin:
     """Mixin с операциями по созданию и подтверждению платежей YooKassa."""
 
+    @staticmethod
+    def _format_amount_value(value: Any) -> str:
+        """Форматирует сумму для хранения в webhook-объекте."""
+
+        try:
+            quantized = Decimal(str(value)).quantize(Decimal("0.00"))
+            return format(quantized, "f")
+        except (InvalidOperation, ValueError, TypeError):
+            return str(value)
+
+    @classmethod
+    def _merge_remote_yookassa_payload(
+        cls,
+        event_object: Dict[str, Any],
+        remote_data: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """Объединяет локальные данные вебхука с ответом API YooKassa."""
+
+        merged: Dict[str, Any] = dict(event_object)
+
+        status = remote_data.get("status")
+        if status:
+            merged["status"] = status
+
+        if "paid" in remote_data:
+            merged["paid"] = bool(remote_data.get("paid"))
+
+        if "refundable" in remote_data:
+            merged["refundable"] = bool(remote_data.get("refundable"))
+
+        payment_method_type = remote_data.get("payment_method_type")
+        if payment_method_type:
+            payment_method = dict(merged.get("payment_method") or {})
+            payment_method["type"] = payment_method_type
+            merged["payment_method"] = payment_method
+
+        amount_value = remote_data.get("amount_value")
+        amount_currency = remote_data.get("amount_currency")
+        if amount_value is not None or amount_currency:
+            merged_amount = dict(merged.get("amount") or {})
+            if amount_value is not None:
+                merged_amount["value"] = cls._format_amount_value(amount_value)
+            if amount_currency:
+                merged_amount["currency"] = str(amount_currency).upper()
+            merged["amount"] = merged_amount
+
+        for datetime_field in ("captured_at", "created_at"):
+            value = remote_data.get(datetime_field)
+            if value:
+                merged[datetime_field] = value
+
+        metadata = remote_data.get("metadata")
+        if metadata:
+            try:
+                merged["metadata"] = dict(metadata)  # type: ignore[arg-type]
+            except TypeError:
+                merged["metadata"] = metadata
+
+        return merged
+
     async def create_yookassa_payment(
         self,
         db: AsyncSession,
@@ -725,6 +785,32 @@ class YooKassaPaymentMixin:
         if not yookassa_payment_id:
             logger.warning("Webhook без payment id: %s", event)
             return False
+
+        remote_data: Optional[Dict[str, Any]] = None
+        if getattr(self, "yookassa_service", None):
+            try:
+                remote_data = await self.yookassa_service.get_payment_info(  # type: ignore[union-attr]
+                    yookassa_payment_id
+                )
+            except Exception as error:  # pragma: no cover - диагностический лог
+                logger.warning(
+                    "Не удалось запросить актуальный статус платежа YooKassa %s: %s",
+                    yookassa_payment_id,
+                    error,
+                    exc_info=True,
+                )
+
+        if remote_data:
+            previous_status = event_object.get("status")
+            event_object = self._merge_remote_yookassa_payload(event_object, remote_data)
+            if previous_status and event_object.get("status") != previous_status:
+                logger.info(
+                    "Статус платежа YooKassa %s скорректирован по данным API: %s → %s",
+                    yookassa_payment_id,
+                    previous_status,
+                    event_object.get("status"),
+                )
+            event["object"] = event_object
 
         payment_module = import_module("app.services.payment_service")
 

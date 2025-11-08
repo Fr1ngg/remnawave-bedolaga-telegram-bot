@@ -383,27 +383,8 @@ def create_payment_router(bot: Bot, payment_service: PaymentService) -> APIRoute
             body = body_bytes.decode("utf-8")
 
             signature = request.headers.get("Signature") or request.headers.get("X-YooKassa-Signature")
-
-            if settings.YOOKASSA_WEBHOOK_SECRET:
-                if not signature:
-                    logger.warning("⚠️ YooKassa webhook без подписи при настроенном секрете")
-                    return JSONResponse(
-                        {"status": "error", "reason": "missing_signature"},
-                        status_code=status.HTTP_401_UNAUTHORIZED,
-                    )
-
-                if not yookassa_webhook_module.YooKassaWebhookHandler.verify_webhook_signature(
-                    body,
-                    signature,
-                    settings.YOOKASSA_WEBHOOK_SECRET,
-                ):
-                    logger.warning("❌ Неверная подпись YooKassa webhook")
-                    return JSONResponse(
-                        {"status": "error", "reason": "invalid_signature"},
-                        status_code=status.HTTP_401_UNAUTHORIZED,
-                    )
-            elif signature:
-                logger.info("ℹ️ Получена подпись YooKassa, но проверка отключена (YOOKASSA_WEBHOOK_SECRET не настроен)")
+            if signature:
+                logger.info("ℹ️ Получена подпись YooKassa: %s", signature)
 
             try:
                 webhook_data = json.loads(body)
