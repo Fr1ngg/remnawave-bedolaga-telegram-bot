@@ -67,6 +67,11 @@ from app.services.payment_service import PaymentService, get_wata_payment_by_lin
 from app.services.promo_offer_service import promo_offer_service
 from app.services.promocode_service import PromoCodeService
 from app.services.subscription_service import SubscriptionService
+from app.services.trial_activation_service import (
+    TrialPaymentChargeFailed,
+    TrialPaymentInsufficientFunds,
+    charge_trial_activation_if_required,
+)
 from app.services.subscription_purchase_service import (
     purchase_service,
     PurchaseBalanceError,
@@ -2888,6 +2893,13 @@ async def get_subscription_details(
     trial_duration_days = (
         settings.TRIAL_DURATION_DAYS if settings.TRIAL_DURATION_DAYS > 0 else None
     )
+    trial_price_kopeks = settings.get_trial_activation_price()
+    trial_payment_required = (
+        settings.is_trial_paid_activation_enabled() and trial_price_kopeks > 0
+    )
+    trial_price_label = (
+        settings.format_price(trial_price_kopeks) if trial_payment_required else None
+    )
 
     subscription_missing_reason = None
     if subscription is None:
@@ -2951,6 +2963,9 @@ async def get_subscription_details(
         trial_available=trial_available,
         trial_duration_days=trial_duration_days,
         trial_status="available" if trial_available else "unavailable",
+        trial_payment_required=trial_payment_required,
+        trial_price_kopeks=trial_price_kopeks if trial_payment_required else None,
+        trial_price_label=trial_price_label,
         **autopay_extras,
     )
 
@@ -3103,6 +3118,29 @@ async def activate_subscription_trial_endpoint(
             },
         )
 
+    try:
+        charged_amount = await charge_trial_activation_if_required(db, user)
+    except TrialPaymentInsufficientFunds as error:
+        missing = error.missing_amount
+        raise HTTPException(
+            status.HTTP_402_PAYMENT_REQUIRED,
+            detail={
+                "code": "insufficient_funds",
+                "message": "Not enough funds to activate the trial",
+                "missing_amount_kopeks": missing,
+                "required_amount_kopeks": error.required_amount,
+                "balance_kopeks": error.balance_amount,
+            },
+        ) from error
+    except TrialPaymentChargeFailed as error:
+        raise HTTPException(
+            status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={
+                "code": "charge_failed",
+                "message": "Failed to charge balance for trial activation",
+            },
+        ) from error
+
     forced_devices = None
     if not settings.is_devices_selection_enabled():
         forced_devices = settings.get_disabled_mode_device_limit()
@@ -3158,6 +3196,9 @@ async def activate_subscription_trial_endpoint(
         duration_days = settings.TRIAL_DURATION_DAYS
 
     language_code = _normalize_language_code(user)
+    charged_amount_label = (
+        settings.format_price(charged_amount) if charged_amount > 0 else None
+    )
     if language_code == "ru":
         if duration_days:
             message = f"Триал активирован на {duration_days} дн. Приятного пользования!"
@@ -3169,8 +3210,19 @@ async def activate_subscription_trial_endpoint(
         else:
             message = "Trial activated successfully. Enjoy!"
 
+    if charged_amount_label:
+        if language_code == "ru":
+            message = f"{message}\n\n💳 С вашего баланса списано {charged_amount_label}."
+        else:
+            message = f"{message}\n\n💳 {charged_amount_label} has been deducted from your balance."
+
     await _with_admin_notification_service(
-        lambda service: service.send_trial_activation_notification(db, user, subscription)
+        lambda service: service.send_trial_activation_notification(
+            db,
+            user,
+            subscription,
+            charged_amount_kopeks=charged_amount,
+        )
     )
 
     return MiniAppSubscriptionTrialResponse(
@@ -3178,6 +3230,10 @@ async def activate_subscription_trial_endpoint(
         subscription_id=getattr(subscription, "id", None),
         trial_status="activated",
         trial_duration_days=duration_days,
+        charged_amount_kopeks=charged_amount if charged_amount > 0 else None,
+        charged_amount_label=charged_amount_label,
+        balance_kopeks=user.balance_kopeks,
+        balance_label=settings.format_price(user.balance_kopeks),
     )
 
 

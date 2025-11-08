@@ -538,6 +538,12 @@ TRAFFIC_PACKAGES_CONFIG="100:15000:true"
 # Бесплатные устройства в триал подписке
 TRIAL_DEVICE_LIMIT=1
 
+# Требовать оплату за активацию триала
+TRIAL_PAYMENT_ENABLED=false
+
+# Стоимость активации триала (в копейках)
+TRIAL_ACTIVATION_PRICE=0
+
 # Бесплатные устройства в платной подписке
 DEFAULT_DEVICE_LIMIT=3
 

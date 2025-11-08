@@ -190,7 +190,9 @@ class AdminNotificationService:
         self,
         db: AsyncSession,
         user: User,
-        subscription: Subscription
+        subscription: Subscription,
+        *,
+        charged_amount_kopeks: Optional[int] = None,
     ) -> bool:
         if not self._is_enabled():
             return False
@@ -210,6 +212,12 @@ class AdminNotificationService:
                 else:
                     trial_device_limit = settings.TRIAL_DEVICE_LIMIT
 
+            payment_block = ""
+            if charged_amount_kopeks and charged_amount_kopeks > 0:
+                payment_block = (
+                    f"\n💳 <b>Оплата за активацию:</b> {settings.format_price(charged_amount_kopeks)}"
+                )
+
             message = f"""🎯 <b>АКТИВАЦИЯ ТРИАЛА</b>
 
 👤 <b>Пользователь:</b> {user_display}
@@ -224,6 +232,7 @@ class AdminNotificationService:
 📊 Трафик: {self._format_traffic(settings.TRIAL_TRAFFIC_LIMIT_GB)}
 📱 Устройства: {trial_device_limit}
 🌐 Сервер: {subscription.connected_squads[0] if subscription.connected_squads else 'По умолчанию'}
+{payment_block}
 
 📆 <b>Действует до:</b> {format_local_datetime(subscription.end_date, '%d.%m.%Y %H:%M')}
 🔗 <b>Реферер:</b> {referrer_info}
