@@ -700,8 +700,8 @@ class Pal24PaymentMixin:
 
             return {
                 "payment": payment,
-                "status": payment.status,
-                "is_paid": payment.is_paid,
+                "status": getattr(payment, "status", None),
+                "is_paid": getattr(payment, "is_paid", None),
                 "remote_status": remote_status_for_return,
                 "remote_data": remote_data,
                 "links": links_map or None,
@@ -709,8 +709,9 @@ class Pal24PaymentMixin:
                 "secondary_url": secondary_url,
                 "sbp_url": links_map.get("sbp"),
                 "card_url": links_map.get("card"),
-                "link_page_url": links_map.get("page") or payment.link_page_url,
-                "link_url": payment.link_url,
+                "link_page_url": links_map.get("page")
+                or getattr(payment, "link_page_url", None),
+                "link_url": getattr(payment, "link_url", None),
                 "selected_method": selected_method,
             }
 
@@ -878,7 +879,8 @@ class Pal24PaymentMixin:
     ) -> tuple[Dict[str, str], str]:
         links: Dict[str, str] = {}
 
-        metadata = payment.metadata_json if isinstance(payment.metadata_json, dict) else {}
+        metadata_raw = getattr(payment, "metadata_json", None)
+        metadata = metadata_raw if isinstance(metadata_raw, dict) else {}
         if metadata:
             links_meta = metadata.get("links")
             if isinstance(links_meta, dict):

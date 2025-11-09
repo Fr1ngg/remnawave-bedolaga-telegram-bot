@@ -2,16 +2,19 @@ import logging
 from typing import AsyncGenerator
 
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
-from sqlalchemy.pool import NullPool
+from sqlalchemy.pool import AsyncAdaptedQueuePool
 
 from app.config import settings
 from app.database.models import Base
 
 logger = logging.getLogger(__name__)
 
+QueuePool = AsyncAdaptedQueuePool
+
+
 engine = create_async_engine(
     settings.get_database_url(),
-    poolclass=NullPool,
+    poolclass=QueuePool,
     echo=settings.DEBUG,
     future=True
 )
