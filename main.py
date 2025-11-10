@@ -112,11 +112,9 @@ async def main():
         ):
             await init_db()
 
-        auto_migration_enabled = (
-            os.getenv("ENABLE_AUTO_MIGRATION", "false").lower() == "true"
-        )
+        skip_migration = os.getenv('SKIP_MIGRATION', 'false').lower() == 'true'
 
-        if auto_migration_enabled:
+        if not skip_migration:
             async with timeline.stage(
                 "Проверка и миграция базы данных",
                 "🧬",
@@ -140,9 +138,9 @@ async def main():
         else:
             timeline.add_manual_step(
                 "Проверка и миграция базы данных",
-                "⏹️",
-                "Отключено",
-                "ENABLE_AUTO_MIGRATION=false (по умолчанию)",
+                "⏭️",
+                "Пропущено",
+                "SKIP_MIGRATION=true",
             )
 
         async with timeline.stage(
