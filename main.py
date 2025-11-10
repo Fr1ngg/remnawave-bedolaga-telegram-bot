@@ -34,6 +34,10 @@ from app.services.external_admin_service import ensure_external_admin_token
 from app.services.broadcast_service import broadcast_service
 from app.utils.startup_timeline import StartupTimeline
 from app.utils.timezone import TimezoneAwareFormatter
+from app.database.schema_health import (
+    check_database_schema_readiness,
+    database_has_tables,
+)
 
 
 class GracefulExit:
@@ -112,9 +116,11 @@ async def main():
         ):
             await init_db()
 
-        skip_migration = os.getenv('SKIP_MIGRATION', 'false').lower() == 'true'
+        auto_migration_enabled = (
+            os.getenv("ENABLE_AUTO_MIGRATION", "false").lower() == "true"
+        )
 
-        if not skip_migration:
+        if auto_migration_enabled:
             async with timeline.stage(
                 "Проверка и миграция базы данных",
                 "🧬",
@@ -136,12 +142,62 @@ async def main():
                     logger.error(f"❌ Ошибка выполнения миграции: {migration_error}")
                     logger.warning("⚠️ Продолжаем запуск без миграции")
         else:
-            timeline.add_manual_step(
-                "Проверка и миграция базы данных",
-                "⏭️",
-                "Пропущено",
-                "SKIP_MIGRATION=true",
-            )
+            db_has_tables = await database_has_tables()
+            if db_has_tables:
+                timeline.add_manual_step(
+                    "Проверка и миграция базы данных",
+                    "⏹️",
+                    "Отключено",
+                    "ENABLE_AUTO_MIGRATION=false (по умолчанию)",
+                )
+
+            async with timeline.stage(
+                "Проверка схемы базы данных",
+                "🛡️",
+                success_message="Схема базы данных подтверждена",
+            ) as stage:
+                schema_ready, missing_tables = await check_database_schema_readiness()
+                if schema_ready:
+                    stage.success("Схема базы данных подтверждена")
+                else:
+                    if not db_has_tables:
+                        stage.log(
+                            "Обнаружена пустая база данных. Выполняем стартовую миграцию..."
+                        )
+                        try:
+                            migration_success = await run_universal_migration()
+                        except Exception as migration_error:  # pragma: no cover - диагностический блок
+                            message = (
+                                "❌ Не удалось выполнить стартовую миграцию: "
+                                f"{migration_error}. Запустите миграции вручную и повторите попытку."
+                            )
+                            stage.failure(message)
+                            logger.error(message)
+                            return
+
+                        if migration_success:
+                            stage.success(
+                                "Стартовая миграция выполнена, схема базы данных готова"
+                            )
+                        else:
+                            stage.warning(
+                                "Стартовая миграция завершилась с предупреждениями, продолжим запуск"
+                            )
+                            logger.warning(
+                                "⚠️ Стартовая миграция завершилась с предупреждениями"
+                            )
+                    else:
+                        missing = ", ".join(sorted(missing_tables))
+                        message = (
+                            "Отсутствуют критические таблицы: "
+                            f"{missing}. Выполните миграции вручную командой "
+                            "`ENABLE_AUTO_MIGRATION=true` или `python -c \"import asyncio; "
+                            "from app.database.universal_migration import run_universal_migration; "
+                            "asyncio.run(run_universal_migration())\"` и перезапустите бот."
+                        )
+                        stage.failure(message)
+                        logger.error(message)
+                        return
 
         async with timeline.stage(
             "Загрузка конфигурации из БД",
