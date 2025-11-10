@@ -34,6 +34,7 @@ from app.services.external_admin_service import ensure_external_admin_token
 from app.services.broadcast_service import broadcast_service
 from app.utils.startup_timeline import StartupTimeline
 from app.utils.timezone import TimezoneAwareFormatter
+from app.database.schema_health import check_database_schema_readiness
 
 
 class GracefulExit:
@@ -112,9 +113,11 @@ async def main():
         ):
             await init_db()
 
-        skip_migration = os.getenv('SKIP_MIGRATION', 'false').lower() == 'true'
+        auto_migration_enabled = (
+            os.getenv("ENABLE_AUTO_MIGRATION", "false").lower() == "true"
+        )
 
-        if not skip_migration:
+        if auto_migration_enabled:
             async with timeline.stage(
                 "Проверка и миграция базы данных",
                 "🧬",
@@ -138,10 +141,31 @@ async def main():
         else:
             timeline.add_manual_step(
                 "Проверка и миграция базы данных",
-                "⏭️",
-                "Пропущено",
-                "SKIP_MIGRATION=true",
+                "⏹️",
+                "Отключено",
+                "ENABLE_AUTO_MIGRATION=false (по умолчанию)",
             )
+
+            async with timeline.stage(
+                "Проверка схемы базы данных",
+                "🛡️",
+                success_message="Схема базы данных подтверждена",
+            ) as stage:
+                schema_ready, missing_tables = await check_database_schema_readiness()
+                if schema_ready:
+                    stage.success("Схема базы данных подтверждена")
+                else:
+                    missing = ", ".join(sorted(missing_tables))
+                    message = (
+                        "Отсутствуют критические таблицы: "
+                        f"{missing}. Выполните миграции вручную командой "
+                        "`ENABLE_AUTO_MIGRATION=true` или `python -c \"import asyncio; "
+                        "from app.database.universal_migration import run_universal_migration; "
+                        "asyncio.run(run_universal_migration())\"` и перезапустите бот."
+                    )
+                    stage.failure(message)
+                    logger.error(message)
+                    return
 
         async with timeline.stage(
             "Загрузка конфигурации из БД",
