@@ -48,6 +48,7 @@ services:
     environment:
       DOCKER_ENV: "true"
       DATABASE_MODE: "auto"
+      ENABLE_AUTO_MIGRATION: "${ENABLE_AUTO_MIGRATION:-false}"
       POSTGRES_HOST: "postgres"
       POSTGRES_PORT: "5432"
       POSTGRES_DB: "${POSTGRES_DB:-remnawave_bot}"
