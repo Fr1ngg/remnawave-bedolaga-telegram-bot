@@ -83,6 +83,20 @@ def _build_additional_buttons(additional_section, language: str) -> List[InlineK
 _LANGUAGE_DISPLAY_NAMES = {
     "ru": "🇷🇺 Русский",
     "en": "🇬🇧 English",
+    "ua": "🇺🇦 Українська",
+    "uk": "🇺🇦 Українська",
+    "zh": "🇨🇳 中文",
+    "es": "🇪🇸 Español",
+    "de": "🇩🇪 Deutsch",
+    "fr": "🇫🇷 Français",
+    "it": "🇮🇹 Italiano",
+    "pl": "🇵🇱 Polski",
+    "tr": "🇹🇷 Türkçe",
+    "kk": "🇰🇿 Қазақ тілі",
+    "uz": "🇺🇿 Oʻzbekcha",
+    "az": "🇦🇿 Azərbaycan",
+    "ka": "🇬🇪 ქართული",
+    "hy": "🇦🇲 Հայերեն",
 }
 
 def get_rules_keyboard(language: str = DEFAULT_LANGUAGE) -> InlineKeyboardMarkup:
