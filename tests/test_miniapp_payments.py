@@ -19,11 +19,16 @@ os.environ.setdefault('BOT_TOKEN', 'test-token')
 from app.config import settings
 from app.webapi.routes import miniapp
 from app.database.models import PaymentMethod
+from app.services.subscription_renewal_service import (
+    SubscriptionRenewalPricing,
+    SubscriptionRenewalResult,
+)
 from app.webapi.schemas.miniapp import (
     MiniAppPaymentCreateRequest,
     MiniAppPaymentIntegrationType,
     MiniAppPaymentMethodsRequest,
     MiniAppPaymentStatusQuery,
+    MiniAppSubscriptionRenewalRequest,
 )
 
 
@@ -42,6 +47,260 @@ def test_compute_cryptobot_limits_scale_with_rate():
     assert high_rate_max == 12000000
     assert high_rate_min > low_rate_min
     assert high_rate_max > low_rate_max
+
+
+@pytest.mark.anyio("asyncio")
+async def test_submit_subscription_renewal_uses_balance_when_sufficient(monkeypatch):
+    monkeypatch.setattr(settings, 'ADMIN_NOTIFICATIONS_ENABLED', False, raising=False)
+    monkeypatch.setattr(settings, 'BOT_TOKEN', 'token', raising=False)
+    monkeypatch.setattr(settings, 'RESET_TRAFFIC_ON_PAYMENT', False, raising=False)
+    monkeypatch.setattr(settings, 'DEFAULT_LANGUAGE', 'ru', raising=False)
+    monkeypatch.setattr(settings, 'CRYPTOBOT_ENABLED', False, raising=False)
+    monkeypatch.setattr(settings, 'CRYPTOBOT_API_TOKEN', None, raising=False)
+    monkeypatch.setattr(type(settings), 'get_available_renewal_periods', lambda self: [30], raising=False)
+
+    user = types.SimpleNamespace(id=10, balance_kopeks=10000, language='ru')
+    subscription = types.SimpleNamespace(
+        id=77,
+        connected_squads=[],
+        traffic_limit_gb=100,
+        device_limit=5,
+        end_date=datetime.utcnow(),
+    )
+
+    pricing_model = SubscriptionRenewalPricing(
+        period_days=30,
+        period_id='days:30',
+        months=1,
+        base_original_total=10000,
+        discounted_total=10000,
+        final_total=10000,
+        promo_discount_value=0,
+        promo_discount_percent=0,
+        overall_discount_percent=0,
+        per_month=10000,
+        server_ids=[],
+        details={},
+    )
+
+    async def fake_authorize(init_data, db):  # noqa: ARG001
+        return user
+
+    def fake_ensure(subscription_user, allowed_statuses=None):  # noqa: ARG001
+        return subscription
+
+    async def fake_calculate(db, u, sub, period):  # noqa: ARG001
+        return pricing_model
+
+    captured: dict[str, Any] = {}
+
+    async def fake_finalize(db, u, sub, pricing, *, charge_balance_amount=None, description=None, payment_method=None):  # noqa: ARG001
+        charge = charge_balance_amount if charge_balance_amount is not None else pricing.final_total
+        captured['charge'] = charge
+        captured['description'] = description
+        return SubscriptionRenewalResult(
+            subscription=types.SimpleNamespace(id=sub.id, end_date=datetime.utcnow()),
+            transaction=types.SimpleNamespace(id=501),
+            total_amount_kopeks=pricing.final_total,
+            charged_from_balance_kopeks=charge,
+            old_end_date=sub.end_date,
+        )
+
+    monkeypatch.setattr(miniapp, '_authorize_miniapp_user', fake_authorize)
+    monkeypatch.setattr(miniapp, '_ensure_paid_subscription', fake_ensure)
+    monkeypatch.setattr(miniapp, '_validate_subscription_id', lambda *args, **kwargs: None)
+    monkeypatch.setattr(miniapp, '_calculate_subscription_renewal_pricing', fake_calculate)
+    monkeypatch.setattr(miniapp.renewal_service, 'finalize', fake_finalize)
+
+    payload = MiniAppSubscriptionRenewalRequest(
+        initData='init',
+        subscriptionId=77,
+        periodId='days:30',
+    )
+
+    response = await miniapp.submit_subscription_renewal_endpoint(payload, db=types.SimpleNamespace())
+
+    assert response.success is True
+    assert response.requires_payment is False
+    assert response.subscription_id == 77
+    assert response.renewed_until is not None
+    assert 'Подписка' in (response.message or '')
+    assert captured['charge'] == 10000
+
+
+@pytest.mark.anyio("asyncio")
+async def test_submit_subscription_renewal_returns_cryptobot_invoice(monkeypatch):
+    monkeypatch.setattr(settings, 'ADMIN_NOTIFICATIONS_ENABLED', False, raising=False)
+    monkeypatch.setattr(settings, 'BOT_TOKEN', 'token', raising=False)
+    monkeypatch.setattr(settings, 'RESET_TRAFFIC_ON_PAYMENT', False, raising=False)
+    monkeypatch.setattr(settings, 'DEFAULT_LANGUAGE', 'ru', raising=False)
+    monkeypatch.setattr(settings, 'CRYPTOBOT_ENABLED', True, raising=False)
+    monkeypatch.setattr(settings, 'CRYPTOBOT_API_TOKEN', 'token', raising=False)
+    monkeypatch.setattr(settings, 'CRYPTOBOT_DEFAULT_ASSET', 'USDT', raising=False)
+    monkeypatch.setattr(type(settings), 'get_available_renewal_periods', lambda self: [30], raising=False)
+
+    user = types.SimpleNamespace(id=15, balance_kopeks=5000, language='ru')
+    subscription = types.SimpleNamespace(
+        id=88,
+        connected_squads=[],
+        traffic_limit_gb=100,
+        device_limit=5,
+        end_date=datetime.utcnow(),
+    )
+
+    pricing_model = SubscriptionRenewalPricing(
+        period_days=30,
+        period_id='days:30',
+        months=1,
+        base_original_total=20000,
+        discounted_total=20000,
+        final_total=20000,
+        promo_discount_value=0,
+        promo_discount_percent=0,
+        overall_discount_percent=0,
+        per_month=20000,
+        server_ids=[],
+        details={},
+    )
+
+    async def fake_authorize(init_data, db):  # noqa: ARG001
+        return user
+
+    def fake_ensure(subscription_user, allowed_statuses=None):  # noqa: ARG001
+        return subscription
+
+    async def fake_calculate(db, u, sub, period):  # noqa: ARG001
+        return pricing_model
+
+    created_calls: dict[str, Any] = {}
+
+    class DummyPaymentService:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        async def create_cryptobot_payment(self, db, **kwargs):
+            created_calls.update(kwargs)
+            return {
+                'local_payment_id': 321,
+                'invoice_id': 'inv_123',
+                'bot_invoice_url': 'https://t.me/invoice',
+                'mini_app_invoice_url': 'https://mini.app/pay',
+                'web_app_invoice_url': None,
+            }
+
+    async def fake_rate():
+        return 100.0
+
+    monkeypatch.setattr(miniapp, '_authorize_miniapp_user', fake_authorize)
+    monkeypatch.setattr(miniapp, '_ensure_paid_subscription', fake_ensure)
+    monkeypatch.setattr(miniapp, '_validate_subscription_id', lambda *args, **kwargs: None)
+    monkeypatch.setattr(miniapp, '_calculate_subscription_renewal_pricing', fake_calculate)
+    monkeypatch.setattr(miniapp, 'PaymentService', lambda *args, **kwargs: DummyPaymentService())
+    monkeypatch.setattr(miniapp, '_get_usd_to_rub_rate', fake_rate)
+
+    payload = MiniAppSubscriptionRenewalRequest(
+        initData='init',
+        subscriptionId=88,
+        periodId='days:30',
+        method='cryptobot',
+    )
+
+    response = await miniapp.submit_subscription_renewal_endpoint(payload, db=types.SimpleNamespace())
+
+    assert response.success is False
+    assert response.requires_payment is True
+    assert response.payment_method == 'cryptobot'
+    assert response.payment_amount_kopeks == 15000
+    assert response.payment_url == 'https://mini.app/pay'
+    assert response.invoice_id == 'inv_123'
+    assert response.payment_id == 321
+    assert response.payment_payload and response.payment_payload.startswith('subscription_renewal')
+    assert created_calls.get('amount_usd') == pytest.approx(1.5)
+    assert created_calls.get('description') == 'Продление подписки на 30 дней'
+
+
+@pytest.mark.anyio("asyncio")
+async def test_submit_subscription_renewal_rounds_up_cryptobot_amount(monkeypatch):
+    monkeypatch.setattr(settings, 'ADMIN_NOTIFICATIONS_ENABLED', False, raising=False)
+    monkeypatch.setattr(settings, 'BOT_TOKEN', 'token', raising=False)
+    monkeypatch.setattr(settings, 'RESET_TRAFFIC_ON_PAYMENT', False, raising=False)
+    monkeypatch.setattr(settings, 'DEFAULT_LANGUAGE', 'ru', raising=False)
+    monkeypatch.setattr(settings, 'CRYPTOBOT_ENABLED', True, raising=False)
+    monkeypatch.setattr(settings, 'CRYPTOBOT_API_TOKEN', 'token', raising=False)
+    monkeypatch.setattr(settings, 'CRYPTOBOT_DEFAULT_ASSET', 'USDT', raising=False)
+    monkeypatch.setattr(type(settings), 'get_available_renewal_periods', lambda self: [30], raising=False)
+
+    user = types.SimpleNamespace(id=42, balance_kopeks=0, language='ru')
+    subscription = types.SimpleNamespace(
+        id=99,
+        connected_squads=[],
+        traffic_limit_gb=100,
+        device_limit=5,
+        end_date=datetime.utcnow(),
+    )
+
+    pricing_model = SubscriptionRenewalPricing(
+        period_days=30,
+        period_id='days:30',
+        months=1,
+        base_original_total=9512,
+        discounted_total=9512,
+        final_total=9512,
+        promo_discount_value=0,
+        promo_discount_percent=0,
+        overall_discount_percent=0,
+        per_month=9512,
+        server_ids=[],
+        details={},
+    )
+
+    async def fake_authorize(init_data, db):  # noqa: ARG001
+        return user
+
+    def fake_ensure(subscription_user, allowed_statuses=None):  # noqa: ARG001
+        return subscription
+
+    async def fake_calculate(db, u, sub, period):  # noqa: ARG001
+        return pricing_model
+
+    captured: dict[str, Any] = {}
+
+    class DummyPaymentService:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        async def create_cryptobot_payment(self, db, **kwargs):
+            captured.update(kwargs)
+            return {
+                'local_payment_id': 654,
+                'invoice_id': 'inv_round',
+                'bot_invoice_url': 'https://t.me/pay',
+                'mini_app_invoice_url': 'https://mini.app/pay-round',
+                'web_app_invoice_url': None,
+            }
+
+    async def fake_rate():
+        return 95.0
+
+    monkeypatch.setattr(miniapp, '_authorize_miniapp_user', fake_authorize)
+    monkeypatch.setattr(miniapp, '_ensure_paid_subscription', fake_ensure)
+    monkeypatch.setattr(miniapp, '_validate_subscription_id', lambda *args, **kwargs: None)
+    monkeypatch.setattr(miniapp, '_calculate_subscription_renewal_pricing', fake_calculate)
+    monkeypatch.setattr(miniapp, 'PaymentService', lambda *args, **kwargs: DummyPaymentService())
+    monkeypatch.setattr(miniapp, '_get_usd_to_rub_rate', fake_rate)
+
+    payload = MiniAppSubscriptionRenewalRequest(
+        initData='init',
+        subscriptionId=99,
+        periodId='days:30',
+        method='cryptobot',
+    )
+
+    response = await miniapp.submit_subscription_renewal_endpoint(payload, db=types.SimpleNamespace())
+
+    assert response.requires_payment is True
+    assert captured.get('amount_usd') == pytest.approx(1.01)
+    assert response.payment_amount_kopeks == 9512
 
 
 @pytest.mark.anyio("asyncio")

@@ -3,10 +3,10 @@ from __future__ import annotations
 import logging
 import re
 import math
-from decimal import Decimal, InvalidOperation, ROUND_HALF_UP, ROUND_FLOOR
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP, ROUND_FLOOR, ROUND_UP
 from datetime import datetime, timedelta, timezone
 from uuid import uuid4
-from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple, Union
+from typing import Any, Callable, Collection, Dict, List, Optional, Tuple, Union
 
 from aiogram import Bot
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -28,13 +28,11 @@ from app.database.crud.promo_offer_template import get_promo_offer_template_by_i
 from app.database.crud.server_squad import (
     add_user_to_servers,
     get_available_server_squads,
-    get_server_ids_by_uuids,
     get_server_squad_by_uuid,
     remove_user_from_servers,
 )
 from app.database.crud.subscription import (
     add_subscription_servers,
-    calculate_subscription_total_cost,
     create_trial_subscription,
     extend_subscription,
     remove_subscription_servers,
@@ -55,7 +53,6 @@ from app.database.models import (
     PaymentMethod,
     User,
 )
-from app.services.admin_notification_service import AdminNotificationService
 from app.services.faq_service import FaqService
 from app.services.privacy_policy_service import PrivacyPolicyService
 from app.services.public_offer_service import PublicOfferService
@@ -68,6 +65,16 @@ from app.services.payment_service import PaymentService, get_wata_payment_by_lin
 from app.services.promo_offer_service import promo_offer_service
 from app.services.promocode_service import PromoCodeService
 from app.services.subscription_service import SubscriptionService
+from app.services.subscription_renewal_service import (
+    SubscriptionRenewalChargeError,
+    SubscriptionRenewalService,
+    build_payment_descriptor,
+    build_renewal_period_id,
+    decode_payment_payload,
+    calculate_missing_amount,
+    encode_payment_payload,
+    with_admin_notification_service,
+)
 from app.services.trial_activation_service import (
     TrialPaymentChargeFailed,
     TrialPaymentInsufficientFunds,
@@ -94,11 +101,9 @@ from app.utils.user_utils import (
 )
 from app.utils.pricing_utils import (
     apply_percentage_discount,
-    calculate_months_from_days,
     calculate_prorated_price,
     format_period_description,
     get_remaining_months,
-    validate_pricing_calculation,
 )
 from app.utils.promo_offer import get_user_active_promo_discount_percent
 
@@ -180,27 +185,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 promo_code_service = PromoCodeService()
-
-
-async def _with_admin_notification_service(
-    handler: Callable[[AdminNotificationService], Awaitable[Any]],
-) -> None:
-    if not getattr(settings, "ADMIN_NOTIFICATIONS_ENABLED", False):
-        return
-    if not settings.BOT_TOKEN:
-        logger.debug("Skipping admin notification: bot token is not configured")
-        return
-
-    bot: Bot | None = None
-    try:
-        bot = Bot(token=settings.BOT_TOKEN)
-        service = AdminNotificationService(bot)
-        await handler(service)
-    except Exception as error:  # pragma: no cover - defensive logging
-        logger.error("Failed to send admin notification from miniapp: %s", error)
-    finally:
-        if bot:
-            await bot.session.close()
+renewal_service = SubscriptionRenewalService()
 
 
 _CRYPTOBOT_MIN_USD = 1.0
@@ -1644,6 +1629,9 @@ async def _resolve_cryptobot_payment_status(
     except (InvalidOperation, TypeError):
         amount_kopeks = None
 
+    descriptor = decode_payment_payload(getattr(payment, "payload", "") or "", expected_user_id=user.id)
+    purpose = "subscription_renewal" if descriptor else "balance_topup"
+
     return MiniAppPaymentStatusResult(
         method="cryptobot",
         status=status,
@@ -1660,6 +1648,9 @@ async def _resolve_cryptobot_payment_status(
             "invoice_id": payment.invoice_id,
             "payload": query.payload,
             "started_at": query.started_at,
+            "purpose": purpose,
+            "subscription_id": descriptor.subscription_id if descriptor else None,
+            "period_days": descriptor.period_days if descriptor else None,
         },
     )
 
@@ -3368,7 +3359,7 @@ async def activate_subscription_trial_endpoint(
         else:
             message = f"{message}\n\n💳 {charged_amount_label} has been deducted from your balance."
 
-    await _with_admin_notification_service(
+    await with_admin_notification_service(
         lambda service: service.send_trial_activation_notification(
             db,
             user,
@@ -3803,10 +3794,93 @@ def _build_promo_offer_payload(user: Optional[User]) -> Optional[Dict[str, Any]]
     return payload
 
 
-def _build_renewal_period_id(period_days: int) -> str:
-    return f"days:{period_days}"
+def _format_payment_method_title(method: str) -> str:
+    mapping = {
+        "cryptobot": "CryptoBot",
+        "yookassa": "YooKassa",
+        "yookassa_sbp": "YooKassa СБП",
+        "mulenpay": "MulenPay",
+        "pal24": "Pal24",
+        "wata": "WataPay",
+        "heleket": "Heleket",
+        "tribute": "Tribute",
+        "stars": "Telegram Stars",
+    }
+    key = (method or "").lower()
+    return mapping.get(key, method.title() if method else "")
 
 
+def _build_renewal_success_message(
+    user: User,
+    subscription: Subscription,
+    charged_amount: int,
+    promo_discount_value: int = 0,
+) -> str:
+    language_code = _normalize_language_code(user)
+    amount_label = settings.format_price(max(0, charged_amount))
+    date_label = (
+        format_local_datetime(subscription.end_date, "%d.%m.%Y %H:%M")
+        if subscription.end_date
+        else ""
+    )
+
+    if language_code == "ru":
+        if charged_amount > 0:
+            message = (
+                f"Подписка продлена до {date_label}. " if date_label else "Подписка продлена. "
+            ) + f"Списано {amount_label}."
+        else:
+            message = (
+                f"Подписка продлена до {date_label}."
+                if date_label
+                else "Подписка успешно продлена."
+            )
+    else:
+        if charged_amount > 0:
+            message = (
+                f"Subscription renewed until {date_label}. " if date_label else "Subscription renewed. "
+            ) + f"Charged {amount_label}."
+        else:
+            message = (
+                f"Subscription renewed until {date_label}."
+                if date_label
+                else "Subscription renewed successfully."
+            )
+
+    if promo_discount_value > 0:
+        discount_label = settings.format_price(promo_discount_value)
+        if language_code == "ru":
+            message += f" Применена дополнительная скидка {discount_label}."
+        else:
+            message += f" Promo discount applied: {discount_label}."
+
+    return message
+
+
+def _build_renewal_pending_message(
+    user: User,
+    missing_amount: int,
+    method: str,
+) -> str:
+    language_code = _normalize_language_code(user)
+    amount_label = settings.format_price(max(0, missing_amount))
+    method_title = _format_payment_method_title(method)
+
+    if language_code == "ru":
+        if method_title:
+            return (
+                f"Недостаточно средств на балансе. Доплатите {amount_label} через {method_title}, "
+                "чтобы завершить продление."
+            )
+        return (
+            f"Недостаточно средств на балансе. Доплатите {amount_label}, чтобы завершить продление."
+        )
+
+    if method_title:
+        return (
+            f"Not enough balance. Pay the remaining {amount_label} via {method_title} to finish the renewal."
+        )
+    return f"Not enough balance. Pay the remaining {amount_label} to finish the renewal."
 def _parse_period_identifier(identifier: Optional[str]) -> Optional[int]:
     if not identifier:
         return None
@@ -3826,94 +3900,13 @@ async def _calculate_subscription_renewal_pricing(
     user: User,
     subscription: Subscription,
     period_days: int,
-) -> Dict[str, Any]:
-    connected_uuids = [str(uuid) for uuid in list(subscription.connected_squads or [])]
-    server_ids: List[int] = []
-    if connected_uuids:
-        server_ids = await get_server_ids_by_uuids(db, connected_uuids)
-
-    traffic_limit = subscription.traffic_limit_gb
-    if traffic_limit is None:
-        traffic_limit = settings.DEFAULT_TRAFFIC_LIMIT_GB
-
-    devices_limit = subscription.device_limit
-    if devices_limit is None:
-        devices_limit = settings.DEFAULT_DEVICE_LIMIT
-
-    total_cost, details = await calculate_subscription_total_cost(
+):
+    return await renewal_service.calculate_pricing(
         db,
+        user,
+        subscription,
         period_days,
-        int(traffic_limit or 0),
-        server_ids,
-        int(devices_limit or 0),
-        user=user,
     )
-
-    months = details.get("months_in_period") or calculate_months_from_days(period_days)
-
-    base_original_total = (
-        details.get("base_price_original", 0)
-        + details.get("traffic_price_per_month", 0) * months
-        + details.get("servers_price_per_month", 0) * months
-        + details.get("devices_price_per_month", 0) * months
-    )
-
-    discounted_total = total_cost
-
-    monthly_additions = 0
-    if months > 0:
-        monthly_additions = (
-            details.get("total_servers_price", 0) // months
-            + details.get("total_devices_price", 0) // months
-            + details.get("total_traffic_price", 0) // months
-        )
-
-    if not validate_pricing_calculation(
-        details.get("base_price", 0),
-        monthly_additions,
-        months,
-        discounted_total,
-    ):
-        logger.warning(
-            "Renewal pricing validation failed for subscription %s (period %s)",
-            subscription.id,
-            period_days,
-        )
-
-    promo_percent = get_user_active_promo_discount_percent(user)
-    final_total = discounted_total
-    promo_discount_value = 0
-    if promo_percent > 0 and discounted_total > 0:
-        final_total, promo_discount_value = apply_percentage_discount(
-            discounted_total,
-            promo_percent,
-        )
-
-    overall_discount_value = max(0, base_original_total - final_total)
-    overall_discount_percent = 0
-    if base_original_total > 0 and overall_discount_value > 0:
-        overall_discount_percent = int(
-            round(overall_discount_value * 100 / base_original_total)
-        )
-
-    per_month = final_total // months if months else final_total
-
-    pricing_payload: Dict[str, Any] = {
-        "period_id": _build_renewal_period_id(period_days),
-        "period_days": period_days,
-        "months": months,
-        "base_original_total": base_original_total,
-        "discounted_total": discounted_total,
-        "final_total": final_total,
-        "promo_discount_value": promo_discount_value,
-        "promo_discount_percent": promo_percent if promo_discount_value else 0,
-        "overall_discount_percent": overall_discount_percent,
-        "per_month": per_month,
-        "server_ids": list(server_ids),
-        "details": details,
-    }
-
-    return pricing_payload
 
 
 async def _prepare_subscription_renewal_options(
@@ -3929,12 +3922,13 @@ async def _prepare_subscription_renewal_options(
 
     for period_days in available_periods:
         try:
-            pricing = await _calculate_subscription_renewal_pricing(
+            pricing_model = await _calculate_subscription_renewal_pricing(
                 db,
                 user,
                 subscription,
                 period_days,
             )
+            pricing = pricing_model.to_payload()
         except Exception as error:  # pragma: no cover - defensive logging
             logger.warning(
                 "Failed to calculate renewal pricing for subscription %s (period %s): %s",
@@ -4108,7 +4102,11 @@ async def _authorize_miniapp_user(
     return user
 
 
-def _ensure_paid_subscription(user: User) -> Subscription:
+def _ensure_paid_subscription(
+    user: User,
+    *,
+    allowed_statuses: Optional[Collection[str]] = None,
+) -> Subscription:
     subscription = getattr(user, "subscription", None)
     if not subscription:
         raise HTTPException(
@@ -4116,7 +4114,9 @@ def _ensure_paid_subscription(user: User) -> Subscription:
             detail={"code": "subscription_not_found", "message": "Subscription not found"},
         )
 
-    if getattr(subscription, "is_trial", False):
+    normalized_allowed_statuses = set(allowed_statuses or {"active"})
+
+    if getattr(subscription, "is_trial", False) and "trial" not in normalized_allowed_statuses:
         raise HTTPException(
             status.HTTP_403_FORBIDDEN,
             detail={
@@ -4125,7 +4125,28 @@ def _ensure_paid_subscription(user: User) -> Subscription:
             },
         )
 
-    if not getattr(subscription, "is_active", False):
+    actual_status = getattr(subscription, "actual_status", None) or ""
+
+    if actual_status not in normalized_allowed_statuses:
+        if actual_status == "trial":
+            detail = {
+                "code": "paid_subscription_required",
+                "message": "This action is available only for paid subscriptions",
+            }
+        elif actual_status == "disabled":
+            detail = {
+                "code": "subscription_disabled",
+                "message": "Subscription is disabled",
+            }
+        else:
+            detail = {
+                "code": "subscription_inactive",
+                "message": "Subscription must be active to manage settings",
+            }
+
+        raise HTTPException(status.HTTP_403_FORBIDDEN, detail=detail)
+
+    if not getattr(subscription, "is_active", False) and "expired" not in normalized_allowed_statuses:
         raise HTTPException(
             status.HTTP_403_FORBIDDEN,
             detail={
@@ -4398,7 +4419,10 @@ async def get_subscription_renewal_options_endpoint(
     db: AsyncSession = Depends(get_db_session),
 ) -> MiniAppSubscriptionRenewalOptionsResponse:
     user = await _authorize_miniapp_user(payload.init_data, db)
-    subscription = _ensure_paid_subscription(user)
+    subscription = _ensure_paid_subscription(
+        user,
+        allowed_statuses={"active", "trial", "expired"},
+    )
     _validate_subscription_id(payload.subscription_id, subscription)
 
     periods, pricing_map, default_period_id = await _prepare_subscription_renewal_options(
@@ -4477,7 +4501,10 @@ async def submit_subscription_renewal_endpoint(
     db: AsyncSession = Depends(get_db_session),
 ) -> MiniAppSubscriptionRenewalResponse:
     user = await _authorize_miniapp_user(payload.init_data, db)
-    subscription = _ensure_paid_subscription(user)
+    subscription = _ensure_paid_subscription(
+        user,
+        allowed_statuses={"active", "trial", "expired"},
+    )
     _validate_subscription_id(payload.subscription_id, subscription)
 
     period_days: Optional[int] = None
@@ -4508,8 +4535,10 @@ async def submit_subscription_renewal_endpoint(
             detail={"code": "period_unavailable", "message": "Selected renewal period is not available"},
         )
 
+    method = (payload.method or "").strip().lower()
+
     try:
-        pricing = await _calculate_subscription_renewal_pricing(
+        pricing_model = await _calculate_subscription_renewal_pricing(
             db,
             user,
             subscription,
@@ -4529,156 +4558,167 @@ async def submit_subscription_renewal_endpoint(
             detail={"code": "pricing_failed", "message": "Failed to calculate renewal pricing"},
         ) from error
 
-    final_total = int(pricing.get("final_total") or 0)
+    pricing = pricing_model.to_payload()
+    final_total = int(pricing_model.final_total)
     balance_kopeks = getattr(user, "balance_kopeks", 0)
-
-    if final_total > 0 and balance_kopeks < final_total:
-        missing = final_total - balance_kopeks
-        raise HTTPException(
-            status.HTTP_402_PAYMENT_REQUIRED,
-            detail={
-                "code": "insufficient_funds",
-                "message": "Not enough funds to renew the subscription",
-                "missing_amount_kopeks": missing,
-            },
-        )
-
-    consume_promo_offer = bool(pricing.get("promo_discount_value"))
+    missing_amount = calculate_missing_amount(balance_kopeks, final_total)
     description = f"Продление подписки на {period_days} дней"
-    old_end_date = subscription.end_date
 
-    if final_total > 0 or consume_promo_offer:
-        success = await subtract_user_balance(
-            db,
-            user,
-            final_total,
-            description,
-            consume_promo_offer=consume_promo_offer,
-        )
-        if not success:
+    if not method or missing_amount <= 0:
+        if final_total > 0 and balance_kopeks < final_total:
+            missing = final_total - balance_kopeks
             raise HTTPException(
-                status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail={"code": "charge_failed", "message": "Failed to charge balance"},
+                status.HTTP_402_PAYMENT_REQUIRED,
+                detail={
+                    "code": "insufficient_funds",
+                    "message": "Not enough funds to renew the subscription",
+                    "missing_amount_kopeks": missing,
+                },
             )
-        await db.refresh(user)
 
-    subscription = await extend_subscription(db, subscription, period_days)
-
-    server_ids = pricing.get("server_ids") or []
-    server_prices_for_period = pricing.get("details", {}).get(
-        "servers_individual_prices",
-        [],
-    )
-    if server_ids:
         try:
-            await add_subscription_servers(
-                db,
-                subscription,
-                server_ids,
-                server_prices_for_period,
-            )
-        except Exception as error:  # pragma: no cover - defensive logging
-            logger.warning(
-                "Failed to record renewal server prices for subscription %s: %s",
-                subscription.id,
-                error,
-            )
-
-    subscription_service = SubscriptionService()
-    try:
-        await subscription_service.update_remnawave_user(
-            db,
-            subscription,
-            reset_traffic=settings.RESET_TRAFFIC_ON_PAYMENT,
-            reset_reason="subscription renewal",
-        )
-    except RemnaWaveConfigurationError as error:  # pragma: no cover - configuration issues
-        logger.warning("RemnaWave update skipped: %s", error)
-    except Exception as error:  # pragma: no cover - defensive logging
-        logger.error(
-            "Failed to update RemnaWave user for subscription %s: %s",
-            subscription.id,
-            error,
-        )
-
-    transaction: Optional[Transaction] = None
-    try:
-        transaction = await create_transaction(
-            db=db,
-            user_id=user.id,
-            type=TransactionType.SUBSCRIPTION_PAYMENT,
-            amount_kopeks=final_total,
-            description=description,
-        )
-    except Exception as error:  # pragma: no cover - defensive logging
-        logger.warning(
-            "Failed to create renewal transaction for subscription %s: %s",
-            subscription.id,
-            error,
-        )
-
-    await db.refresh(user)
-    await db.refresh(subscription)
-
-    if transaction and old_end_date and subscription.end_date:
-        await _with_admin_notification_service(
-            lambda service: service.send_subscription_extension_notification(
+            result = await renewal_service.finalize(
                 db,
                 user,
                 subscription,
-                transaction,
-                period_days,
-                old_end_date,
-                new_end_date=subscription.end_date,
-                balance_after=user.balance_kopeks,
+                pricing_model,
+                description=description,
             )
+        except SubscriptionRenewalChargeError as error:
+            logger.error(
+                "Failed to charge balance for subscription renewal %s: %s",
+                subscription.id,
+                error,
+            )
+            raise HTTPException(
+                status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail={"code": "charge_failed", "message": "Failed to charge balance"},
+            ) from error
+
+        updated_subscription = result.subscription
+        message = _build_renewal_success_message(
+            user,
+            updated_subscription,
+            result.total_amount_kopeks,
+            pricing_model.promo_discount_value,
         )
 
-    language_code = _normalize_language_code(user)
-    amount_label = settings.format_price(final_total)
-    date_label = (
-        format_local_datetime(subscription.end_date, "%d.%m.%Y %H:%M")
-        if subscription.end_date
-        else ""
-    )
+        return MiniAppSubscriptionRenewalResponse(
+            message=message,
+            balance_kopeks=user.balance_kopeks,
+            balance_label=settings.format_price(user.balance_kopeks),
+            subscription_id=updated_subscription.id,
+            renewed_until=updated_subscription.end_date,
+        )
 
-    if language_code == "ru":
-        if final_total > 0:
-            message = (
-                f"Подписка продлена до {date_label}. " if date_label else "Подписка продлена. "
-            ) + f"Списано {amount_label}."
-        else:
-            message = (
-                f"Подписка продлена до {date_label}."
-                if date_label
-                else "Подписка успешно продлена."
+    supported_methods = {"cryptobot"}
+    if method not in supported_methods:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            detail={"code": "unsupported_method", "message": "Payment method is not supported for renewal"},
+        )
+
+    if method == "cryptobot":
+        if not settings.is_cryptobot_enabled():
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="Payment method is unavailable")
+
+        rate = await _get_usd_to_rub_rate()
+        min_amount_kopeks, max_amount_kopeks = _compute_cryptobot_limits(rate)
+        if missing_amount < min_amount_kopeks:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                detail={
+                    "code": "amount_below_minimum",
+                    "message": f"Amount is below minimum ({min_amount_kopeks / 100:.2f} RUB)",
+                },
             )
-    else:
-        if final_total > 0:
-            message = (
-                f"Subscription renewed until {date_label}. " if date_label else "Subscription renewed. "
-            ) + f"Charged {amount_label}."
-        else:
-            message = (
-                f"Subscription renewed until {date_label}."
-                if date_label
-                else "Subscription renewed successfully."
+        if missing_amount > max_amount_kopeks:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                detail={
+                    "code": "amount_above_maximum",
+                    "message": f"Amount exceeds maximum ({max_amount_kopeks / 100:.2f} RUB)",
+                },
             )
 
-    promo_discount_value = pricing.get("promo_discount_value") or 0
-    if consume_promo_offer and promo_discount_value > 0:
-        discount_label = settings.format_price(promo_discount_value)
-        if language_code == "ru":
-            message += f" Применена дополнительная скидка {discount_label}."
-        else:
-            message += f" Promo discount applied: {discount_label}."
+        try:
+            decimal_amount = (Decimal(missing_amount) / Decimal(100) / Decimal(str(rate)))
+            amount_usd = float(
+                decimal_amount.quantize(Decimal("0.01"), rounding=ROUND_UP)
+            )
+        except (InvalidOperation, ValueError) as error:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                detail={"code": "conversion_failed", "message": "Unable to convert amount to USD"},
+            ) from error
 
-    return MiniAppSubscriptionRenewalResponse(
-        message=message,
-        balance_kopeks=user.balance_kopeks,
-        balance_label=settings.format_price(user.balance_kopeks),
-        subscription_id=subscription.id,
-        renewed_until=subscription.end_date,
+        if amount_usd <= 0:
+            amount_usd = float(
+                decimal_amount.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+            )
+
+        descriptor = build_payment_descriptor(
+            user.id,
+            subscription.id,
+            period_days,
+            final_total,
+            missing_amount,
+        )
+        payload_value = encode_payment_payload(descriptor)
+
+        payment_service = PaymentService()
+        result = await payment_service.create_cryptobot_payment(
+            db=db,
+            user_id=user.id,
+            amount_usd=amount_usd,
+            asset=settings.CRYPTOBOT_DEFAULT_ASSET,
+            description=description,
+            payload=payload_value,
+        )
+        if not result:
+            raise HTTPException(
+                status.HTTP_502_BAD_GATEWAY,
+                detail={"code": "payment_creation_failed", "message": "Failed to create payment"},
+            )
+
+        payment_url = (
+            result.get("mini_app_invoice_url")
+            or result.get("bot_invoice_url")
+            or result.get("web_app_invoice_url")
+        )
+        if not payment_url:
+            raise HTTPException(
+                status.HTTP_502_BAD_GATEWAY,
+                detail={"code": "payment_url_missing", "message": "Failed to obtain payment url"},
+            )
+
+        extra_payload = {
+            "bot_invoice_url": result.get("bot_invoice_url"),
+            "mini_app_invoice_url": result.get("mini_app_invoice_url"),
+            "web_app_invoice_url": result.get("web_app_invoice_url"),
+        }
+
+        message = _build_renewal_pending_message(user, missing_amount, method)
+
+        return MiniAppSubscriptionRenewalResponse(
+            success=False,
+            message=message,
+            balance_kopeks=user.balance_kopeks,
+            balance_label=settings.format_price(user.balance_kopeks),
+            subscription_id=subscription.id,
+            requires_payment=True,
+            payment_method=method,
+            payment_url=payment_url,
+            payment_amount_kopeks=missing_amount,
+            payment_id=result.get("local_payment_id"),
+            invoice_id=result.get("invoice_id"),
+            payment_payload=payload_value,
+            payment_extra={key: value for key, value in extra_payload.items() if value},
+        )
+
+    raise HTTPException(
+        status.HTTP_400_BAD_REQUEST,
+        detail={"code": "unsupported_method", "message": "Payment method is not supported for renewal"},
     )
 
 
@@ -4791,7 +4831,7 @@ async def subscription_purchase_endpoint(
             pass
 
     if subscription and transaction and period_days:
-        await _with_admin_notification_service(
+        await with_admin_notification_service(
             lambda service: service.send_subscription_purchase_notification(
                 db,
                 user,
@@ -5020,7 +5060,7 @@ async def update_subscription_servers_endpoint(
     service = SubscriptionService()
     await service.update_remnawave_user(db, subscription)
 
-    await _with_admin_notification_service(
+    await with_admin_notification_service(
         lambda service: service.send_subscription_update_notification(
             db,
             user,
@@ -5184,7 +5224,7 @@ async def update_subscription_traffic_endpoint(
     service = SubscriptionService()
     await service.update_remnawave_user(db, subscription)
 
-    await _with_admin_notification_service(
+    await with_admin_notification_service(
         lambda service: service.send_subscription_update_notification(
             db,
             user,
@@ -5335,7 +5375,7 @@ async def update_subscription_devices_endpoint(
     service = SubscriptionService()
     await service.update_remnawave_user(db, subscription)
 
-    await _with_admin_notification_service(
+    await with_admin_notification_service(
         lambda service: service.send_subscription_update_notification(
             db,
             user,

@@ -202,6 +202,7 @@ class MiniAppSubscriptionRenewalRequest(BaseModel):
     subscription_id: Optional[int] = Field(default=None, alias="subscriptionId")
     period_id: Optional[str] = Field(default=None, alias="periodId")
     period_days: Optional[int] = Field(default=None, alias="periodDays")
+    method: Optional[str] = None
 
     model_config = ConfigDict(populate_by_name=True)
 
@@ -213,6 +214,14 @@ class MiniAppSubscriptionRenewalResponse(BaseModel):
     balance_label: Optional[str] = Field(default=None, alias="balanceLabel")
     subscription_id: Optional[int] = Field(default=None, alias="subscriptionId")
     renewed_until: Optional[datetime] = Field(default=None, alias="renewedUntil")
+    requires_payment: bool = Field(default=False, alias="requiresPayment")
+    payment_method: Optional[str] = Field(default=None, alias="paymentMethod")
+    payment_url: Optional[str] = Field(default=None, alias="paymentUrl")
+    payment_amount_kopeks: Optional[int] = Field(default=None, alias="paymentAmountKopeks")
+    payment_id: Optional[int] = Field(default=None, alias="paymentId")
+    invoice_id: Optional[str] = Field(default=None, alias="invoiceId")
+    payment_payload: Optional[str] = Field(default=None, alias="paymentPayload")
+    payment_extra: Optional[Dict[str, Any]] = Field(default=None, alias="paymentExtra")
 
     model_config = ConfigDict(populate_by_name=True)
 

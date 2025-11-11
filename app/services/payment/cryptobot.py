@@ -16,10 +16,19 @@ from app.database.models import PaymentMethod, TransactionType
 from app.services.subscription_auto_purchase_service import (
     auto_purchase_saved_cart_after_topup,
 )
+from app.services.subscription_renewal_service import (
+    SubscriptionRenewalChargeError,
+    SubscriptionRenewalService,
+    RenewalPaymentDescriptor,
+    decode_payment_payload,
+)
 from app.utils.currency_converter import currency_converter
 from app.utils.user_utils import format_referrer_info
 
 logger = logging.getLogger(__name__)
+
+
+renewal_service = SubscriptionRenewalService()
 
 
 @dataclass(slots=True)
@@ -172,6 +181,20 @@ class CryptoBotPaymentMixin:
             updated_payment = await cryptobot_crud.update_cryptobot_payment_status(
                 db, invoice_id, status, paid_at
             )
+
+            descriptor = decode_payment_payload(
+                getattr(updated_payment, "payload", "") or "",
+                expected_user_id=updated_payment.user_id,
+            )
+            if descriptor:
+                renewal_handled = await self._process_subscription_renewal_payment(
+                    db,
+                    updated_payment,
+                    descriptor,
+                    cryptobot_crud,
+                )
+                if renewal_handled:
+                    return True
 
             if not updated_payment.transaction_id:
                 amount_usd = updated_payment.amount_float
@@ -393,6 +416,136 @@ class CryptoBotPaymentMixin:
                 "Ошибка обработки CryptoBot webhook: %s", error, exc_info=True
             )
             return False
+
+    async def _process_subscription_renewal_payment(
+        self,
+        db: AsyncSession,
+        payment: Any,
+        descriptor: RenewalPaymentDescriptor,
+        cryptobot_crud: Any,
+    ) -> bool:
+        try:
+            payment_service_module = import_module("app.services.payment_service")
+            user = await payment_service_module.get_user_by_id(db, payment.user_id)
+        except Exception as error:
+            logger.error(
+                "Не удалось загрузить пользователя %s для продления через CryptoBot: %s",
+                getattr(payment, "user_id", None),
+                error,
+            )
+            return False
+
+        if not user:
+            logger.error(
+                "Пользователь %s не найден при обработке продления через CryptoBot",
+                getattr(payment, "user_id", None),
+            )
+            return False
+
+        subscription = getattr(user, "subscription", None)
+        if not subscription or subscription.id != descriptor.subscription_id:
+            logger.warning(
+                "Продление через CryptoBot отклонено: подписка %s не совпадает с ожидаемой %s",
+                getattr(subscription, "id", None),
+                descriptor.subscription_id,
+            )
+            return False
+
+        try:
+            pricing_model = await renewal_service.calculate_pricing(
+                db,
+                user,
+                subscription,
+                descriptor.period_days,
+            )
+        except Exception as error:
+            logger.error(
+                "Не удалось пересчитать стоимость продления для CryptoBot %s: %s",
+                payment.invoice_id,
+                error,
+            )
+            return False
+
+        if pricing_model.final_total != descriptor.total_amount_kopeks:
+            logger.warning(
+                "Сумма продления через CryptoBot %s не совпадает (ожидалось %s, получено %s)",
+                payment.invoice_id,
+                pricing_model.final_total,
+                descriptor.total_amount_kopeks,
+            )
+            return False
+
+        required_balance = max(
+            0,
+            pricing_model.final_total - descriptor.missing_amount_kopeks,
+        )
+
+        current_balance = getattr(user, "balance_kopeks", 0)
+        if current_balance < required_balance:
+            logger.warning(
+                "Недостаточно средств на балансе пользователя %s для завершения продления: нужно %s, доступно %s",
+                user.id,
+                required_balance,
+                current_balance,
+            )
+            return False
+
+        description = f"Продление подписки на {descriptor.period_days} дней"
+
+        try:
+            result = await renewal_service.finalize(
+                db,
+                user,
+                subscription,
+                pricing_model,
+                charge_balance_amount=required_balance,
+                description=description,
+                payment_method=PaymentMethod.CRYPTOBOT,
+            )
+        except SubscriptionRenewalChargeError as error:
+            logger.error(
+                "Списание баланса не выполнено при продлении через CryptoBot %s: %s",
+                payment.invoice_id,
+                error,
+            )
+            return False
+        except Exception as error:
+            logger.error(
+                "Ошибка завершения продления через CryptoBot %s: %s",
+                payment.invoice_id,
+                error,
+                exc_info=True,
+            )
+            return False
+
+        transaction = result.transaction
+        if transaction:
+            try:
+                await cryptobot_crud.link_cryptobot_payment_to_transaction(
+                    db,
+                    payment.invoice_id,
+                    transaction.id,
+                )
+            except Exception as error:
+                logger.warning(
+                    "Не удалось связать платеж CryptoBot %s с транзакцией %s: %s",
+                    payment.invoice_id,
+                    transaction.id,
+                    error,
+                )
+
+        external_amount_label = settings.format_price(descriptor.missing_amount_kopeks)
+        balance_amount_label = settings.format_price(required_balance)
+
+        logger.info(
+            "Подписка %s продлена через CryptoBot invoice %s (внешний платеж %s, списано с баланса %s)",
+            subscription.id,
+            payment.invoice_id,
+            external_amount_label,
+            balance_amount_label,
+        )
+
+        return True
 
     async def _deliver_admin_topup_notification(
         self, context: _AdminNotificationContext
