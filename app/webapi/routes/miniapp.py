@@ -49,6 +49,7 @@ from app.database.models import (
     PromoGroup,
     PromoOfferTemplate,
     Subscription,
+    SubscriptionStatus,
     SubscriptionTemporaryAccess,
     Transaction,
     TransactionType,
@@ -4137,6 +4138,37 @@ def _ensure_paid_subscription(user: User) -> Subscription:
     return subscription
 
 
+def _ensure_subscription_for_renewal(user: User) -> Subscription:
+    subscription = getattr(user, "subscription", None)
+    if not subscription:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND,
+            detail={"code": "subscription_not_found", "message": "Subscription not found"},
+        )
+
+    allowed_statuses = {
+        SubscriptionStatus.ACTIVE.value,
+        SubscriptionStatus.TRIAL.value,
+        SubscriptionStatus.EXPIRED.value,
+    }
+    actual_allowed_statuses = {"active", "trial", "expired"}
+    actual_status = getattr(subscription, "actual_status", None)
+
+    if (
+        subscription.status not in allowed_statuses
+        and actual_status not in actual_allowed_statuses
+    ):
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            detail={
+                "code": "subscription_ineligible_for_renewal",
+                "message": "Subscription must be active, trial or expired to renew",
+            },
+        )
+
+    return subscription
+
+
 async def _prepare_server_catalog(
     db: AsyncSession,
     user: User,
@@ -4398,7 +4430,7 @@ async def get_subscription_renewal_options_endpoint(
     db: AsyncSession = Depends(get_db_session),
 ) -> MiniAppSubscriptionRenewalOptionsResponse:
     user = await _authorize_miniapp_user(payload.init_data, db)
-    subscription = _ensure_paid_subscription(user)
+    subscription = _ensure_subscription_for_renewal(user)
     _validate_subscription_id(payload.subscription_id, subscription)
 
     periods, pricing_map, default_period_id = await _prepare_subscription_renewal_options(
@@ -4477,7 +4509,7 @@ async def submit_subscription_renewal_endpoint(
     db: AsyncSession = Depends(get_db_session),
 ) -> MiniAppSubscriptionRenewalResponse:
     user = await _authorize_miniapp_user(payload.init_data, db)
-    subscription = _ensure_paid_subscription(user)
+    subscription = _ensure_subscription_for_renewal(user)
     _validate_subscription_id(payload.subscription_id, subscription)
 
     period_days: Optional[int] = None
