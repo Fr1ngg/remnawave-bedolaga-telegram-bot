@@ -4663,6 +4663,7 @@ async def submit_subscription_renewal_endpoint(
             period_days,
             final_total,
             missing_amount,
+            pricing_snapshot=pricing,
         )
         payload_value = encode_payment_payload(descriptor)
 

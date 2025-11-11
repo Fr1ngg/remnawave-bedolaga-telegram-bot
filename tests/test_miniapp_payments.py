@@ -22,7 +22,11 @@ from app.database.models import PaymentMethod
 from app.services.subscription_renewal_service import (
     SubscriptionRenewalPricing,
     SubscriptionRenewalResult,
+    build_payment_descriptor,
+    decode_payment_payload,
+    encode_payment_payload,
 )
+from app.services.payment.cryptobot import CryptoBotPaymentMixin
 from app.webapi.schemas.miniapp import (
     MiniAppPaymentCreateRequest,
     MiniAppPaymentIntegrationType,
@@ -47,6 +51,41 @@ def test_compute_cryptobot_limits_scale_with_rate():
     assert high_rate_max == 12000000
     assert high_rate_min > low_rate_min
     assert high_rate_max > low_rate_max
+
+
+def test_encode_decode_renewal_payload_preserves_snapshot():
+    pricing_model = SubscriptionRenewalPricing(
+        period_days=30,
+        period_id='days:30',
+        months=1,
+        base_original_total=12000,
+        discounted_total=10000,
+        final_total=9000,
+        promo_discount_value=1000,
+        promo_discount_percent=10,
+        overall_discount_percent=25,
+        per_month=9000,
+        server_ids=[1, 2],
+        details={'servers_price_per_month': 1000},
+    )
+
+    descriptor = build_payment_descriptor(
+        user_id=1,
+        subscription_id=42,
+        period_days=30,
+        total_amount_kopeks=pricing_model.final_total,
+        missing_amount_kopeks=1000,
+        pricing_snapshot=pricing_model.to_payload(),
+    )
+
+    payload_value = encode_payment_payload(descriptor)
+    decoded = decode_payment_payload(payload_value, expected_user_id=1)
+
+    assert decoded is not None
+    assert decoded.total_amount_kopeks == 9000
+    assert decoded.missing_amount_kopeks == 1000
+    assert decoded.pricing_snapshot is not None
+    assert decoded.pricing_snapshot.get('server_ids') == [1, 2]
 
 
 @pytest.mark.anyio("asyncio")
@@ -302,6 +341,161 @@ async def test_submit_subscription_renewal_rounds_up_cryptobot_amount(monkeypatc
     assert captured.get('amount_usd') == pytest.approx(1.01)
     assert response.payment_amount_kopeks == 9512
 
+
+@pytest.mark.anyio("asyncio")
+async def test_cryptobot_renewal_uses_pricing_snapshot(monkeypatch):
+    module = sys.modules['app.services.payment.cryptobot']
+    mixin = CryptoBotPaymentMixin()
+
+    subscription = types.SimpleNamespace(id=77, connected_squads=[], traffic_limit_gb=100, device_limit=5)
+    user = types.SimpleNamespace(id=5, balance_kopeks=7000, subscription=subscription)
+
+    pricing_model = SubscriptionRenewalPricing(
+        period_days=30,
+        period_id='days:30',
+        months=1,
+        base_original_total=12000,
+        discounted_total=10000,
+        final_total=10000,
+        promo_discount_value=0,
+        promo_discount_percent=0,
+        overall_discount_percent=0,
+        per_month=10000,
+        server_ids=[11, 22],
+        details={'servers_individual_prices': [500, 500]},
+    )
+
+    descriptor = build_payment_descriptor(
+        user_id=5,
+        subscription_id=77,
+        period_days=30,
+        total_amount_kopeks=10000,
+        missing_amount_kopeks=3000,
+        pricing_snapshot=pricing_model.to_payload(),
+    )
+
+    payment = types.SimpleNamespace(invoice_id='INV-1', user_id=5)
+
+    async def fake_get_user_by_id(db, user_id):  # noqa: ARG001
+        return user if user_id == 5 else None
+
+    monkeypatch.setitem(sys.modules, 'app.services.payment_service', types.SimpleNamespace(get_user_by_id=fake_get_user_by_id))
+
+    async def fail_calculate(*args, **kwargs):  # noqa: ARG001
+        raise AssertionError('calculate_pricing should not be called when snapshot is present')
+
+    monkeypatch.setattr(module.renewal_service, 'calculate_pricing', fail_calculate)
+
+    captured: dict[str, Any] = {}
+
+    async def fake_finalize(db, u, sub, pricing, *, charge_balance_amount=None, description=None, payment_method=None):  # noqa: ARG001
+        captured['pricing'] = pricing
+        captured['charge'] = charge_balance_amount
+        captured['description'] = description
+        captured['payment_method'] = payment_method
+        return SubscriptionRenewalResult(
+            subscription=types.SimpleNamespace(id=sub.id, end_date=datetime.utcnow()),
+            transaction=types.SimpleNamespace(id=999),
+            total_amount_kopeks=pricing.final_total,
+            charged_from_balance_kopeks=charge_balance_amount or pricing.final_total,
+            old_end_date=None,
+        )
+
+    monkeypatch.setattr(module.renewal_service, 'finalize', fake_finalize)
+
+    async def fake_link(db, invoice_id, transaction_id):  # noqa: ARG001
+        captured['linked'] = (invoice_id, transaction_id)
+
+    cryptobot_crud = types.SimpleNamespace(link_cryptobot_payment_to_transaction=fake_link)
+
+    result = await mixin._process_subscription_renewal_payment(
+        db=types.SimpleNamespace(),
+        payment=payment,
+        descriptor=descriptor,
+        cryptobot_crud=cryptobot_crud,
+    )
+
+    assert result is True
+    assert captured['pricing'].server_ids == [11, 22]
+    assert captured['pricing'].final_total == 10000
+    assert captured['charge'] == 7000
+    assert captured['payment_method'] == PaymentMethod.CRYPTOBOT
+    assert captured['linked'] == ('INV-1', 999)
+
+
+@pytest.mark.anyio("asyncio")
+async def test_cryptobot_renewal_accepts_changed_pricing_without_snapshot(monkeypatch):
+    module = sys.modules['app.services.payment.cryptobot']
+    mixin = CryptoBotPaymentMixin()
+
+    subscription = types.SimpleNamespace(id=55, connected_squads=[], traffic_limit_gb=50, device_limit=3)
+    user = types.SimpleNamespace(id=8, balance_kopeks=4000, subscription=subscription)
+
+    descriptor = build_payment_descriptor(
+        user_id=8,
+        subscription_id=55,
+        period_days=30,
+        total_amount_kopeks=5000,
+        missing_amount_kopeks=1000,
+    )
+
+    payment = types.SimpleNamespace(invoice_id='INV-2', user_id=8)
+
+    async def fake_get_user_by_id(db, user_id):  # noqa: ARG001
+        return user if user_id == 8 else None
+
+    monkeypatch.setitem(sys.modules, 'app.services.payment_service', types.SimpleNamespace(get_user_by_id=fake_get_user_by_id))
+
+    recalculated_pricing = SubscriptionRenewalPricing(
+        period_days=30,
+        period_id='days:30',
+        months=1,
+        base_original_total=5200,
+        discounted_total=5200,
+        final_total=5200,
+        promo_discount_value=0,
+        promo_discount_percent=0,
+        overall_discount_percent=0,
+        per_month=5200,
+        server_ids=[],
+        details={},
+    )
+
+    async def fake_calculate(db, u, sub, period):  # noqa: ARG001
+        return recalculated_pricing
+
+    monkeypatch.setattr(module.renewal_service, 'calculate_pricing', fake_calculate)
+
+    captured: dict[str, Any] = {}
+
+    async def fake_finalize(db, u, sub, pricing, *, charge_balance_amount=None, description=None, payment_method=None):  # noqa: ARG001
+        captured['pricing'] = pricing
+        captured['charge'] = charge_balance_amount
+        return SubscriptionRenewalResult(
+            subscription=types.SimpleNamespace(id=sub.id, end_date=datetime.utcnow()),
+            transaction=None,
+            total_amount_kopeks=pricing.final_total,
+            charged_from_balance_kopeks=charge_balance_amount or pricing.final_total,
+            old_end_date=None,
+        )
+
+    monkeypatch.setattr(module.renewal_service, 'finalize', fake_finalize)
+
+    async def noop_link(*args, **kwargs):
+        return None
+
+    cryptobot_crud = types.SimpleNamespace(link_cryptobot_payment_to_transaction=noop_link)
+
+    result = await mixin._process_subscription_renewal_payment(
+        db=types.SimpleNamespace(),
+        payment=payment,
+        descriptor=descriptor,
+        cryptobot_crud=cryptobot_crud,
+    )
+
+    assert result is True
+    assert captured['pricing'].final_total == 5000
+    assert captured['charge'] == 4000
 
 @pytest.mark.anyio("asyncio")
 async def test_create_payment_link_pal24_uses_selected_option(monkeypatch):

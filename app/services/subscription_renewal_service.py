@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import base64
+import json
 import logging
 from dataclasses import dataclass
 from datetime import datetime
@@ -71,6 +73,23 @@ class SubscriptionRenewalPricing:
             "details": dict(self.details),
         }
 
+    @classmethod
+    def from_payload(cls, payload: Dict[str, Any]) -> "SubscriptionRenewalPricing":
+        return cls(
+            period_days=int(payload.get("period_days", 0) or 0),
+            period_id=str(payload.get("period_id") or build_renewal_period_id(int(payload.get("period_days", 0) or 0))),
+            months=int(payload.get("months", 0) or 0),
+            base_original_total=int(payload.get("base_original_total", 0) or 0),
+            discounted_total=int(payload.get("discounted_total", 0) or 0),
+            final_total=int(payload.get("final_total", 0) or 0),
+            promo_discount_value=int(payload.get("promo_discount_value", 0) or 0),
+            promo_discount_percent=int(payload.get("promo_discount_percent", 0) or 0),
+            overall_discount_percent=int(payload.get("overall_discount_percent", 0) or 0),
+            per_month=int(payload.get("per_month", 0) or 0),
+            server_ids=list(payload.get("server_ids", []) or []),
+            details=dict(payload.get("details", {}) or {}),
+        )
+
 
 @dataclass(slots=True)
 class SubscriptionRenewalResult:
@@ -89,6 +108,7 @@ class RenewalPaymentDescriptor:
     total_amount_kopeks: int
     missing_amount_kopeks: int
     payload_id: str
+    pricing_snapshot: Optional[Dict[str, Any]] = None
 
     @property
     def balance_component_kopeks(self) -> int:
@@ -109,6 +129,8 @@ def build_payment_descriptor(
     period_days: int,
     total_amount_kopeks: int,
     missing_amount_kopeks: int,
+    *,
+    pricing_snapshot: Optional[Dict[str, Any]] = None,
 ) -> RenewalPaymentDescriptor:
     return RenewalPaymentDescriptor(
         user_id=user_id,
@@ -117,15 +139,33 @@ def build_payment_descriptor(
         total_amount_kopeks=max(0, int(total_amount_kopeks)),
         missing_amount_kopeks=max(0, int(missing_amount_kopeks)),
         payload_id=uuid4().hex[:8],
+        pricing_snapshot=pricing_snapshot or None,
     )
 
 
 def encode_payment_payload(descriptor: RenewalPaymentDescriptor) -> str:
-    return (
+    snapshot_segment = ""
+    if descriptor.pricing_snapshot:
+        try:
+            raw_snapshot = json.dumps(
+                descriptor.pricing_snapshot,
+                separators=(",", ":"),
+                ensure_ascii=False,
+            ).encode("utf-8")
+            snapshot_segment = base64.urlsafe_b64encode(raw_snapshot).decode("ascii").rstrip("=")
+        except (TypeError, ValueError):
+            snapshot_segment = ""
+
+    payload = (
         f"{_PAYLOAD_PREFIX}|{descriptor.user_id}|{descriptor.subscription_id}|"
         f"{descriptor.period_days}|{descriptor.total_amount_kopeks}|"
         f"{descriptor.missing_amount_kopeks}|{descriptor.payload_id}"
     )
+
+    if snapshot_segment:
+        payload = f"{payload}|{snapshot_segment}"
+
+    return payload
 
 
 def decode_payment_payload(payload: str, expected_user_id: Optional[int] = None) -> Optional[RenewalPaymentDescriptor]:
@@ -137,7 +177,16 @@ def decode_payment_payload(payload: str, expected_user_id: Optional[int] = None)
         return None
 
     try:
-        _, user_id_raw, subscription_raw, period_raw, total_raw, missing_raw, payload_id = parts[:7]
+        (
+            _,
+            user_id_raw,
+            subscription_raw,
+            period_raw,
+            total_raw,
+            missing_raw,
+            payload_id,
+            *snapshot_parts,
+        ) = parts
         user_id = int(user_id_raw)
         subscription_id = int(subscription_raw)
         period_days = int(period_raw)
@@ -145,6 +194,19 @@ def decode_payment_payload(payload: str, expected_user_id: Optional[int] = None)
         missing_amount = int(missing_raw)
     except (TypeError, ValueError):
         return None
+
+    pricing_snapshot: Optional[Dict[str, Any]] = None
+    if snapshot_parts:
+        encoded_snapshot = snapshot_parts[0]
+        if encoded_snapshot:
+            padding = "=" * (-len(encoded_snapshot) % 4)
+            try:
+                decoded = base64.urlsafe_b64decode((encoded_snapshot + padding).encode("ascii"))
+                snapshot_data = json.loads(decoded.decode("utf-8"))
+                if isinstance(snapshot_data, dict):
+                    pricing_snapshot = snapshot_data
+            except (ValueError, json.JSONDecodeError, UnicodeDecodeError):
+                logger.warning("Failed to decode renewal pricing snapshot from payload")
 
     if expected_user_id is not None and user_id != expected_user_id:
         return None
@@ -156,6 +218,7 @@ def decode_payment_payload(payload: str, expected_user_id: Optional[int] = None)
         total_amount_kopeks=max(0, total_amount),
         missing_amount_kopeks=max(0, missing_amount),
         payload_id=payload_id,
+        pricing_snapshot=pricing_snapshot,
     )
 
 
@@ -167,6 +230,7 @@ def build_payment_metadata(descriptor: RenewalPaymentDescriptor) -> Dict[str, An
         "total_amount_kopeks": str(descriptor.total_amount_kopeks),
         "missing_amount_kopeks": str(descriptor.missing_amount_kopeks),
         "payload_id": descriptor.payload_id,
+        "pricing_snapshot": descriptor.pricing_snapshot or {},
     }
 
 
@@ -202,6 +266,12 @@ def parse_payment_metadata(
     if expected_user_id is not None and user_id_int is not None and user_id_int != expected_user_id:
         return None
 
+    pricing_snapshot = metadata.get("pricing_snapshot")
+    if isinstance(pricing_snapshot, dict):
+        snapshot_dict = pricing_snapshot
+    else:
+        snapshot_dict = None
+
     return RenewalPaymentDescriptor(
         user_id=user_id_int or expected_user_id or 0,
         subscription_id=subscription_id,
@@ -209,6 +279,7 @@ def parse_payment_metadata(
         total_amount_kopeks=max(0, total_amount),
         missing_amount_kopeks=max(0, missing_amount),
         payload_id=payload_id,
+        pricing_snapshot=snapshot_dict,
     )
 
 

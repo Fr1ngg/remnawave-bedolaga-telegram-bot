@@ -18,8 +18,10 @@ from app.services.subscription_auto_purchase_service import (
 )
 from app.services.subscription_renewal_service import (
     SubscriptionRenewalChargeError,
+    SubscriptionRenewalPricing,
     SubscriptionRenewalService,
     RenewalPaymentDescriptor,
+    build_renewal_period_id,
     decode_payment_payload,
 )
 from app.utils.currency_converter import currency_converter
@@ -451,33 +453,58 @@ class CryptoBotPaymentMixin:
             )
             return False
 
-        try:
-            pricing_model = await renewal_service.calculate_pricing(
-                db,
-                user,
-                subscription,
-                descriptor.period_days,
-            )
-        except Exception as error:
-            logger.error(
-                "Не удалось пересчитать стоимость продления для CryptoBot %s: %s",
-                payment.invoice_id,
-                error,
-            )
-            return False
+        pricing_model: Optional[SubscriptionRenewalPricing] = None
+        if descriptor.pricing_snapshot:
+            try:
+                pricing_model = SubscriptionRenewalPricing.from_payload(
+                    descriptor.pricing_snapshot
+                )
+            except Exception as error:
+                logger.warning(
+                    "Не удалось восстановить сохраненную стоимость продления из payload %s: %s",
+                    payment.invoice_id,
+                    error,
+                )
 
-        if pricing_model.final_total != descriptor.total_amount_kopeks:
-            logger.warning(
-                "Сумма продления через CryptoBot %s не совпадает (ожидалось %s, получено %s)",
-                payment.invoice_id,
-                pricing_model.final_total,
-                descriptor.total_amount_kopeks,
-            )
-            return False
+        if pricing_model is None:
+            try:
+                pricing_model = await renewal_service.calculate_pricing(
+                    db,
+                    user,
+                    subscription,
+                    descriptor.period_days,
+                )
+            except Exception as error:
+                logger.error(
+                    "Не удалось пересчитать стоимость продления для CryptoBot %s: %s",
+                    payment.invoice_id,
+                    error,
+                )
+                return False
+
+            if pricing_model.final_total != descriptor.total_amount_kopeks:
+                logger.warning(
+                    "Сумма продления через CryptoBot %s изменилась (ожидалось %s, получено %s)",
+                    payment.invoice_id,
+                    descriptor.total_amount_kopeks,
+                    pricing_model.final_total,
+                )
+                pricing_model.final_total = descriptor.total_amount_kopeks
+                pricing_model.per_month = (
+                    descriptor.total_amount_kopeks // pricing_model.months
+                    if pricing_model.months
+                    else descriptor.total_amount_kopeks
+                )
+
+        pricing_model.period_days = descriptor.period_days
+        pricing_model.period_id = build_renewal_period_id(descriptor.period_days)
 
         required_balance = max(
             0,
-            pricing_model.final_total - descriptor.missing_amount_kopeks,
+            min(
+                pricing_model.final_total,
+                descriptor.balance_component_kopeks,
+            ),
         )
 
         current_balance = getattr(user, "balance_kopeks", 0)
