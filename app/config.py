@@ -328,7 +328,7 @@ class Settings(BaseSettings):
     SKIP_REFERRAL_CODE: bool = False
 
     DEFAULT_LANGUAGE: str = "ru"
-    AVAILABLE_LANGUAGES: str = "ru,en"
+    AVAILABLE_LANGUAGES: str = "ru,en,ua,zh"
     LANGUAGE_SELECTION_ENABLED: bool = True
     
     LOG_LEVEL: str = "INFO"
@@ -703,11 +703,11 @@ class Settings(BaseSettings):
             langs = self.AVAILABLE_LANGUAGES
             if isinstance(langs, str):
                 if not langs.strip():
-                    return ["ru", "en"]
+                    return ["ru", "en", "ua", "zh"]
                 return [x.strip() for x in langs.split(',') if x.strip()]
-            return ["ru", "en"]
+            return ["ru", "en", "ua", "zh"]
         except AttributeError:
-            return ["ru", "en"]
+            return ["ru", "en", "ua", "zh"]
 
     def is_language_selection_enabled(self) -> bool:
         return bool(getattr(self, "LANGUAGE_SELECTION_ENABLED", True))
