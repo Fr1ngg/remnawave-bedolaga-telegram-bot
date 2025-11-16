@@ -1,0 +1,72 @@
+[project]
+name = "remnawave-bedolaga-telegram-bot"
+version = "0.0.0"
+description = "Add your description here"
+requires-python = ">=3.13"
+dependencies = [
+    "aiogram==3.22.0",
+    "aiogram-dialog==2.4.0",
+    "dishka==1.7.2",
+    "fastapi==0.121.2",
+    "fluentogram==1.2.1",
+    "granian==2.5.7",
+    "pydantic-settings==2.12.0",
+    "redis==7.0.1",
+]
+
+[dependency-groups]
+dev = [
+    "ruff==0.14.5",
+]
+
+[tool.ruff]
+line-length = 99
+target-version = "py313"
+exclude = [
+    ".git",
+    "venv",
+    ".venv",
+]
+
+src = ["src"]
+
+[tool.ruff.lint]
+select = [
+    "E",
+    "F",
+    "B",
+    "I",
+    "UP",
+    "N",
+    "SIM",
+    "C4",
+    "TID",
+    "T10",
+    "Q",
+    "RET",
+    "S",
+    "BLE",
+    "TRY",
+]
+
+ignore = [
+    "N805",
+    "UP045",
+    "UP006",
+    "UP035",
+    "TID252",
+    "Q000",
+    "Q003",
+    "E501",
+    "UP046",
+]
+
+[tool.ruff.lint.isort]
+combine-as-imports = true
+force-single-line = false
+known-first-party = ["src"]
+
+[tool.ruff.format]
+quote-style = "single"
+indent-style = "space"
+docstring-code-format = true
