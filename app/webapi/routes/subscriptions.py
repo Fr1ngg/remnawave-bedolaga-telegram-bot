@@ -159,7 +159,10 @@ async def create_subscription(
                 existing,
                 duration_days=duration_days,
                 traffic_limit_gb=traffic_limit_gb,
-                device_limit=trial_device_limit or settings.TRIAL_DEVICE_LIMIT,
+                device_limit=
+                    trial_device_limit
+                    if trial_device_limit is not None
+                    else settings.TRIAL_DEVICE_LIMIT,
                 connected_squads=connected_squads,
                 is_trial=True,
                 update_server_counters=True,
