@@ -129,7 +129,7 @@ async def create_paid_subscription(
     connected_squads: List[str] = None,
     update_server_counters: bool = False,
 ) -> Subscription:
-    
+
     end_date = datetime.utcnow() + timedelta(days=duration_days)
     
     if device_limit is None:
@@ -180,6 +180,91 @@ async def create_paid_subscription(
             logger.error(
                 "⚠️ Ошибка обновления счетчика пользователей серверов для платной подписки пользователя %s: %s",
                 user_id,
+                error,
+            )
+
+    return subscription
+
+
+async def replace_subscription(
+    db: AsyncSession,
+    subscription: Subscription,
+    *,
+    duration_days: int,
+    traffic_limit_gb: int,
+    device_limit: int,
+    connected_squads: List[str],
+    is_trial: bool,
+    autopay_enabled: Optional[bool] = None,
+    autopay_days_before: Optional[int] = None,
+    update_server_counters: bool = False,
+) -> Subscription:
+    """Перезаписывает параметры существующей подписки пользователя."""
+
+    current_time = datetime.utcnow()
+    old_squads = set(subscription.connected_squads or [])
+    new_squads = set(connected_squads or [])
+
+    new_autopay_enabled = (
+        subscription.autopay_enabled
+        if autopay_enabled is None
+        else autopay_enabled
+    )
+    new_autopay_days_before = (
+        subscription.autopay_days_before
+        if autopay_days_before is None
+        else autopay_days_before
+    )
+
+    subscription.status = SubscriptionStatus.ACTIVE.value
+    subscription.is_trial = is_trial
+    subscription.start_date = current_time
+    subscription.end_date = current_time + timedelta(days=duration_days)
+    subscription.traffic_limit_gb = traffic_limit_gb
+    subscription.traffic_used_gb = 0.0
+    subscription.device_limit = device_limit
+    subscription.connected_squads = list(new_squads)
+    subscription.subscription_url = None
+    subscription.subscription_crypto_link = None
+    subscription.remnawave_short_uuid = None
+    subscription.autopay_enabled = new_autopay_enabled
+    subscription.autopay_days_before = new_autopay_days_before
+    subscription.updated_at = current_time
+
+    await db.commit()
+    await db.refresh(subscription)
+
+    if update_server_counters:
+        try:
+            from app.database.crud.server_squad import (
+                add_user_to_servers,
+                get_server_ids_by_uuids,
+                remove_user_from_servers,
+            )
+
+            squads_to_remove = old_squads - new_squads
+            squads_to_add = new_squads - old_squads
+
+            if squads_to_remove:
+                server_ids = await get_server_ids_by_uuids(db, list(squads_to_remove))
+                if server_ids:
+                    await remove_user_from_servers(db, sorted(server_ids))
+
+            if squads_to_add:
+                server_ids = await get_server_ids_by_uuids(db, list(squads_to_add))
+                if server_ids:
+                    await add_user_to_servers(db, sorted(server_ids))
+
+            logger.info(
+                "♻️ Обновлены параметры подписки %s: удалено сквадов %s, добавлено %s",
+                subscription.id,
+                len(squads_to_remove),
+                len(squads_to_add),
+            )
+        except Exception as error:
+            logger.error(
+                "⚠️ Ошибка обновления счетчиков серверов при замене подписки %s: %s",
+                subscription.id,
                 error,
             )
 
