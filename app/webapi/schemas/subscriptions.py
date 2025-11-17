@@ -34,6 +34,7 @@ class SubscriptionCreateRequest(BaseModel):
     device_limit: Optional[int] = None
     squad_uuid: Optional[str] = None
     connected_squads: Optional[List[str]] = None
+    replace_existing: bool = False
 
 
 class SubscriptionExtendRequest(BaseModel):
