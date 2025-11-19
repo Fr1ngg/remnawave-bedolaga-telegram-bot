@@ -805,118 +805,68 @@ async def calculate_subscription_total_cost(
     user: Optional[User] = None,
     promo_group: Optional[PromoGroup] = None,
 ) -> Tuple[int, dict]:
-    from app.config import PERIOD_PRICES
-    
-    months_in_period = calculate_months_from_days(period_days)
-    
-    base_price_original = PERIOD_PRICES.get(period_days, 0)
-    period_discount_percent = _get_discount_percent(
-        user,
-        promo_group,
-        "period",
-        period_days=period_days,
+    from app.utils.pricing_calculator import calculate_subscription_total_cost as new_calculate_cost
+
+    # Use the new unified pricing calculator
+    pricing_result = await new_calculate_cost(
+        db, period_days, traffic_gb, server_squad_ids, devices,
+        user=user, promo_group=promo_group
     )
-    base_discount_total = base_price_original * period_discount_percent // 100
-    base_price = base_price_original - base_discount_total
-    
-    promo_group = promo_group or (user.promo_group if user else None)
 
-    traffic_price_per_month = settings.get_traffic_price(traffic_gb)
-    traffic_discount_percent = _get_discount_percent(
-        user,
-        promo_group,
-        "traffic",
-        period_days=period_days,
-    )
-    traffic_discount_per_month = traffic_price_per_month * traffic_discount_percent // 100
-    discounted_traffic_per_month = traffic_price_per_month - traffic_discount_per_month
-    total_traffic_price = discounted_traffic_per_month * months_in_period
-    total_traffic_discount = traffic_discount_per_month * months_in_period
-
-    servers_prices = await get_servers_monthly_prices(db, server_squad_ids)
-    servers_price_per_month = sum(servers_prices)
-    servers_discount_percent = _get_discount_percent(
-        user,
-        promo_group,
-        "servers",
-        period_days=period_days,
-    )
-    servers_discount_per_month = servers_price_per_month * servers_discount_percent // 100
-    discounted_servers_per_month = servers_price_per_month - servers_discount_per_month
-    total_servers_price = discounted_servers_per_month * months_in_period
-    total_servers_discount = servers_discount_per_month * months_in_period
-
-    additional_devices = max(0, devices - settings.DEFAULT_DEVICE_LIMIT)
-    devices_price_per_month = additional_devices * settings.PRICE_PER_DEVICE
-    devices_discount_percent = _get_discount_percent(
-        user,
-        promo_group,
-        "devices",
-        period_days=period_days,
-    )
-    devices_discount_per_month = devices_price_per_month * devices_discount_percent // 100
-    discounted_devices_per_month = devices_price_per_month - devices_discount_per_month
-    total_devices_price = discounted_devices_per_month * months_in_period
-    total_devices_discount = devices_discount_per_month * months_in_period
-
-    total_cost = base_price + total_traffic_price + total_servers_price + total_devices_price
-
+    # Preserve the old return format for backward compatibility
     details = {
-        'base_price': base_price,
-        'base_price_original': base_price_original,
-        'base_discount_percent': period_discount_percent,
-        'base_discount_total': base_discount_total,
-        'traffic_price_per_month': traffic_price_per_month,
-        'traffic_discount_percent': traffic_discount_percent,
-        'traffic_discount_total': total_traffic_discount,
-        'total_traffic_price': total_traffic_price,
-        'servers_price_per_month': servers_price_per_month,
-        'servers_discount_percent': servers_discount_percent,
-        'servers_discount_total': total_servers_discount,
-        'total_servers_price': total_servers_price,
-        'devices_price_per_month': devices_price_per_month,
-        'devices_discount_percent': devices_discount_percent,
-        'devices_discount_total': total_devices_discount,
-        'total_devices_price': total_devices_price,
-        'months_in_period': months_in_period,
-        'servers_individual_prices': [
-            (price - (price * servers_discount_percent // 100)) * months_in_period
-            for price in servers_prices
-        ]
+        'base_price': pricing_result.details.base_price_discounted,
+        'base_price_original': pricing_result.details.base_price_original,
+        'base_discount_percent': pricing_result.details.base_discount_percent,
+        'base_discount_total': pricing_result.details.base_discount_total,
+        'traffic_price_per_month': pricing_result.details.traffic_price_per_month_original,
+        'traffic_discount_percent': pricing_result.details.traffic_discount_percent,
+        'traffic_discount_total': pricing_result.details.traffic_discount_total,
+        'total_traffic_price': pricing_result.details.total_traffic_price,
+        'servers_price_per_month': pricing_result.details.servers_price_per_month_original,
+        'servers_discount_percent': pricing_result.details.servers_discount_percent,
+        'servers_discount_total': pricing_result.details.servers_discount_total,
+        'total_servers_price': pricing_result.details.total_servers_price,
+        'devices_price_per_month': pricing_result.details.devices_price_per_month_original,
+        'devices_discount_percent': pricing_result.details.devices_discount_percent,
+        'devices_discount_total': pricing_result.details.devices_discount_total,
+        'total_devices_price': pricing_result.details.total_devices_price,
+        'months_in_period': pricing_result.details.months_in_period,
+        'servers_individual_prices': pricing_result.details.servers_individual_prices
     }
 
-    logger.info(f"📊 Расчет стоимости подписки на {period_days} дней ({months_in_period} мес):")
-    logger.info(f"   Базовый период: {base_price/100}₽")
-    if total_traffic_price > 0:
+    logger.info(f"📊 Расчет стоимости подписки на {period_days} дней ({pricing_result.details.months_in_period} мес):")
+    logger.info(f"   Базовый период: {pricing_result.details.base_price_discounted/100}₽")
+    if pricing_result.details.total_traffic_price > 0:
         message = (
-            f"   Трафик: {traffic_price_per_month/100}₽/мес × {months_in_period} = {total_traffic_price/100}₽"
+            f"   Трафик: {pricing_result.details.traffic_price_per_month_original/100}₽/мес × {pricing_result.details.months_in_period} = {pricing_result.details.total_traffic_price/100}₽"
         )
-        if total_traffic_discount > 0:
+        if pricing_result.details.traffic_discount_total > 0:
             message += (
-                f" (скидка {traffic_discount_percent}%: -{total_traffic_discount/100}₽)"
+                f" (скидка {pricing_result.details.traffic_discount_percent}%: -{pricing_result.details.traffic_discount_total/100}₽)"
             )
         logger.info(message)
-    if total_servers_price > 0:
+    if pricing_result.details.total_servers_price > 0:
         message = (
-            f"   Серверы: {servers_price_per_month/100}₽/мес × {months_in_period} = {total_servers_price/100}₽"
+            f"   Серверы: {pricing_result.details.servers_price_per_month_original/100}₽/мес × {pricing_result.details.months_in_period} = {pricing_result.details.total_servers_price/100}₽"
         )
-        if total_servers_discount > 0:
+        if pricing_result.details.servers_discount_total > 0:
             message += (
-                f" (скидка {servers_discount_percent}%: -{total_servers_discount/100}₽)"
+                f" (скидка {pricing_result.details.servers_discount_percent}%: -{pricing_result.details.servers_discount_total/100}₽)"
             )
         logger.info(message)
-    if total_devices_price > 0:
+    if pricing_result.details.total_devices_price > 0:
         message = (
-            f"   Устройства: {devices_price_per_month/100}₽/мес × {months_in_period} = {total_devices_price/100}₽"
+            f"   Устройства: {pricing_result.details.devices_price_per_month_original/100}₽/мес × {pricing_result.details.months_in_period} = {pricing_result.details.total_devices_price/100}₽"
         )
-        if total_devices_discount > 0:
+        if pricing_result.details.devices_discount_total > 0:
             message += (
-                f" (скидка {devices_discount_percent}%: -{total_devices_discount/100}₽)"
+                f" (скидка {pricing_result.details.devices_discount_percent}%: -{pricing_result.details.devices_discount_total/100}₽)"
             )
         logger.info(message)
-    logger.info(f"   ИТОГО: {total_cost/100}₽")
-    
-    return total_cost, details
+    logger.info(f"   ИТОГО: {pricing_result.total_price/100}₽")
+
+    return pricing_result.total_price, details
     
 async def get_subscription_server_ids(
     db: AsyncSession,
