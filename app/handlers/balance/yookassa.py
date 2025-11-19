@@ -172,7 +172,7 @@ async def process_yookassa_payment_amount(
             [types.InlineKeyboardButton(text=texts.BACK, callback_data="balance_topup")]
         ])
         
-        await message.answer(
+        sent_message = await message.answer(
             f"💳 <b>Оплата банковской картой</b>\n\n"
             f"💰 Сумма: {settings.format_price(amount_kopeks)}\n"
             f"🆔 ID платежа: {payment_result['yookassa_payment_id'][:8]}...\n\n"
@@ -186,6 +186,12 @@ async def process_yookassa_payment_amount(
             f"❓ Если возникнут проблемы, обратитесь в {settings.get_support_contact_display_html()}",
             reply_markup=keyboard,
             parse_mode="HTML"
+        )
+
+        await payment_service.remember_topup_invoice_message(
+            db_user.id,
+            message.chat.id,
+            sent_message.message_id,
         )
         
         await state.clear()
@@ -352,7 +358,7 @@ async def process_yookassa_sbp_payment_amount(
         # Если есть QR-код, отправляем его как медиа-сообщение
         if qr_photo:
             # Используем метод отправки медиа-группы или фото с описанием
-            await message.answer_photo(
+            sent_message = await message.answer_photo(
                 photo=qr_photo,
                 caption=message_text,
                 reply_markup=keyboard,
@@ -360,11 +366,17 @@ async def process_yookassa_sbp_payment_amount(
             )
         else:
             # Если QR-код недоступен, отправляем обычное текстовое сообщение
-            await message.answer(
+            sent_message = await message.answer(
                 message_text,
                 reply_markup=keyboard,
                 parse_mode="HTML"
             )
+
+        await payment_service.remember_topup_invoice_message(
+            db_user.id,
+            message.chat.id,
+            sent_message.message_id,
+        )
         
         logger.info(f"Создан платеж YooKassa СБП для пользователя {db_user.telegram_id}: "
                    f"{amount_kopeks//100}₽, ID: {payment_result['yookassa_payment_id']}")

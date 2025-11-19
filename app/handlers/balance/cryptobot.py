@@ -159,7 +159,7 @@ async def process_cryptobot_payment_amount(
             [types.InlineKeyboardButton(text=texts.BACK, callback_data="balance_topup")]
         ])
         
-        await message.answer(
+        sent_message = await message.answer(
             f"🪙 <b>Оплата криптовалютой</b>\n\n"
             f"💰 Сумма к зачислению: {amount_rubles:.0f} ₽\n"
             f"💵 К оплате: {amount_usd:.2f} USD\n"
@@ -176,6 +176,12 @@ async def process_cryptobot_payment_amount(
             f"❓ Если возникнут проблемы, обратитесь в {settings.get_support_contact_display_html()}",
             reply_markup=keyboard,
             parse_mode="HTML"
+        )
+
+        await payment_service.remember_topup_invoice_message(
+            db_user.id,
+            message.chat.id,
+            sent_message.message_id,
         )
         
         await state.clear()

@@ -181,7 +181,14 @@ async def process_heleket_payment_amount(
         [types.InlineKeyboardButton(text=texts.BACK, callback_data="balance_topup")],
     ])
 
-    await message.answer("\n".join(details), parse_mode="HTML", reply_markup=keyboard)
+    sent_message = await message.answer(
+        "\n".join(details), parse_mode="HTML", reply_markup=keyboard
+    )
+    await payment_service.remember_topup_invoice_message(
+        db_user.id,
+        message.chat.id,
+        sent_message.message_id,
+    )
     await state.clear()
 
 
