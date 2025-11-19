@@ -204,16 +204,10 @@ async def _send_pal24_payment_message(
             support=settings.get_support_contact_display_html(),
         )
 
-        sent_message = await message.answer(
+        await message.answer(
             message_text,
             reply_markup=keyboard,
             parse_mode="HTML",
-        )
-
-        await payment_service.remember_topup_invoice_message(
-            db_user.id,
-            message.chat.id,
-            sent_message.message_id,
         )
 
         await state.clear()
