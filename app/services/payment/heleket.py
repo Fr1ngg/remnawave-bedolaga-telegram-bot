@@ -331,12 +331,6 @@ class HeleketPaymentMixin:
             await db.commit()
             await db.refresh(user)
 
-        cart_message = await self.build_cart_message_after_topup(
-            db,
-            user,
-            amount_kopeks,
-        )
-
         if getattr(self, "bot", None):
             topup_status = "🆕 Первое пополнение" if was_first_topup else "🔄 Пополнение"
             referrer_info = format_referrer_info(user)
@@ -384,7 +378,7 @@ class HeleketPaymentMixin:
 
                 await self.bot.send_message(
                     chat_id=user.telegram_id,
-                    text="\n".join(message_lines) + cart_message,
+                    text="\n".join(message_lines),
                     parse_mode="HTML",
                     reply_markup=keyboard,
                 )
