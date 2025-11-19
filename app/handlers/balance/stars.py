@@ -76,10 +76,11 @@ async def process_stars_payment_amount(
         stars_rate = settings.get_stars_rate() 
         
         payment_service = PaymentService(message.bot)
+        invoice_payload = f"balance_{db_user.id}_{amount_kopeks}"
         invoice_link = await payment_service.create_stars_invoice(
             amount_kopeks=amount_kopeks,
             description=f"Пополнение баланса на {texts.format_price(amount_kopeks)}",
-            payload=f"balance_{db_user.id}_{amount_kopeks}"
+            payload=invoice_payload
         )
         
         keyboard = types.InlineKeyboardMarkup(inline_keyboard=[
@@ -87,7 +88,7 @@ async def process_stars_payment_amount(
             [types.InlineKeyboardButton(text=texts.BACK, callback_data="balance_topup")]
         ])
         
-        await message.answer(
+        sent_message = await message.answer(
             f"⭐ <b>Оплата через Telegram Stars</b>\n\n"
             f"💰 Сумма: {texts.format_price(amount_kopeks)}\n"
             f"⭐ К оплате: {stars_amount} звезд\n"
@@ -96,6 +97,19 @@ async def process_stars_payment_amount(
             reply_markup=keyboard,
             parse_mode="HTML"
         )
+
+        try:
+            await payment_service.remember_stars_invoice_message(
+                payload=invoice_payload,
+                chat_id=message.chat.id,
+                message_id=sent_message.message_id,
+            )
+        except Exception as store_error:
+            logger.warning(
+                "Не удалось сохранить сообщение инвойса Stars %s: %s",
+                invoice_payload,
+                store_error,
+            )
         
         await state.clear()
         
