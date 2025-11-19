@@ -163,10 +163,16 @@ async def process_mulenpay_payment_amount(
             mulenpay_name_html=mulenpay_name_html,
         )
 
-        await message.answer(
+        sent_message = await message.answer(
             message_text,
             reply_markup=keyboard,
             parse_mode="HTML",
+        )
+
+        await payment_service.remember_topup_invoice_message(
+            db_user.id,
+            message.chat.id,
+            sent_message.message_id,
         )
 
         await state.clear()
