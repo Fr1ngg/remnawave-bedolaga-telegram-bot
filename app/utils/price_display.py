@@ -5,7 +5,6 @@ This module provides a centralized way to:
 - Calculate prices with all applicable discounts (promo groups, promo offers)
 - Format price buttons consistently across all flows
 - Ensure uniform discount display throughout the application
-- Integrate with the new unified pricing calculator for complete subscription pricing
 """
 
 from dataclasses import dataclass
@@ -138,7 +137,7 @@ def format_price_button(
         Without discount:
             "📅 30 дней - 990₽"
     """
-    # Format button text differently if final_price is 0
+    # Format button text differently if final price is 0
     if price_info.final_price == 0:
         button_text = f"📅 {period_label}"
     elif price_info.has_discount:
@@ -182,7 +181,7 @@ def format_price_text(
 
         Without discount:
             "📅 30 дней - 990₽"
-
+            
         With zero price:
             "📅 30 дней"
     """
