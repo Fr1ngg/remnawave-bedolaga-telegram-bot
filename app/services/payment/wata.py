@@ -12,6 +12,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.database.models import PaymentMethod, TransactionType
+from app.services.subscription_auto_purchase_service import (
+    auto_purchase_saved_cart_after_topup,
+)
 from app.services.wata_service import WataAPIError, WataService
 from app.utils.user_utils import format_referrer_info
 
@@ -425,9 +428,6 @@ class WataPaymentMixin:
         )
 
         if payment.transaction_id:
-            await self.delete_topup_invoice_message(
-                payment.user_id,
-            )
             logger.info(
                 "WATA платеж %s уже привязан к транзакции %s",
                 payment.payment_link_id,
@@ -468,17 +468,6 @@ class WataPaymentMixin:
         subscription = getattr(user, "subscription", None)
         referrer_info = format_referrer_info(user)
         topup_status = "🆕 Первое пополнение" if was_first_topup else "🔄 Пополнение"
-
-        await self.delete_topup_invoice_message(
-            user.id,
-            chat_id=user.telegram_id,
-        )
-
-        cart_message = await self.build_cart_message_after_topup(
-            db,
-            user,
-            payment.amount_kopeks,
-        )
 
         try:
             from app.services.referral_service import process_referral_topup
@@ -530,7 +519,6 @@ class WataPaymentMixin:
                         "🔄 При наличии сохранённой корзины подписки и включенной автопокупке, "
                         "подписка будет приобретена автоматически после пополнения баланса.\n\n"
                         "Баланс пополнен автоматически!"
-                        f"{cart_message}"
                     ),
                     parse_mode="HTML",
                     reply_markup=keyboard,
@@ -538,5 +526,69 @@ class WataPaymentMixin:
             except Exception as error:
                 logger.error("Ошибка отправки уведомления пользователю WATA: %s", error)
 
-        
+        try:
+            from app.services.user_cart_service import user_cart_service
+            from aiogram import types
+
+            has_saved_cart = await user_cart_service.has_user_cart(user.id)
+            auto_purchase_success = False
+            if has_saved_cart:
+                try:
+                    auto_purchase_success = await auto_purchase_saved_cart_after_topup(
+                        db,
+                        user,
+                        bot=getattr(self, "bot", None),
+                    )
+                except Exception as auto_error:
+                    logger.error(
+                        "Ошибка автоматической покупки подписки для пользователя %s: %s",
+                        user.id,
+                        auto_error,
+                        exc_info=True,
+                    )
+
+                if auto_purchase_success:
+                    has_saved_cart = False
+
+            if has_saved_cart and getattr(self, "bot", None):
+                from app.localization.texts import get_texts
+
+                texts = get_texts(user.language)
+                cart_message = texts.t(
+                    "BALANCE_TOPUP_CART_REMINDER_DETAILED",
+                    "🛒 У вас есть неоформленный заказ.\n\n"
+                    "Вы можете продолжить оформление с теми же параметрами.",
+                )
+
+                keyboard = types.InlineKeyboardMarkup(
+                    inline_keyboard=[
+                        [
+                            types.InlineKeyboardButton(
+                                text=texts.RETURN_TO_SUBSCRIPTION_CHECKOUT,
+                                callback_data="return_to_saved_cart",
+                            )
+                        ],
+                        [
+                            types.InlineKeyboardButton(
+                                text="💰 Мой баланс",
+                                callback_data="menu_balance",
+                            )
+                        ],
+                        [
+                            types.InlineKeyboardButton(
+                                text="🏠 Главное меню",
+                                callback_data="back_to_menu",
+                            )
+                        ],
+                    ]
+                )
+
+                await self.bot.send_message(
+                    user.telegram_id,
+                    cart_message,
+                    reply_markup=keyboard,
+                )
+        except Exception as error:
+            logger.debug("Не удалось отправить напоминание о корзине после WATA: %s", error)
+
         return payment
