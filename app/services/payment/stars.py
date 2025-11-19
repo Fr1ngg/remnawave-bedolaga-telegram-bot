@@ -6,12 +6,11 @@
 
 from __future__ import annotations
 
-import asyncio
 import logging
 from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal, ROUND_FLOOR, ROUND_HALF_UP
-from typing import Any, Optional
+from typing import Optional
 
 from aiogram.types import LabeledPrice
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -21,6 +20,9 @@ from app.database.crud.transaction import create_transaction
 from app.database.crud.user import get_user_by_id
 from app.database.models import PaymentMethod, TransactionType
 from app.external.telegram_stars import TelegramStarsService
+from app.services.subscription_auto_purchase_service import (
+    auto_purchase_saved_cart_after_topup,
+)
 from app.utils.user_utils import format_referrer_info
 
 logger = logging.getLogger(__name__)
@@ -36,57 +38,6 @@ class _SimpleSubscriptionPayload:
 
 class TelegramStarsMixin:
     """Mixin с операциями создания и обработки платежей через Telegram Stars."""
-
-    _stars_invoice_messages: dict[str, tuple[int, int]] = {}
-    _stars_invoice_lock: asyncio.Lock = asyncio.Lock()
-
-    async def remember_stars_invoice_message(
-        self,
-        payload: str,
-        chat_id: int,
-        message_id: int,
-    ) -> None:
-        """Сохраняет ID сообщения с инвойсом, чтобы удалить его после оплаты."""
-
-        if not payload:
-            return
-
-        async with self._stars_invoice_lock:
-            self._stars_invoice_messages[payload] = (chat_id, message_id)
-
-    async def delete_stars_invoice_message(
-        self,
-        payload: str,
-        *,
-        chat_id: int | None = None,
-        bot: Any | None = None,
-    ) -> None:
-        """Удаляет сообщение с инвойсом Stars, если оно было сохранено."""
-
-        bot_instance = bot or getattr(self, "bot", None)
-
-        if not bot_instance or not payload:
-            return
-
-        async with self._stars_invoice_lock:
-            message_info = self._stars_invoice_messages.pop(payload, None)
-
-        if not message_info:
-            return
-
-        invoice_chat_id, invoice_message_id = message_info
-
-        # Если по каким-то причинам чат не сохранился, пытаемся использовать переданный chat_id
-        target_chat_id = invoice_chat_id or chat_id
-        if not target_chat_id:
-            return
-
-        try:
-            await bot_instance.delete_message(target_chat_id, invoice_message_id)
-        except Exception as error:  # pragma: no cover - диагностический лог
-            logger.warning(
-                "Не удалось удалить сообщение с инвойсом Stars %s: %s", payload, error
-            )
 
     async def create_stars_invoice(
         self,
@@ -542,12 +493,6 @@ class TelegramStarsMixin:
             amount_kopeks,
         )
 
-        cart_message = await self.build_cart_message_after_topup(
-            db,
-            user,
-            amount_kopeks,
-        )
-
         if getattr(self, "bot", None):
             try:
                 from app.services.admin_notification_service import AdminNotificationService
@@ -585,7 +530,6 @@ class TelegramStarsMixin:
                         "🦊 Способ: Telegram Stars\n"
                         f"🆔 Транзакция: {charge_id_short}...\n\n"
                         "Баланс пополнен автоматически!"
-                        f"{cart_message}"
                     ),
                     parse_mode="HTML",
                     reply_markup=keyboard,
@@ -600,6 +544,84 @@ class TelegramStarsMixin:
                     "Ошибка отправки уведомления о пополнении Stars: %s",
                     error,
                 )
+
+        # Проверяем наличие сохраненной корзины для возврата к оформлению подписки
+        try:
+            from aiogram import types
+            from app.localization.texts import get_texts
+            from app.services.user_cart_service import user_cart_service
+
+            has_saved_cart = await user_cart_service.has_user_cart(user.id)
+            auto_purchase_success = False
+            if has_saved_cart:
+                try:
+                    auto_purchase_success = await auto_purchase_saved_cart_after_topup(
+                        db,
+                        user,
+                        bot=getattr(self, "bot", None),
+                    )
+                except Exception as auto_error:  # pragma: no cover - диагностический лог
+                    logger.error(
+                        "Ошибка автоматической покупки подписки для пользователя %s: %s",
+                        user.id,
+                        auto_error,
+                        exc_info=True,
+                    )
+
+                if auto_purchase_success:
+                    has_saved_cart = False
+
+            if has_saved_cart and getattr(self, "bot", None):
+                texts = get_texts(user.language)
+                cart_message = texts.t(
+                    "BALANCE_TOPUP_CART_REMINDER_DETAILED",
+                    "🛒 У вас есть неоформленный заказ.\n\n"
+                    "Вы можете продолжить оформление с теми же параметрами.",
+                )
+
+                keyboard = types.InlineKeyboardMarkup(
+                    inline_keyboard=[
+                        [
+                            types.InlineKeyboardButton(
+                                text=texts.RETURN_TO_SUBSCRIPTION_CHECKOUT,
+                                callback_data="return_to_saved_cart",
+                            )
+                        ],
+                        [
+                            types.InlineKeyboardButton(
+                                text="💰 Мой баланс",
+                                callback_data="menu_balance",
+                            )
+                        ],
+                        [
+                            types.InlineKeyboardButton(
+                                text="🏠 Главное меню",
+                                callback_data="back_to_menu",
+                            )
+                        ],
+                    ]
+                )
+
+                await self.bot.send_message(
+                    chat_id=user.telegram_id,
+                    text=f"✅ Баланс пополнен на {settings.format_price(amount_kopeks)}!\n\n"
+                         f"⚠️ <b>Важно:</b> Пополнение баланса не активирует подписку автоматически. "
+                         f"Обязательно активируйте подписку отдельно!\n\n"
+                         f"🔄 При наличии сохранённой корзины подписки и включенной автопокупке, "
+                         f"подписка будет приобретена автоматически после пополнения баланса.\n\n{cart_message}",
+                    reply_markup=keyboard,
+                )
+                logger.info(
+                    "Отправлено уведомление с кнопкой возврата к оформлению подписки пользователю %s",
+                    user.id,
+                )
+        except Exception as error:  # pragma: no cover - диагностический лог
+            logger.error(
+                "Ошибка при работе с сохраненной корзиной для пользователя %s: %s",
+                user.id,
+                error,
+                exc_info=True,
+            )
 
         logger.info(
             "✅ Обработан Stars платеж: пользователь %s, %s звезд → %s",
