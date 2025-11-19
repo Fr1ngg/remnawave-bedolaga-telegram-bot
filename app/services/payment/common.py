@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from types import SimpleNamespace
 from typing import Any
@@ -19,6 +20,9 @@ from app.config import settings
 from app.database.crud.user import get_user_by_telegram_id
 from app.database.database import get_db
 from app.localization.texts import get_texts
+from app.services.subscription_auto_purchase_service import (
+    auto_purchase_saved_cart_after_topup,
+)
 from app.services.subscription_checkout_service import (
     has_subscription_checkout_draft,
     should_offer_checkout_resume,
@@ -31,6 +35,57 @@ logger = logging.getLogger(__name__)
 
 class PaymentCommonMixin:
     """Mixin с базовой логикой, которую используют остальные платёжные блоки."""
+
+    _topup_invoice_messages: dict[int, list[tuple[int, int]]] = {}
+    _topup_invoice_lock: asyncio.Lock = asyncio.Lock()
+
+    async def remember_topup_invoice_message(
+        self, user_id: int, chat_id: int, message_id: int
+    ) -> None:
+        """Запоминает сообщение с инструкциями/инвойсом, чтобы удалить его после оплаты."""
+
+        if not user_id:
+            return
+
+        async with self._topup_invoice_lock:
+            self._topup_invoice_messages.setdefault(user_id, []).append(
+                (chat_id, message_id)
+            )
+
+    async def delete_topup_invoice_message(
+        self,
+        user_id: int,
+        *,
+        chat_id: int | None = None,
+        bot: Any | None = None,
+    ) -> None:
+        """Удаляет сохранённое сообщение с оплатой, если оно ещё висит в чате."""
+
+        bot_instance = bot or getattr(self, "bot", None)
+
+        if not bot_instance or not user_id:
+            return
+
+        async with self._topup_invoice_lock:
+            messages_info = self._topup_invoice_messages.pop(user_id, [])
+
+        if not messages_info:
+            return
+
+        for invoice_chat_id, invoice_message_id in messages_info:
+            target_chat_id = invoice_chat_id or chat_id
+
+            if not target_chat_id:
+                continue
+
+            try:
+                await bot_instance.delete_message(target_chat_id, invoice_message_id)
+            except Exception as error:  # pragma: no cover - диагностический лог
+                logger.warning(
+                    "Не удалось удалить сообщение с инструкциями по оплате пользователя %s: %s",
+                    user_id,
+                    error,
+                )
 
     async def build_topup_success_keyboard(self, user: Any) -> InlineKeyboardMarkup:
         """Формирует клавиатуру по завершении платежа, подстраиваясь под пользователя."""
@@ -110,6 +165,65 @@ class PaymentCommonMixin:
 
         return InlineKeyboardMarkup(inline_keyboard=keyboard_rows)
 
+    async def build_cart_message_after_topup(
+        self,
+        db: AsyncSession,
+        user: Any,
+        amount_kopeks: int,
+        *,
+        bot: Any | None = None,
+    ) -> str:
+        """Возвращает текст напоминания о сохранённой корзине и запускает автопокупку."""
+
+        user_id = getattr(user, "id", None)
+        if not user_id:
+            return ""
+
+        try:
+            has_saved_cart = await user_cart_service.has_user_cart(user_id)
+        except Exception as cart_error:  # pragma: no cover - диагностический лог
+            logger.warning(
+                "Не удалось проверить наличие сохраненной корзины у пользователя %s: %s",
+                user_id,
+                cart_error,
+            )
+            return ""
+
+        if has_saved_cart:
+            try:
+                auto_purchase_success = await auto_purchase_saved_cart_after_topup(
+                    db,
+                    user,
+                    bot=bot or getattr(self, "bot", None),
+                )
+            except Exception as auto_error:  # pragma: no cover - диагностический лог
+                logger.error(
+                    "Ошибка автоматической покупки подписки для пользователя %s: %s",
+                    user_id,
+                    auto_error,
+                    exc_info=True,
+                )
+                auto_purchase_success = False
+
+            if auto_purchase_success:
+                has_saved_cart = False
+
+        if not has_saved_cart:
+            return ""
+
+        try:
+            texts = get_texts(getattr(user, "language", "ru"))
+            return "\n\n" + texts.BALANCE_TOPUP_CART_REMINDER_DETAILED.format(
+                total_amount=settings.format_price(amount_kopeks)
+            )
+        except Exception as text_error:  # pragma: no cover - диагностический лог
+            logger.warning(
+                "Не удалось сформировать напоминание о сохраненной корзине для пользователя %s: %s",
+                user_id,
+                text_error,
+            )
+            return ""
+
     async def _send_payment_success_notification(
         self,
         telegram_id: int,
@@ -118,6 +232,7 @@ class PaymentCommonMixin:
         *,
         db: AsyncSession | None = None,
         payment_method_title: str | None = None,
+        cart_message: str | None = None,
     ) -> None:
         """Отправляет пользователю уведомление об успешном платеже."""
         if not getattr(self, "bot", None):
@@ -144,6 +259,9 @@ class PaymentCommonMixin:
                 f"🔄 При наличии сохранённой корзины подписки и включенной автопокупке, "
                 f"подписка будет приобретена автоматически после пополнения баланса."
             )
+
+            if cart_message:
+                message += f"\n\n{cart_message}"
 
             await self.bot.send_message(
                 chat_id=telegram_id,
