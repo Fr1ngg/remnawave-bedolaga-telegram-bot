@@ -984,6 +984,39 @@ async def remove_subscription_servers(
         return False
 
 
+async def reset_all_trial_subscriptions(db: AsyncSession) -> int:
+    from sqlalchemy import delete
+
+    try:
+        trial_result = await db.execute(
+            select(Subscription.id)
+            .where(Subscription.is_trial.is_(True))
+        )
+        trial_ids = [row[0] for row in trial_result.fetchall()]
+
+        if not trial_ids:
+            logger.info("♻️ Триальные подписки не найдены — сброс не требуется")
+            return 0
+
+        await db.execute(
+            delete(SubscriptionServer).where(
+                SubscriptionServer.subscription_id.in_(trial_ids)
+            )
+        )
+        await db.execute(
+            delete(Subscription).where(Subscription.id.in_(trial_ids))
+        )
+
+        await db.commit()
+        logger.info("♻️ Сброшено триальных подписок: %s", len(trial_ids))
+        return len(trial_ids)
+
+    except Exception as error:
+        await db.rollback()
+        logger.error("Ошибка сброса триальных подписок: %s", error)
+        raise
+
+
 async def get_subscription_renewal_cost(
     db: AsyncSession,
     subscription_id: int,
