@@ -65,18 +65,14 @@ def get_admin_main_keyboard(language: str = "ru") -> InlineKeyboardMarkup:
 
 def get_admin_users_submenu_keyboard(language: str = "ru") -> InlineKeyboardMarkup:
     texts = get_texts(language)
-
+    
     return InlineKeyboardMarkup(inline_keyboard=[
         [
             InlineKeyboardButton(text=texts.ADMIN_USERS, callback_data="admin_users"),
             InlineKeyboardButton(text=texts.ADMIN_REFERRALS, callback_data="admin_referrals")
         ],
         [
-            InlineKeyboardButton(text=texts.ADMIN_SUBSCRIPTIONS, callback_data="admin_subscriptions"),
-            InlineKeyboardButton(
-                text=_t(texts, "ADMIN_TRIALS", "🎁 Триалы"),
-                callback_data="admin_trials",
-            ),
+            InlineKeyboardButton(text=texts.ADMIN_SUBSCRIPTIONS, callback_data="admin_subscriptions")
         ],
         [
             InlineKeyboardButton(text=texts.BACK, callback_data="admin_panel")
