@@ -1767,13 +1767,25 @@ async def select_devices(
 
     devices_price = max(0, devices - settings.DEFAULT_DEVICE_LIMIT) * settings.PRICE_PER_DEVICE
 
+    previous_devices = data.get('devices', settings.DEFAULT_DEVICE_LIMIT)
+
     data['devices'] = devices
     data['total_price'] = base_price + countries_price + devices_price
     await state.set_data(data)
 
-    await callback.message.edit_reply_markup(
-        reply_markup=get_devices_keyboard(devices, db_user.language)
-    )
+    if devices != previous_devices:
+        try:
+            await callback.message.edit_reply_markup(
+                reply_markup=get_devices_keyboard(devices, db_user.language)
+            )
+        except TelegramBadRequest as error:
+            if "message is not modified" in str(error).lower():
+                logger.debug(
+                    "ℹ️ Пропускаем обновление клавиатуры устройств: содержимое не изменилось"
+                )
+            else:
+                raise
+
     await callback.answer()
 
 async def devices_continue(
