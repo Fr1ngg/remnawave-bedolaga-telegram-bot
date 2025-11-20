@@ -49,10 +49,17 @@ async def start_wata_payment(
         if quick_amount_buttons:
             keyboard.inline_keyboard = quick_amount_buttons + keyboard.inline_keyboard
 
-    await callback.message.edit_text(
+    edited_message = await callback.message.edit_text(
         message_text,
         reply_markup=keyboard,
         parse_mode="HTML",
+    )
+
+    payment_service = PaymentService(callback.bot)
+    await payment_service.remember_topup_invoice_message(
+        db_user.id,
+        callback.message.chat.id,
+        edited_message.message_id,
     )
 
     await state.set_state(BalanceStates.waiting_for_amount)
@@ -159,10 +166,16 @@ async def process_wata_payment_amount(
         support=settings.get_support_contact_display_html(),
     )
 
-    await message.answer(
+    sent_message = await message.answer(
         message_text,
         reply_markup=keyboard,
         parse_mode="HTML",
+    )
+
+    await payment_service.remember_topup_invoice_message(
+        db_user.id,
+        message.chat.id,
+        sent_message.message_id,
     )
 
     await state.clear()

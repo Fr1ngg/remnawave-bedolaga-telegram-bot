@@ -59,10 +59,17 @@ async def start_heleket_payment(
         if quick_buttons:
             keyboard.inline_keyboard = quick_buttons + keyboard.inline_keyboard
 
-    await callback.message.edit_text(
+    edited_message = await callback.message.edit_text(
         "\n".join(filter(None, message_lines)),
         reply_markup=keyboard,
         parse_mode="HTML",
+    )
+
+    payment_service = PaymentService(callback.bot)
+    await payment_service.remember_topup_invoice_message(
+        db_user.id,
+        callback.message.chat.id,
+        edited_message.message_id,
     )
 
     await state.set_state(BalanceStates.waiting_for_amount)
@@ -181,7 +188,14 @@ async def process_heleket_payment_amount(
         [types.InlineKeyboardButton(text=texts.BACK, callback_data="balance_topup")],
     ])
 
-    await message.answer("\n".join(details), parse_mode="HTML", reply_markup=keyboard)
+    sent_message = await message.answer(
+        "\n".join(details), parse_mode="HTML", reply_markup=keyboard
+    )
+    await payment_service.remember_topup_invoice_message(
+        db_user.id,
+        message.chat.id,
+        sent_message.message_id,
+    )
     await state.clear()
 
 
