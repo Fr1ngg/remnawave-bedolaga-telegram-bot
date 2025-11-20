@@ -87,7 +87,7 @@ async def _prompt_amount(
         if quick_amount_buttons:
             keyboard.inline_keyboard = quick_amount_buttons + keyboard.inline_keyboard
 
-    await message.edit_text(
+    edited_message = await message.edit_text(
         prompt_template.format(
             method_name=method_name,
             min_amount=min_amount_label,
@@ -95,6 +95,13 @@ async def _prompt_amount(
         ),
         reply_markup=keyboard,
         parse_mode="HTML",
+    )
+
+    payment_service = PaymentService(message.bot)
+    await payment_service.remember_topup_invoice_message(
+        db_user.id,
+        message.chat.id,
+        edited_message.message_id,
     )
 
     await state.set_state(BalanceStates.waiting_for_amount)
@@ -300,7 +307,7 @@ async def process_platega_payment_amount(
         ),
     )
 
-    await message.answer(
+    sent_message = await message.answer(
         instructions_template.format(
             method=method_title,
             amount=settings.format_price(amount_kopeks),
@@ -309,6 +316,12 @@ async def process_platega_payment_amount(
         ),
         reply_markup=keyboard,
         parse_mode="HTML",
+    )
+
+    await payment_service.remember_topup_invoice_message(
+        db_user.id,
+        message.chat.id,
+        sent_message.message_id,
     )
 
     await state.clear()
