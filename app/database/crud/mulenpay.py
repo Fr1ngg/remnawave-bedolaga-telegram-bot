@@ -3,6 +3,7 @@ from datetime import datetime
 from typing import Optional
 
 from sqlalchemy import select
+from datetime import datetime
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
@@ -90,6 +91,7 @@ async def update_mulenpay_payment_status(
     paid_at: Optional[datetime] = None,
     callback_payload: Optional[dict] = None,
     mulen_payment_id: Optional[int] = None,
+    metadata: Optional[dict] = None,
 ) -> MulenPayPayment:
     payment.status = status
     if is_paid is not None:
@@ -100,7 +102,22 @@ async def update_mulenpay_payment_status(
         payment.callback_payload = callback_payload
     if mulen_payment_id is not None and not payment.mulen_payment_id:
         payment.mulen_payment_id = mulen_payment_id
+    if metadata is not None:
+        payment.metadata_json = metadata
 
+    payment.updated_at = datetime.utcnow()
+    await db.commit()
+    await db.refresh(payment)
+    return payment
+
+
+async def update_mulenpay_payment_metadata(
+    db: AsyncSession,
+    *,
+    payment: MulenPayPayment,
+    metadata: dict,
+) -> MulenPayPayment:
+    payment.metadata_json = metadata
     payment.updated_at = datetime.utcnow()
     await db.commit()
     await db.refresh(payment)

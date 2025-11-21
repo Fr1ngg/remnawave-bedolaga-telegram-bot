@@ -96,6 +96,7 @@ async def update_pal24_payment_status(
     balance_currency: Optional[str] = None,
     payer_account: Optional[str] = None,
     callback_payload: Optional[Dict[str, Any]] = None,
+    metadata: Optional[Dict[str, Any]] = None,
 ) -> Pal24Payment:
     update_values: Dict[str, Any] = {
         "status": status,
@@ -121,6 +122,12 @@ async def update_pal24_payment_status(
         update_values["payer_account"] = payer_account
     if callback_payload is not None:
         update_values["callback_payload"] = callback_payload
+    if metadata is not None:
+        existing = getattr(payment, "metadata_json", {}) or {}
+        if not isinstance(existing, dict):
+            existing = {}
+        existing.update(metadata)
+        update_values["metadata_json"] = existing
 
     update_values["last_status"] = status
 

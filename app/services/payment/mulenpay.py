@@ -182,7 +182,43 @@ class MulenPayPaymentMixin:
                 )
                 return False
 
+            metadata = dict(getattr(payment, "metadata_json", {}) or {})
+            invoice_message = metadata.get("invoice_message") or {}
+
+            invoice_message_removed = False
+
+            if getattr(self, "bot", None):
+                chat_id = invoice_message.get("chat_id")
+                message_id = invoice_message.get("message_id")
+                if chat_id and message_id:
+                    try:
+                        await self.bot.delete_message(chat_id, message_id)
+                    except Exception as delete_error:  # pragma: no cover - depends on bot rights
+                        logger.warning(
+                            "Не удалось удалить %s счёт %s: %s",
+                            display_name,
+                            message_id,
+                            delete_error,
+                        )
+                    else:
+                        metadata.pop("invoice_message", None)
+                        invoice_message_removed = True
+
             if payment.is_paid:
+                if invoice_message_removed:
+                    try:
+                        await payment_module.update_mulenpay_payment_metadata(
+                            db,
+                            payment=payment,
+                            metadata=metadata,
+                        )
+                    except Exception as error:  # pragma: no cover - diagnostics
+                        logger.warning(
+                            "Не удалось обновить метаданные %s после удаления счёта: %s",
+                            display_name,
+                            error,
+                        )
+
                 logger.info(
                     "%s платеж %s уже обработан, игнорируем повторный callback",
                     display_name,
@@ -197,6 +233,7 @@ class MulenPayPaymentMixin:
                     status="success",
                     callback_payload=callback_data,
                     mulen_payment_id=mulen_payment_id_int,
+                    metadata=metadata,
                 )
 
                 if payment.transaction_id:

@@ -427,6 +427,34 @@ class WataPaymentMixin:
             metadata=existing_metadata,
         )
 
+        invoice_message = existing_metadata.get("invoice_message") or {}
+        invoice_message_removed = False
+        if getattr(self, "bot", None):
+            chat_id = invoice_message.get("chat_id")
+            message_id = invoice_message.get("message_id")
+            if chat_id and message_id:
+                try:
+                    await self.bot.delete_message(chat_id, message_id)
+                except Exception as delete_error:  # pragma: no cover - depends on bot rights
+                    logger.warning(
+                        "Не удалось удалить сообщение WATA с инструкцией: %s",
+                        delete_error,
+                    )
+                else:
+                    existing_metadata.pop("invoice_message", None)
+                    invoice_message_removed = True
+
+        if invoice_message_removed:
+            try:
+                await payment_module.update_wata_payment_status(
+                    db,
+                    payment=payment,
+                    status=payment.status or "Paid",
+                    metadata=existing_metadata,
+                )
+            except Exception as error:  # pragma: no cover - diagnostic logging only
+                logger.debug("Не удалось обновить метаданные WATA после очистки: %s", error)
+
         if payment.transaction_id:
             logger.info(
                 "WATA платеж %s уже привязан к транзакции %s",

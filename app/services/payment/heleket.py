@@ -273,6 +273,39 @@ class HeleketPaymentMixin:
             logger.error("Heleket платеж %s имеет некорректную сумму: %s", updated_payment.uuid, updated_payment.amount)
             return None
 
+        metadata = getattr(updated_payment, "metadata_json", {}) or {}
+        if not isinstance(metadata, dict):
+            metadata = {}
+
+        invoice_message = metadata.get("invoice_message") or {}
+        invoice_message_removed = False
+        if getattr(self, "bot", None):
+            chat_id = invoice_message.get("chat_id")
+            message_id = invoice_message.get("message_id")
+            if chat_id and message_id:
+                try:
+                    await self.bot.delete_message(chat_id, message_id)
+                except Exception as delete_error:  # pragma: no cover - depends on bot rights
+                    logger.warning(
+                        "Не удалось удалить счёт Heleket %s: %s",
+                        message_id,
+                        delete_error,
+                    )
+                else:
+                    metadata.pop("invoice_message", None)
+                    invoice_message_removed = True
+
+        if invoice_message_removed:
+            try:
+                await heleket_crud.update_heleket_payment(
+                    db,
+                    updated_payment.uuid,
+                    status=updated_payment.status,
+                    metadata=metadata,
+                )
+            except Exception as error:  # pragma: no cover - diagnostic logging only
+                logger.debug("Не удалось очистить invoice Heleket: %s", error)
+
         transaction = await payment_module.create_transaction(
             db,
             user_id=updated_payment.user_id,

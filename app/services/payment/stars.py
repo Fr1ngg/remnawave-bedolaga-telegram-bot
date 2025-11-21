@@ -515,36 +515,6 @@ class TelegramStarsMixin:
                     exc_info=True,
                 )
 
-        if getattr(self, "bot", None):
-            try:
-                keyboard = await self.build_topup_success_keyboard(user)
-
-                charge_id_short = (telegram_payment_charge_id or getattr(transaction, "external_id", ""))[:8]
-
-                await self.bot.send_message(
-                    user.telegram_id,
-                    (
-                        "✅ <b>Пополнение успешно!</b>\n\n"
-                        f"⭐ Звезд: {stars_amount}\n"
-                        f"💰 Сумма: {settings.format_price(amount_kopeks)}\n"
-                        "🦊 Способ: Telegram Stars\n"
-                        f"🆔 Транзакция: {charge_id_short}...\n\n"
-                        "Баланс пополнен автоматически!"
-                    ),
-                    parse_mode="HTML",
-                    reply_markup=keyboard,
-                )
-                logger.info(
-                    "✅ Отправлено уведомление пользователю %s о пополнении на %s",
-                    user.telegram_id,
-                    settings.format_price(amount_kopeks),
-                )
-            except Exception as error:  # pragma: no cover - диагностический лог
-                logger.error(
-                    "Ошибка отправки уведомления о пополнении Stars: %s",
-                    error,
-                )
-
         # Проверяем наличие сохраненной корзины для возврата к оформлению подписки
         try:
             from aiogram import types

@@ -1,10 +1,10 @@
 import logging
 from decimal import Decimal, ROUND_HALF_UP
 from aiogram import Dispatcher, types, F
+from aiogram.fsm.context import FSMContext
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
-from app.database.models import User
 from app.services.payment_service import PaymentService
 from app.external.telegram_stars import TelegramStarsService
 from app.database.crud.user import get_user_by_telegram_id
@@ -18,7 +18,9 @@ async def handle_pre_checkout_query(query: types.PreCheckoutQuery):
     texts = get_texts(DEFAULT_LANGUAGE)
 
     try:
-        logger.info(f"📋 Pre-checkout query от {query.from_user.id}: {query.total_amount} XTR, payload: {query.invoice_payload}")
+        logger.info(
+            f"📋 Pre-checkout query от {query.from_user.id}: {query.total_amount} XTR, payload: {query.invoice_payload}"
+        )
 
         allowed_prefixes = ("balance_", "admin_stars_test_", "simple_sub_")
 
@@ -35,6 +37,7 @@ async def handle_pre_checkout_query(query: types.PreCheckoutQuery):
 
         try:
             from app.database.database import get_db
+
             async for db in get_db():
                 user = await get_user_by_telegram_id(db, query.from_user.id)
                 if not user:
@@ -77,6 +80,7 @@ async def handle_pre_checkout_query(query: types.PreCheckoutQuery):
 async def handle_successful_payment(
     message: types.Message,
     db: AsyncSession,
+    state: FSMContext,
     **kwargs
 ):
     texts = get_texts(DEFAULT_LANGUAGE)
@@ -106,6 +110,27 @@ async def handle_successful_payment(
             return
 
         payment_service = PaymentService(message.bot)
+
+        state_data = await state.get_data()
+        prompt_message_id = state_data.get("stars_prompt_message_id")
+        prompt_chat_id = state_data.get("stars_prompt_chat_id", message.chat.id)
+        invoice_message_id = state_data.get("stars_invoice_message_id")
+        invoice_chat_id = state_data.get("stars_invoice_chat_id", message.chat.id)
+
+        for chat_id, message_id, label in [
+            (prompt_chat_id, prompt_message_id, "запрос суммы"),
+            (invoice_chat_id, invoice_message_id, "инвойс Stars"),
+        ]:
+            if message_id:
+                try:
+                    await message.bot.delete_message(chat_id, message_id)
+                except Exception as delete_error:  # pragma: no cover - зависит от прав бота
+                    logger.warning(
+                        "Не удалось удалить сообщение %s после оплаты Stars: %s",
+                        label,
+                        delete_error,
+                    )
+
         success = await payment_service.process_stars_payment(
             db=db,
             user_id=user.id,
@@ -113,7 +138,14 @@ async def handle_successful_payment(
             payload=payment.invoice_payload,
             telegram_payment_charge_id=payment.telegram_payment_charge_id
         )
-        
+
+        await state.update_data(
+            stars_prompt_message_id=None,
+            stars_prompt_chat_id=None,
+            stars_invoice_message_id=None,
+            stars_invoice_chat_id=None,
+        )
+
         if success:
             rubles_amount = TelegramStarsService.calculate_rubles_from_stars(payment.total_amount)
             amount_kopeks = int((rubles_amount * Decimal(100)).to_integral_value(rounding=ROUND_HALF_UP))
@@ -172,15 +204,15 @@ async def handle_successful_payment(
 
 
 def register_stars_handlers(dp: Dispatcher):
-    
+
     dp.pre_checkout_query.register(
         handle_pre_checkout_query,
-        F.currency == "XTR" 
+        F.currency == "XTR"
     )
-    
+
     dp.message.register(
         handle_successful_payment,
         F.successful_payment
     )
-    
+
     logger.info("🌟 Зарегистрированы обработчики Telegram Stars платежей")

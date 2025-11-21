@@ -1,6 +1,9 @@
 import logging
+from datetime import datetime
+
 from aiogram import types
 from aiogram.fsm.context import FSMContext
+from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
@@ -58,9 +61,13 @@ async def start_yookassa_payment(
         reply_markup=keyboard,
         parse_mode="HTML"
     )
-    
+
     await state.set_state(BalanceStates.waiting_for_amount)
     await state.update_data(payment_method="yookassa")
+    await state.update_data(
+        yookassa_prompt_message_id=callback.message.message_id,
+        yookassa_prompt_chat_id=callback.message.chat.id,
+    )
     await callback.answer()
 
 
@@ -108,9 +115,13 @@ async def start_yookassa_sbp_payment(
         reply_markup=keyboard,
         parse_mode="HTML"
     )
-    
+
     await state.set_state(BalanceStates.waiting_for_amount)
     await state.update_data(payment_method="yookassa_sbp")
+    await state.update_data(
+        yookassa_prompt_message_id=callback.message.message_id,
+        yookassa_prompt_chat_id=callback.message.chat.id,
+    )
     await callback.answer()
 
 
@@ -172,7 +183,25 @@ async def process_yookassa_payment_amount(
             [types.InlineKeyboardButton(text=texts.BACK, callback_data="balance_topup")]
         ])
         
-        await message.answer(
+        state_data = await state.get_data()
+        prompt_message_id = state_data.get("yookassa_prompt_message_id")
+        prompt_chat_id = state_data.get("yookassa_prompt_chat_id", message.chat.id)
+
+        try:
+            await message.delete()
+        except Exception as delete_error:  # pragma: no cover - зависит от прав бота
+            logger.warning("Не удалось удалить сообщение с суммой YooKassa: %s", delete_error)
+
+        if prompt_message_id:
+            try:
+                await message.bot.delete_message(prompt_chat_id, prompt_message_id)
+            except Exception as delete_error:  # pragma: no cover - диагностический лог
+                logger.warning(
+                    "Не удалось удалить сообщение с запросом суммы YooKassa: %s",
+                    delete_error,
+                )
+
+        invoice_message = await message.answer(
             f"💳 <b>Оплата банковской картой</b>\n\n"
             f"💰 Сумма: {settings.format_price(amount_kopeks)}\n"
             f"🆔 ID платежа: {payment_result['yookassa_payment_id'][:8]}...\n\n"
@@ -187,9 +216,34 @@ async def process_yookassa_payment_amount(
             reply_markup=keyboard,
             parse_mode="HTML"
         )
-        
+
+        try:
+            from app.services import payment_service as payment_module
+
+            payment = await payment_module.get_yookassa_payment_by_local_id(
+                db, payment_result["local_payment_id"]
+            )
+            if payment:
+                metadata = dict(getattr(payment, "metadata_json", {}) or {})
+                metadata["invoice_message"] = {
+                    "chat_id": invoice_message.chat.id,
+                    "message_id": invoice_message.message_id,
+                }
+                await db.execute(
+                    update(payment.__class__)
+                    .where(payment.__class__.id == payment.id)
+                    .values(metadata_json=metadata, updated_at=datetime.utcnow())
+                )
+                await db.commit()
+        except Exception as error:  # pragma: no cover - диагностический лог
+            logger.warning("Не удалось сохранить сообщение YooKassa: %s", error)
+
+        await state.update_data(
+            yookassa_invoice_message_id=invoice_message.message_id,
+            yookassa_invoice_chat_id=invoice_message.chat.id,
+        )
+
         await state.clear()
-        
         logger.info(f"Создан платеж YooKassa для пользователя {db_user.telegram_id}: "
                    f"{amount_kopeks//100}₽, ID: {payment_result['yookassa_payment_id']}")
         
@@ -310,27 +364,45 @@ async def process_yookassa_sbp_payment_amount(
         
         # Создаем клавиатуру с кнопками для оплаты по ссылке и проверки статуса
         keyboard_buttons = []
-        
+
         # Добавляем кнопку оплаты, если доступна ссылка
         if confirmation_url:
             keyboard_buttons.append([types.InlineKeyboardButton(text="🔗 Перейти к оплате", url=confirmation_url)])
         else:
             # Если ссылка недоступна, предлагаем оплатить через ID платежа в приложении банка
             keyboard_buttons.append([types.InlineKeyboardButton(text="📱 Оплатить в приложении банка", callback_data="temp_disabled")])
-        
+
         # Добавляем общие кнопки
         keyboard_buttons.append([types.InlineKeyboardButton(text="📊 Проверить статус", callback_data=f"check_yookassa_{payment_result['local_payment_id']}")])
         keyboard_buttons.append([types.InlineKeyboardButton(text=texts.BACK, callback_data="balance_topup")])
-        
+
         keyboard = types.InlineKeyboardMarkup(inline_keyboard=keyboard_buttons)
-        
+
+        state_data = await state.get_data()
+        prompt_message_id = state_data.get("yookassa_prompt_message_id")
+        prompt_chat_id = state_data.get("yookassa_prompt_chat_id", message.chat.id)
+
+        try:
+            await message.delete()
+        except Exception as delete_error:  # pragma: no cover - зависит от прав бота
+            logger.warning("Не удалось удалить сообщение с суммой YooKassa (СБП): %s", delete_error)
+
+        if prompt_message_id:
+            try:
+                await message.bot.delete_message(prompt_chat_id, prompt_message_id)
+            except Exception as delete_error:  # pragma: no cover - диагностический лог
+                logger.warning(
+                    "Не удалось удалить сообщение с запросом суммы YooKassa (СБП): %s",
+                    delete_error,
+                )
+
         # Подготавливаем текст сообщения
         message_text = (
             f"🔗 <b>Оплата через СБП</b>\n\n"
             f"💰 Сумма: {settings.format_price(amount_kopeks)}\n"
             f"🆔 ID платежа: {payment_result['yookassa_payment_id'][:8]}...\n\n"
         )
-        
+
         # Добавляем инструкции в зависимости от доступных способов оплаты
         if not confirmation_url:
             message_text += (
@@ -341,18 +413,18 @@ async def process_yookassa_sbp_payment_amount(
                 f"4. Подтвердите платеж в приложении банка\n"
                 f"5. Деньги поступят на баланс автоматически\n\n"
             )
-        
+
         message_text += (
             f"🔒 Оплата происходит через защищенную систему YooKassa\n"
             f"✅ Принимаем СБП от всех банков-участников\n\n"
             f"❓ Если возникнут проблемы, обратитесь в {settings.get_support_contact_display_html()}"
         )
-        
+
         # Отправляем сообщение с инструкциями и клавиатурой
         # Если есть QR-код, отправляем его как медиа-сообщение
         if qr_photo:
             # Используем метод отправки медиа-группы или фото с описанием
-            await message.answer_photo(
+            invoice_message = await message.answer_photo(
                 photo=qr_photo,
                 caption=message_text,
                 reply_markup=keyboard,
@@ -360,12 +432,39 @@ async def process_yookassa_sbp_payment_amount(
             )
         else:
             # Если QR-код недоступен, отправляем обычное текстовое сообщение
-            await message.answer(
+            invoice_message = await message.answer(
                 message_text,
                 reply_markup=keyboard,
                 parse_mode="HTML"
             )
-        
+
+        try:
+            from app.services import payment_service as payment_module
+
+            payment = await payment_module.get_yookassa_payment_by_local_id(
+                db, payment_result["local_payment_id"]
+            )
+            if payment:
+                metadata = dict(getattr(payment, "metadata_json", {}) or {})
+                metadata["invoice_message"] = {
+                    "chat_id": invoice_message.chat.id,
+                    "message_id": invoice_message.message_id,
+                }
+                await db.execute(
+                    update(payment.__class__)
+                    .where(payment.__class__.id == payment.id)
+                    .values(metadata_json=metadata, updated_at=datetime.utcnow())
+                )
+                await db.commit()
+        except Exception as error:  # pragma: no cover - диагностический лог
+            logger.warning("Не удалось сохранить сообщение YooKassa (СБП): %s", error)
+
+        await state.update_data(
+            yookassa_invoice_message_id=invoice_message.message_id,
+            yookassa_invoice_chat_id=invoice_message.chat.id,
+        )
+
+        await state.clear()
         logger.info(f"Создан платеж YooKassa СБП для пользователя {db_user.telegram_id}: "
                    f"{amount_kopeks//100}₽, ID: {payment_result['yookassa_payment_id']}")
         
