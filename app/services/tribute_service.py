@@ -23,10 +23,30 @@ logger = logging.getLogger(__name__)
 
 
 class TributeService:
+    _invoice_messages: Dict[int, Dict[str, int]] = {}
     
     def __init__(self, bot: Bot):
         self.bot = bot
         self.tribute_api = TributeAPI()
+
+    @classmethod
+    def remember_invoice_message(cls, user_id: int, chat_id: int, message_id: int) -> None:
+        cls._invoice_messages[user_id] = {"chat_id": chat_id, "message_id": message_id}
+
+    async def _cleanup_invoice_message(self, user_id: int) -> None:
+        invoice_message = self._invoice_messages.pop(user_id, None)
+        if not invoice_message or not getattr(self, "bot", None):
+            return
+
+        chat_id = invoice_message.get("chat_id")
+        message_id = invoice_message.get("message_id")
+        if not chat_id or not message_id:
+            return
+
+        try:
+            await self.bot.delete_message(chat_id, message_id)
+        except Exception as error:  # pragma: no cover - depends on bot rights
+            logger.warning("Не удалось удалить Tribute счёт %s: %s", message_id, error)
     
     async def create_payment_link(
         self,
@@ -174,7 +194,8 @@ class TributeService:
                     )
                 except Exception as e:
                     logger.error(f"Ошибка отправки уведомления о Tribute пополнении: {e}")
-                
+
+                await self._cleanup_invoice_message(user_telegram_id)
                 await self._send_success_notification(user_telegram_id, amount_kopeks)
                 
                 logger.info(f"🎉 Успешно обработан Tribute платеж: {amount_kopeks/100}₽ для пользователя {user_telegram_id}")

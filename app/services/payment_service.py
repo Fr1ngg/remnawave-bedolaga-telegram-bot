@@ -112,6 +112,11 @@ async def update_mulenpay_payment_status(*args, **kwargs):
     return await mulenpay_crud.update_mulenpay_payment_status(*args, **kwargs)
 
 
+async def update_mulenpay_payment_metadata(*args, **kwargs):
+    mulenpay_crud = import_module("app.database.crud.mulenpay")
+    return await mulenpay_crud.update_mulenpay_payment_metadata(*args, **kwargs)
+
+
 async def link_mulenpay_payment_to_transaction(*args, **kwargs):
     mulenpay_crud = import_module("app.database.crud.mulenpay")
     return await mulenpay_crud.link_mulenpay_payment_to_transaction(*args, **kwargs)

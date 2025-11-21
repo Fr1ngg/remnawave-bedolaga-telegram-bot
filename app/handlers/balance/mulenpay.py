@@ -59,7 +59,11 @@ async def start_mulenpay_payment(
     )
 
     await state.set_state(BalanceStates.waiting_for_amount)
-    await state.update_data(payment_method="mulenpay")
+    await state.update_data(
+        payment_method="mulenpay",
+        mulenpay_prompt_message_id=callback.message.message_id,
+        mulenpay_prompt_chat_id=callback.message.chat.id,
+    )
     await callback.answer()
 
 
@@ -92,6 +96,26 @@ async def process_mulenpay_payment_amount(
         return
 
     amount_rubles = amount_kopeks / 100
+
+    state_data = await state.get_data()
+    prompt_message_id = state_data.get("mulenpay_prompt_message_id")
+    prompt_chat_id = state_data.get("mulenpay_prompt_chat_id", message.chat.id)
+
+    try:
+        await message.delete()
+    except Exception as delete_error:  # pragma: no cover - depends on bot permissions
+        logger.warning(
+            "Не удалось удалить сообщение с суммой MulenPay: %s", delete_error
+        )
+
+    if prompt_message_id:
+        try:
+            await message.bot.delete_message(prompt_chat_id, prompt_message_id)
+        except Exception as delete_error:  # pragma: no cover - diagnostic
+            logger.warning(
+                "Не удалось удалить сообщение с запросом суммы MulenPay: %s",
+                delete_error,
+            )
 
     try:
         payment_service = PaymentService(message.bot)
@@ -163,10 +187,37 @@ async def process_mulenpay_payment_amount(
             mulenpay_name_html=mulenpay_name_html,
         )
 
-        await message.answer(
+        invoice_message = await message.answer(
             message_text,
             reply_markup=keyboard,
             parse_mode="HTML",
+        )
+
+        try:
+            from app.services import payment_service as payment_module
+
+            payment = await payment_module.get_mulenpay_payment_by_local_id(
+                db, local_payment_id
+            )
+            if payment:
+                payment_metadata = dict(
+                    getattr(payment, "metadata_json", {}) or {}
+                )
+                payment_metadata["invoice_message"] = {
+                    "chat_id": invoice_message.chat.id,
+                    "message_id": invoice_message.message_id,
+                }
+                await payment_module.update_mulenpay_payment_metadata(
+                    db,
+                    payment=payment,
+                    metadata=payment_metadata,
+                )
+        except Exception as error:  # pragma: no cover - diagnostic logging only
+            logger.warning("Не удалось сохранить данные сообщения MulenPay: %s", error)
+
+        await state.update_data(
+            mulenpay_invoice_message_id=invoice_message.message_id,
+            mulenpay_invoice_chat_id=invoice_message.chat.id,
         )
 
         await state.clear()

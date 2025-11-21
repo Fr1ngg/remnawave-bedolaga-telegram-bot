@@ -306,6 +306,22 @@ class PlategaPaymentMixin:
         metadata = dict(getattr(payment, "metadata_json", {}) or {})
         balance_already_credited = bool(metadata.get("balance_credited"))
 
+        invoice_message = metadata.get("invoice_message") or {}
+        if getattr(self, "bot", None):
+            chat_id = invoice_message.get("chat_id")
+            message_id = invoice_message.get("message_id")
+            if chat_id and message_id:
+                try:
+                    await self.bot.delete_message(chat_id, message_id)
+                except Exception as delete_error:  # pragma: no cover - depends on bot rights
+                    logger.warning(
+                        "Не удалось удалить Platega счёт %s: %s",
+                        message_id,
+                        delete_error,
+                    )
+                else:
+                    metadata.pop("invoice_message", None)
+
         if payment.transaction_id:
             logger.info(
                 "Platega платеж %s уже связан с транзакцией %s",
