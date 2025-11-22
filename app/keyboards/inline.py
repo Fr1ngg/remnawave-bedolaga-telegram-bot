@@ -127,6 +127,21 @@ def get_rules_keyboard(language: str = DEFAULT_LANGUAGE) -> InlineKeyboardMarkup
         ]
     ])
 
+def get_privacy_policy_keyboard(language: str = DEFAULT_LANGUAGE) -> InlineKeyboardMarkup:
+    texts = get_texts(language)
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(
+                text=texts.PRIVACY_POLICY_ACCEPT,
+                callback_data="privacy_policy_accept"
+            ),
+            InlineKeyboardButton(
+                text=texts.PRIVACY_POLICY_DECLINE,
+                callback_data="privacy_policy_decline"
+            )
+        ]
+    ])
+
 def get_channel_sub_keyboard(
     channel_link: Optional[str],
     language: str = DEFAULT_LANGUAGE,

@@ -20,18 +20,20 @@ from app.database.crud.campaign import (
 from app.database.models import UserStatus, SubscriptionStatus
 from app.keyboards.inline import (
     get_rules_keyboard,
+    get_privacy_policy_keyboard,
     get_main_menu_keyboard,
     get_post_registration_keyboard,
     get_language_selection_keyboard,
 )
 from app.localization.loader import DEFAULT_LANGUAGE
-from app.localization.texts import get_texts, get_rules
+from app.localization.texts import get_texts, get_rules, get_privacy_policy
 from app.services.referral_service import process_referral_registration
 from app.services.campaign_service import AdvertisingCampaignService
 from app.services.admin_notification_service import AdminNotificationService
 from app.services.subscription_service import SubscriptionService
 from app.services.support_settings_service import SupportSettingsService
 from app.services.main_menu_button_service import MainMenuButtonService
+from app.services.privacy_policy_service import PrivacyPolicyService
 from app.utils.user_utils import generate_unique_referral_code
 from app.utils.promo_offer import (
     build_promo_offer_hint,
@@ -104,6 +106,7 @@ async def handle_potential_referral_code(
 
     if current_state not in [
         RegistrationStates.waiting_for_rules_accept.state,
+        RegistrationStates.waiting_for_privacy_policy_accept.state,
         RegistrationStates.waiting_for_referral_code.state,
         None
     ]:
@@ -611,12 +614,105 @@ async def process_language_selection(
     )
 
 
+async def _show_privacy_policy_after_rules(
+    callback: types.CallbackQuery,
+    state: FSMContext,
+    db: AsyncSession,
+    language: str,
+) -> bool:
+    """
+    Показывает политику конфиденциальности после принятия правил.
+    Возвращает True, если политика была показана, False если её нет или произошла ошибка.
+    """
+    policy = await PrivacyPolicyService.get_policy(db, language, fallback=True)
+    
+    if not policy or not policy.is_enabled:
+        logger.info("⚠️ Политика конфиденциальности не включена, пропускаем её показ")
+        return False
+    
+    if not policy.content or not policy.content.strip():
+        privacy_policy_text = get_privacy_policy(language)
+        if not privacy_policy_text or not privacy_policy_text.strip():
+            logger.info("⚠️ Политика конфиденциальности включена, но дефолтный текст пустой, пропускаем показ")
+            return False
+        logger.info(f"🔒 Используется дефолтный текст политики конфиденциальности из локализации для языка {language}")
+    else:
+        privacy_policy_text = policy.content
+        logger.info(f"🔒 Используется политика конфиденциальности из БД для языка {language}")
+    
+    try:
+        await callback.message.edit_text(
+            privacy_policy_text,
+            reply_markup=get_privacy_policy_keyboard(language)
+        )
+        await state.set_state(RegistrationStates.waiting_for_privacy_policy_accept)
+        logger.info(f"🔒 Политика конфиденциальности отправлена пользователю {callback.from_user.id}")
+        return True
+    except Exception as e:
+        logger.error(f"Ошибка при показе политики конфиденциальности: {e}", exc_info=True)
+        try:
+            await callback.message.answer(
+                privacy_policy_text,
+                reply_markup=get_privacy_policy_keyboard(language)
+            )
+            await state.set_state(RegistrationStates.waiting_for_privacy_policy_accept)
+            logger.info(f"🔒 Политика конфиденциальности отправлена новым сообщением пользователю {callback.from_user.id}")
+            return True
+        except Exception as e2:
+            logger.error(f"Критическая ошибка при отправке политики конфиденциальности: {e2}", exc_info=True)
+            return False
+
+
+async def _continue_registration_after_rules(
+    callback: types.CallbackQuery,
+    state: FSMContext,
+    db: AsyncSession,
+    language: str,
+) -> None:
+    """
+    Продолжает регистрацию после принятия правил (реферальный код или завершение).
+    """
+    data = await state.get_data() or {}
+    texts = get_texts(language)
+    
+    if data.get('referral_code'):
+        logger.info(f"🎫 Найден реферальный код из deep link: {data['referral_code']}")
+
+        referrer = await get_user_by_referral_code(db, data['referral_code'])
+        if referrer:
+            data['referrer_id'] = referrer.id
+            await state.set_data(data)
+            logger.info(f"✅ Реферер найден: {referrer.id}")
+
+        await complete_registration_from_callback(callback, state, db)
+    else:
+        if settings.SKIP_REFERRAL_CODE:
+            logger.info("⚙️ SKIP_REFERRAL_CODE включен - пропускаем запрос реферального кода")
+            await complete_registration_from_callback(callback, state, db)
+        else:
+            try:
+                await callback.message.edit_text(
+                    texts.t(
+                        "REFERRAL_CODE_QUESTION",
+                        "У вас есть реферальный код? Введите его или нажмите 'Пропустить'",
+                    ),
+                    reply_markup=get_referral_code_keyboard(language)
+                )
+                await state.set_state(RegistrationStates.waiting_for_referral_code)
+                logger.info(f"🔍 Ожидание ввода реферального кода")
+            except Exception as e:
+                logger.error(f"Ошибка при показе вопроса о реферальном коде: {e}")
+                await complete_registration_from_callback(callback, state, db)
+
+
 async def process_rules_accept(
     callback: types.CallbackQuery,
     state: FSMContext,
     db: AsyncSession
 ):
-    
+    """
+    Обрабатывает принятие или отклонение правил пользователем.
+    """
     logger.info(f"📋 RULES: Начало обработки правил")
     logger.info(f"📊 Callback data: {callback.data}")
     logger.info(f"👤 User: {callback.from_user.id}")
@@ -637,50 +733,16 @@ async def process_rules_accept(
         if callback.data == 'rules_accept':
             logger.info(f"✅ Правила приняты пользователем {callback.from_user.id}")
             
-            try:
-                await callback.message.delete()
-                logger.info(f"🗑️ Сообщение с правилами удалено")
-            except Exception as e:
-                logger.warning(f"⚠️ Не удалось удалить сообщение с правилами: {e}")
-                try:
-                    await callback.message.edit_text(
-                        texts.t(
-                            "RULES_ACCEPTED_PROCESSING",
-                            "✅ Правила приняты! Завершаем регистрацию...",
-                        ),
-                        reply_markup=None
-                    )
-                except Exception:
-                    pass
+            # Пытаемся показать политику конфиденциальности
+            policy_shown = await _show_privacy_policy_after_rules(
+                callback, state, db, language
+            )
             
-            if data.get('referral_code'):
-                logger.info(f"🎫 Найден реферальный код из deep link: {data['referral_code']}")
-
-                referrer = await get_user_by_referral_code(db, data['referral_code'])
-                if referrer:
-                    data['referrer_id'] = referrer.id
-                    await state.set_data(data)
-                    logger.info(f"✅ Реферер найден: {referrer.id}")
-
-                await complete_registration_from_callback(callback, state, db)
-            else:
-                if settings.SKIP_REFERRAL_CODE:
-                    logger.info("⚙️ SKIP_REFERRAL_CODE включен - пропускаем запрос реферального кода")
-                    await complete_registration_from_callback(callback, state, db)
-                else:
-                    try:
-                        await callback.message.answer(
-                            texts.t(
-                                "REFERRAL_CODE_QUESTION",
-                                "У вас есть реферальный код? Введите его или нажмите 'Пропустить'",
-                            ),
-                            reply_markup=get_referral_code_keyboard(language)
-                        )
-                        await state.set_state(RegistrationStates.waiting_for_referral_code)
-                        logger.info(f"🔍 Ожидание ввода реферального кода")
-                    except Exception as e:
-                        logger.error(f"Ошибка при показе вопроса о реферальном коде: {e}")
-                        await complete_registration_from_callback(callback, state, db)
+            # Если политика не была показана, продолжаем регистрацию
+            if not policy_shown:
+                await _continue_registration_after_rules(
+                    callback, state, db, language
+                )
                     
         else:
             logger.info(f"❌ Правила отклонены пользователем {callback.from_user.id}")
@@ -697,10 +759,13 @@ async def process_rules_accept(
                 )
             except Exception as e:
                 logger.error(f"Ошибка при показе сообщения об отклонении правил: {e}")
-                await callback.message.edit_text(
-                    rules_required_text,
-                    reply_markup=get_rules_keyboard(language)
-                )
+                try:
+                    await callback.message.edit_text(
+                        rules_required_text,
+                        reply_markup=get_rules_keyboard(language)
+                    )
+                except:
+                    pass
         
         logger.info(f"✅ Правила обработаны для пользователя {callback.from_user.id}")
         
@@ -723,6 +788,128 @@ async def process_rules_accept(
                 reply_markup=get_rules_keyboard(language)
             )
             await state.set_state(RegistrationStates.waiting_for_rules_accept)
+        except:
+            pass
+
+
+async def process_privacy_policy_accept(
+    callback: types.CallbackQuery,
+    state: FSMContext,
+    db: AsyncSession
+):
+    
+    logger.info(f"🔒 PRIVACY POLICY: Начало обработки политики конфиденциальности")
+    logger.info(f"📊 Callback data: {callback.data}")
+    logger.info(f"👤 User: {callback.from_user.id}")
+    
+    current_state = await state.get_state()
+    logger.info(f"📊 Текущее состояние: {current_state}")
+    
+    language = DEFAULT_LANGUAGE
+    texts = get_texts(language)
+
+    try:
+        await callback.answer()
+
+        data = await state.get_data() or {}
+        language = data.get('language', language)
+        texts = get_texts(language)
+        
+        if callback.data == 'privacy_policy_accept':
+            logger.info(f"✅ Политика конфиденциальности принята пользователем {callback.from_user.id}")
+            
+            try:
+                await callback.message.delete()
+                logger.info(f"🗑️ Сообщение с политикой конфиденциальности удалено")
+            except Exception as e:
+                logger.warning(f"⚠️ Не удалось удалить сообщение с политикой конфиденциальности: {e}")
+                try:
+                    await callback.message.edit_text(
+                        texts.t(
+                            "PRIVACY_POLICY_ACCEPTED_PROCESSING",
+                            "✅ Политика конфиденциальности принята! Продолжаем регистрацию...",
+                        ),
+                        reply_markup=None
+                    )
+                except Exception:
+                    pass
+            
+            if data.get('referral_code'):
+                logger.info(f"🎫 Найден реферальный код из deep link: {data['referral_code']}")
+
+                referrer = await get_user_by_referral_code(db, data['referral_code'])
+                if referrer:
+                    data['referrer_id'] = referrer.id
+                    await state.set_data(data)
+                    logger.info(f"✅ Реферер найден: {referrer.id}")
+
+                await complete_registration_from_callback(callback, state, db)
+            else:
+                if settings.SKIP_REFERRAL_CODE:
+                    logger.info("⚙️ SKIP_REFERRAL_CODE включен - пропускаем запрос реферального кода")
+                    await complete_registration_from_callback(callback, state, db)
+                else:
+                    try:
+                        await state.set_data(data)
+                        await state.set_state(RegistrationStates.waiting_for_referral_code)
+                        
+                        await callback.bot.send_message(
+                            chat_id=callback.from_user.id,
+                            text=texts.t(
+                                "REFERRAL_CODE_QUESTION",
+                                "У вас есть реферальный код? Введите его или нажмите 'Пропустить'",
+                            ),
+                            reply_markup=get_referral_code_keyboard(language)
+                        )
+                        logger.info(f"🔍 Ожидание ввода реферального кода")
+                    except Exception as e:
+                        logger.error(f"Ошибка при показе вопроса о реферальном коде: {e}")
+                        await complete_registration_from_callback(callback, state, db)
+                    
+        else:
+            logger.info(f"❌ Политика конфиденциальности отклонена пользователем {callback.from_user.id}")
+            
+            privacy_policy_required_text = texts.t(
+                "PRIVACY_POLICY_REQUIRED",
+                "Для использования бота необходимо принять политику конфиденциальности.",
+            )
+
+            try:
+                await callback.message.edit_text(
+                    privacy_policy_required_text,
+                    reply_markup=get_privacy_policy_keyboard(language)
+                )
+            except Exception as e:
+                logger.error(f"Ошибка при показе сообщения об отклонении политики конфиденциальности: {e}")
+                try:
+                    await callback.message.edit_text(
+                        privacy_policy_required_text,
+                        reply_markup=get_privacy_policy_keyboard(language)
+                    )
+                except:
+                    pass
+        
+        logger.info(f"✅ Политика конфиденциальности обработана для пользователя {callback.from_user.id}")
+        
+    except Exception as e:
+        logger.error(f"❌ Ошибка обработки политики конфиденциальности: {e}", exc_info=True)
+        await callback.answer(
+            texts.t("ERROR_TRY_AGAIN", "❌ Произошла ошибка. Попробуйте еще раз."),
+            show_alert=True,
+        )
+
+        try:
+            data = await state.get_data() or {}
+            language = data.get('language', language)
+            texts = get_texts(language)
+            await callback.message.answer(
+                texts.t(
+                    "ERROR_PRIVACY_POLICY_RETRY",
+                    "Произошла ошибка. Попробуйте принять политику конфиденциальности еще раз:",
+                ),
+                reply_markup=get_privacy_policy_keyboard(language)
+            )
+            await state.set_state(RegistrationStates.waiting_for_privacy_policy_accept)
         except:
             pass
 
@@ -1751,7 +1938,14 @@ def register_handlers(dp: Dispatcher):
         StateFilter(RegistrationStates.waiting_for_rules_accept)
     )
     logger.info("✅ Зарегистрирован process_rules_accept")
-
+    
+    dp.callback_query.register(
+        process_privacy_policy_accept,
+        F.data.in_(["privacy_policy_accept", "privacy_policy_decline"]),
+        StateFilter(RegistrationStates.waiting_for_privacy_policy_accept)
+    )
+    logger.info("✅ Зарегистрирован process_privacy_policy_accept")
+    
     dp.callback_query.register(
         process_language_selection,
         F.data.startswith("language_select:"),
