@@ -3,6 +3,8 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Optional
 
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException, Query, Security, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -27,6 +29,7 @@ from ..schemas.tickets import (
 )
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 def _serialize_message(message: TicketMessage) -> TicketMessageResponse:
@@ -262,10 +265,25 @@ async def get_ticket_message_media(
     if not message.has_media or not message.media_file_id or not message.media_type:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Media not found for this message")
 
+    media_url: Optional[str] = None
+    bot = Bot(
+        token=settings.BOT_TOKEN,
+        default=DefaultBotProperties(parse_mode=ParseMode.HTML),
+    )
+    try:
+        file = await bot.get_file(message.media_file_id)
+        if file.file_path:
+            media_url = f"https://api.telegram.org/file/bot{settings.BOT_TOKEN}/{file.file_path}"
+    except Exception as error:
+        logger.warning("Failed to resolve media URL for ticket %s message %s: %s", ticket_id, message_id, error)
+    finally:
+        await bot.session.close()
+
     return TicketMediaResponse(
         id=message.id,
         ticket_id=ticket.id,
         media_type=message.media_type,
         media_file_id=message.media_file_id,
         media_caption=message.media_caption,
+        media_url=media_url,
     )
