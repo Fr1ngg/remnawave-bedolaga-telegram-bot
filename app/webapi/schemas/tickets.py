@@ -67,3 +67,4 @@ class TicketMediaResponse(BaseModel):
     media_type: str
     media_file_id: str
     media_caption: Optional[str] = None
+    media_url: Optional[str] = None
