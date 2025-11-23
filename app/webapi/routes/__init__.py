@@ -16,6 +16,7 @@ from . import (
     transactions,
     users,
     logs,
+    media,
 )
 
 __all__ = [
@@ -36,4 +37,5 @@ __all__ = [
     "transactions",
     "users",
     "logs",
+    "media",
 ]

@@ -15,6 +15,7 @@ from app.database.crud.ticket import TicketCRUD, TicketMessageCRUD
 from app.database.models import Ticket, TicketMessage, TicketStatus
 
 from ..dependencies import get_db_session, require_api_token
+from ..utils.media import build_media_url
 from ..schemas.tickets import (
     TicketMessageResponse,
     TicketPriorityUpdateRequest,
@@ -222,6 +223,7 @@ async def reply_to_ticket(
         media_caption=payload.media_caption,
     )
 
+    media_url = None
     bot = Bot(
         token=settings.BOT_TOKEN,
         default=DefaultBotProperties(parse_mode=ParseMode.HTML),
@@ -262,10 +264,20 @@ async def get_ticket_message_media(
     if not message.has_media or not message.media_file_id or not message.media_type:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Media not found for this message")
 
+    bot = Bot(
+        token=settings.BOT_TOKEN,
+        default=DefaultBotProperties(parse_mode=ParseMode.HTML),
+    )
+    try:
+        media_url = await build_media_url(bot, message.media_file_id)
+    finally:
+        await bot.session.close()
+
     return TicketMediaResponse(
         id=message.id,
         ticket_id=ticket.id,
         media_type=message.media_type,
         media_file_id=message.media_file_id,
         media_caption=message.media_caption,
+        media_url=media_url,
     )

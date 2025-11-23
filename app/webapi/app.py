@@ -28,6 +28,7 @@ from .routes import (
     transactions,
     users,
     logs,
+    media,
 )
 
 
@@ -161,5 +162,6 @@ def create_web_api_app() -> FastAPI:
     app.include_router(miniapp.router, prefix="/miniapp", tags=["miniapp"])
     app.include_router(polls.router, prefix="/polls", tags=["polls"])
     app.include_router(logs.router, prefix="/logs", tags=["logs"])
+    app.include_router(media.router, tags=["media"])
 
     return app
