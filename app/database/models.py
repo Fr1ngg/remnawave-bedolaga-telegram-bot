@@ -957,6 +957,29 @@ class ReferralEarning(Base):
         return self.amount_kopeks / 100
 
 
+class ReferralWithdrawalRequest(Base):
+    __tablename__ = "referral_withdrawal_requests"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    amount_kopeks = Column(Integer, nullable=False)
+    requisites = Column(Text, nullable=False)
+    status = Column(String(32), nullable=False, default="pending")
+
+    closed_by_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    closed_at = Column(DateTime, nullable=True)
+
+    created_at = Column(DateTime, default=func.now())
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+
+    user = relationship("User", foreign_keys=[user_id])
+    closed_by = relationship("User", foreign_keys=[closed_by_id])
+
+    @property
+    def amount_rubles(self) -> float:
+        return self.amount_kopeks / 100
+
+
 class Squad(Base):
     __tablename__ = "squads"
     
