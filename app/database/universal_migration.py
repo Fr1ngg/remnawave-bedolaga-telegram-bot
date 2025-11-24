@@ -3819,6 +3819,76 @@ async def add_promocode_promo_group_column() -> bool:
         return False
 
 
+async def create_referral_withdrawal_requests_table() -> bool:
+    table_exists = await check_table_exists("referral_withdrawal_requests")
+    if table_exists:
+        logger.info("ℹ️ Таблица referral_withdrawal_requests уже существует")
+        return True
+
+    try:
+        async with engine.begin() as conn:
+            db_type = await get_database_type()
+
+            if db_type == "sqlite":
+                create_sql = """
+                CREATE TABLE referral_withdrawal_requests (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER NOT NULL,
+                    amount_kopeks INTEGER NOT NULL,
+                    requisites TEXT NOT NULL,
+                    status VARCHAR(32) NOT NULL DEFAULT 'pending',
+                    closed_by_id INTEGER NULL,
+                    closed_at DATETIME NULL,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+                    FOREIGN KEY (closed_by_id) REFERENCES users(id) ON DELETE SET NULL
+                );
+                CREATE INDEX idx_referral_withdrawals_user ON referral_withdrawal_requests(user_id);
+                """
+            elif db_type == "postgresql":
+                create_sql = """
+                CREATE TABLE referral_withdrawal_requests (
+                    id SERIAL PRIMARY KEY,
+                    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                    amount_kopeks INTEGER NOT NULL,
+                    requisites TEXT NOT NULL,
+                    status VARCHAR(32) NOT NULL DEFAULT 'pending',
+                    closed_by_id INTEGER NULL REFERENCES users(id) ON DELETE SET NULL,
+                    closed_at TIMESTAMP NULL,
+                    created_at TIMESTAMP DEFAULT NOW(),
+                    updated_at TIMESTAMP DEFAULT NOW()
+                );
+                CREATE INDEX idx_referral_withdrawals_user ON referral_withdrawal_requests(user_id);
+                """
+            else:  # MySQL
+                create_sql = """
+                CREATE TABLE referral_withdrawal_requests (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    user_id INT NOT NULL,
+                    amount_kopeks INT NOT NULL,
+                    requisites TEXT NOT NULL,
+                    status VARCHAR(32) NOT NULL DEFAULT 'pending',
+                    closed_by_id INT NULL,
+                    closed_at TIMESTAMP NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                    CONSTRAINT fk_ref_withdraw_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+                    CONSTRAINT fk_ref_withdraw_closed_by FOREIGN KEY (closed_by_id) REFERENCES users(id) ON DELETE SET NULL
+                );
+                CREATE INDEX idx_referral_withdrawals_user ON referral_withdrawal_requests(user_id);
+                """
+
+            await conn.execute(text(create_sql))
+
+        logger.info("✅ Таблица referral_withdrawal_requests создана")
+        return True
+
+    except Exception as error:
+        logger.error(f"❌ Ошибка создания таблицы referral_withdrawal_requests: {error}")
+        return False
+
+
 async def run_universal_migration():
     logger.info("=== НАЧАЛО УНИВЕРСАЛЬНОЙ МИГРАЦИИ ===")
     
@@ -4020,6 +4090,13 @@ async def run_universal_migration():
             logger.info("✅ Таблица main_menu_buttons готова")
         else:
             logger.warning("⚠️ Проблемы с таблицей main_menu_buttons")
+
+        logger.info("=== СОЗДАНИЕ ТАБЛИЦЫ REFERRAL_WITHDRAWAL_REQUESTS ===")
+        referral_withdrawals_created = await create_referral_withdrawal_requests_table()
+        if referral_withdrawals_created:
+            logger.info("✅ Таблица заявок на вывод партнёрки готова")
+        else:
+            logger.warning("⚠️ Проблемы с таблицей заявок на вывод партнёрки")
 
         template_columns_ready = await ensure_promo_offer_template_active_duration_column()
         if template_columns_ready:
@@ -4267,6 +4344,7 @@ async def check_migration_status():
             "promo_offer_templates_active_discount_column": False,
             "promo_offer_logs_table": False,
             "subscription_temporary_access_table": False,
+            "referral_withdrawal_requests_table": False,
         }
         
         status["has_made_first_topup_column"] = await check_column_exists('users', 'has_made_first_topup')
@@ -4290,6 +4368,7 @@ async def check_migration_status():
         status["promo_offer_templates_active_discount_column"] = await check_column_exists('promo_offer_templates', 'active_discount_hours')
         status["promo_offer_logs_table"] = await check_table_exists('promo_offer_logs')
         status["subscription_temporary_access_table"] = await check_table_exists('subscription_temporary_access')
+        status["referral_withdrawal_requests_table"] = await check_table_exists('referral_withdrawal_requests')
 
         status["welcome_texts_is_enabled_column"] = await check_column_exists('welcome_texts', 'is_enabled')
         status["users_promo_group_column"] = await check_column_exists('users', 'promo_group_id')
@@ -4358,6 +4437,7 @@ async def check_migration_status():
             "promo_offer_templates_active_discount_column": "Колонка active_discount_hours в promo_offer_templates",
             "promo_offer_logs_table": "Таблица promo_offer_logs",
             "subscription_temporary_access_table": "Таблица subscription_temporary_access",
+            "referral_withdrawal_requests_table": "Таблица заявок на вывод партнёрки",
         }
         
         for check_key, check_status in status.items():
