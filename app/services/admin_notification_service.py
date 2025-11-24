@@ -8,6 +8,7 @@ from sqlalchemy.exc import MissingGreenlet
 
 from app.config import settings
 from app.database.crud.promo_group import get_promo_group_by_id
+from app.database.crud.subscription_event import create_subscription_event
 from app.database.crud.user import get_user_by_id
 from app.database.crud.transaction import get_transaction_by_id
 from app.database.models import (
@@ -91,6 +92,42 @@ class AdminNotificationService:
         if telegram_id is None:
             return "IDUnknown"
         return f"ID{telegram_id}"
+
+    async def _record_subscription_event(
+        self,
+        db: AsyncSession,
+        *,
+        event_type: str,
+        user: User,
+        subscription: Subscription,
+        transaction: Transaction | None = None,
+        amount_kopeks: int | None = None,
+        message: str | None = None,
+        extra: Dict[str, Any] | None = None,
+        occurred_at: datetime | None = None,
+    ) -> None:
+        """Persist subscription-related event for external dashboards."""
+
+        try:
+            await create_subscription_event(
+                db,
+                user_id=user.id,
+                event_type=event_type,
+                subscription_id=subscription.id if subscription else None,
+                transaction_id=transaction.id if transaction else None,
+                amount_kopeks=amount_kopeks,
+                currency=None,
+                message=message,
+                occurred_at=occurred_at,
+                extra=extra or None,
+            )
+        except Exception:
+            logger.error(
+                "Не удалось сохранить событие подписки (%s) для пользователя %s",
+                event_type,
+                getattr(user, "id", "unknown"),
+                exc_info=True,
+            )
 
     def _format_promo_group_discounts(self, promo_group: PromoGroup) -> List[str]:
         discount_lines: List[str] = []
@@ -194,10 +231,27 @@ class AdminNotificationService:
         *,
         charged_amount_kopeks: Optional[int] = None,
     ) -> bool:
-        if not self._is_enabled():
-            return False
-        
         try:
+            await self._record_subscription_event(
+                db,
+                event_type="activation",
+                user=user,
+                subscription=subscription,
+                transaction=None,
+                amount_kopeks=charged_amount_kopeks,
+                message="Trial activation",
+                occurred_at=datetime.utcnow(),
+                extra={
+                    "charged_amount_kopeks": charged_amount_kopeks,
+                    "trial_duration_days": settings.TRIAL_DURATION_DAYS,
+                    "traffic_limit_gb": settings.TRIAL_TRAFFIC_LIMIT_GB,
+                    "device_limit": subscription.device_limit,
+                },
+            )
+
+            if not self._is_enabled():
+                return False
+
             user_status = "🆕 Новый" if not user.has_had_paid_subscription else "🔄 Существующий"
             referrer_info = await self._get_referrer_info(db, user.referred_by_id)
             promo_group = await self._get_user_promo_group(db, user)
@@ -255,10 +309,28 @@ class AdminNotificationService:
         was_trial_conversion: bool = False,
         amount_kopeks: Optional[int] = None,
     ) -> bool:
-        if not self._is_enabled():
-            return False
-        
         try:
+            total_amount = amount_kopeks if amount_kopeks is not None else (transaction.amount_kopeks if transaction else 0)
+
+            await self._record_subscription_event(
+                db,
+                event_type="purchase",
+                user=user,
+                subscription=subscription,
+                transaction=transaction,
+                amount_kopeks=total_amount,
+                message="Subscription purchase",
+                occurred_at=(transaction.completed_at or transaction.created_at) if transaction else datetime.utcnow(),
+                extra={
+                    "period_days": period_days,
+                    "was_trial_conversion": was_trial_conversion,
+                    "payment_method": self._get_payment_method_display(transaction.payment_method) if transaction else "Баланс",
+                },
+            )
+
+            if not self._is_enabled():
+                return False
+
             event_type = "🔄 КОНВЕРСИЯ ИЗ ТРИАЛА" if was_trial_conversion else "💎 ПОКУПКА ПОДПИСКИ"
 
             if was_trial_conversion:
@@ -275,7 +347,6 @@ class AdminNotificationService:
             promo_block = self._format_promo_group_block(promo_group)
             user_display = self._get_user_display(user)
 
-            total_amount = amount_kopeks if amount_kopeks is not None else (transaction.amount_kopeks if transaction else 0)
             transaction_id = transaction.id if transaction else "—"
 
             message = f"""💎 <b>{event_type}</b>
@@ -567,18 +638,36 @@ class AdminNotificationService:
         new_end_date: datetime | None = None,
         balance_after: int | None = None,
     ) -> bool:
-        if not self._is_enabled():
-            return False
-
         try:
+            current_end_date = new_end_date or subscription.end_date
+            current_balance = balance_after if balance_after is not None else user.balance_kopeks
+
+            await self._record_subscription_event(
+                db,
+                event_type="renewal",
+                user=user,
+                subscription=subscription,
+                transaction=transaction,
+                amount_kopeks=transaction.amount_kopeks,
+                message="Subscription renewed",
+                occurred_at=transaction.completed_at or transaction.created_at,
+                extra={
+                    "extended_days": extended_days,
+                    "previous_end_date": old_end_date.isoformat(),
+                    "new_end_date": current_end_date.isoformat(),
+                    "payment_method": transaction.payment_method,
+                    "balance_after": current_balance,
+                },
+            )
+
+            if not self._is_enabled():
+                return False
+
             payment_method = self._get_payment_method_display(transaction.payment_method)
             servers_info = await self._get_servers_info(subscription.connected_squads)
             promo_group = await self._get_user_promo_group(db, user)
             promo_block = self._format_promo_group_block(promo_group)
             user_display = self._get_user_display(user)
-
-            current_end_date = new_end_date or subscription.end_date
-            current_balance = balance_after if balance_after is not None else user.balance_kopeks
 
             message = f"""⏰ <b>ПРОДЛЕНИЕ ПОДПИСКИ</b>
 
