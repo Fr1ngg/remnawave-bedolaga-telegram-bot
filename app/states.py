@@ -35,6 +35,10 @@ class PromoCodeStates(StatesGroup):
     waiting_for_code = State()
     waiting_for_referral_code = State()
 
+
+class ReferralWithdrawalStates(StatesGroup):
+    waiting_for_requisites = State()
+
 class AdminStates(StatesGroup):
     
     waiting_for_user_search = State()
@@ -97,6 +101,9 @@ class AdminStates(StatesGroup):
     editing_user_traffic = State()
     editing_user_referrals = State()
     editing_user_referral_percent = State()
+    editing_referral_withdraw_min_amount = State()
+    editing_referral_withdraw_prompt_text = State()
+    editing_referral_withdraw_success_text = State()
 
     editing_rules_page = State()
     editing_privacy_policy = State()
