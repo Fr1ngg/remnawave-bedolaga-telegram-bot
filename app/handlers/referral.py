@@ -3,6 +3,7 @@ from pathlib import Path
 
 import qrcode
 from aiogram import Dispatcher, F, types
+from aiogram.fsm.context import FSMContext
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.types import FSInputFile
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -11,6 +12,8 @@ from app.config import settings
 from app.database.models import User
 from app.keyboards.inline import get_referral_keyboard
 from app.localization.texts import get_texts
+from app.services.referral_withdrawal_service import ReferralWithdrawalService
+from app.states import ReferralWithdrawalStates
 from app.utils.photo_message import edit_or_answer_photo
 from app.utils.user_utils import (
     get_detailed_referral_list,
@@ -25,11 +28,15 @@ logger = logging.getLogger(__name__)
 async def show_referral_info(
     callback: types.CallbackQuery,
     db_user: User,
-    db: AsyncSession
+    db: AsyncSession,
+    state: FSMContext,
 ):
+    await state.clear()
+
     texts = get_texts(db_user.language)
-    
+
     summary = await get_user_referral_summary(db, db_user.id)
+    withdrawal_settings = await ReferralWithdrawalService.get_settings(db)
     
     bot_username = (await callback.bot.get_me()).username
     referral_link = f"https://t.me/{bot_username}?start={db_user.referral_code}"
@@ -181,7 +188,10 @@ async def show_referral_info(
     await edit_or_answer_photo(
         callback,
         referral_text,
-        get_referral_keyboard(db_user.language),
+        get_referral_keyboard(
+            db_user.language,
+            show_withdrawal_button=withdrawal_settings.enabled,
+        ),
     )
     await callback.answer()
 
@@ -454,6 +464,124 @@ async def create_invite_message(
     await callback.answer()
 
 
+async def start_referral_withdrawal_request(
+    callback: types.CallbackQuery,
+    db_user: User,
+    db: AsyncSession,
+    state: FSMContext,
+):
+    texts = get_texts(db_user.language)
+    settings_obj = await ReferralWithdrawalService.get_settings(db)
+
+    if not settings_obj.enabled:
+        await callback.answer(
+            texts.t(
+                "REFERRAL_WITHDRAWAL_DISABLED",
+                "Вывод реферального дохода сейчас недоступен.",
+            ),
+            show_alert=True,
+        )
+        return
+
+    available = await ReferralWithdrawalService.get_available_amount(db, db_user.id)
+    if available < settings_obj.min_amount_kopeks:
+        await callback.answer(
+            texts.t(
+                "REFERRAL_WITHDRAWAL_TOO_LOW",
+                "Минимальная сумма для вывода: {min_amount}. Доступно: {available}.",
+            ).format(
+                min_amount=texts.format_price(settings_obj.min_amount_kopeks),
+                available=texts.format_price(available),
+            ),
+            show_alert=True,
+        )
+        return
+
+    fallback_prompt = texts.t(
+        "REFERRAL_WITHDRAWAL_PROMPT",
+        ReferralWithdrawalService.DEFAULT_PROMPT,
+    )
+    prompt_template = settings_obj.prompt_text or fallback_prompt
+
+    prompt_text = ReferralWithdrawalService.format_prompt_text(
+        prompt_template,
+        {
+            "available": texts.format_price(available),
+            "min_amount": texts.format_price(settings_obj.min_amount_kopeks),
+        },
+        fallback_prompt,
+    )
+
+    await state.set_state(ReferralWithdrawalStates.waiting_for_requisites)
+    await state.update_data(referral_withdraw_available=available)
+    await callback.message.answer(
+        prompt_text,
+        reply_markup=types.InlineKeyboardMarkup(
+            inline_keyboard=[[types.InlineKeyboardButton(text=texts.BACK, callback_data="menu_referrals")]]
+        ),
+    )
+    await callback.answer()
+
+
+async def handle_referral_withdrawal_requisites(
+    message: types.Message,
+    db_user: User,
+    db: AsyncSession,
+    state: FSMContext,
+):
+    texts = get_texts(db_user.language)
+    requisites = (message.text or "").strip()
+
+    if not requisites:
+        await message.answer(
+            texts.t(
+                "REFERRAL_WITHDRAWAL_ENTER_REQUISITES",
+                "Пожалуйста, отправьте реквизиты для вывода.",
+            )
+        )
+        return
+
+    request = await ReferralWithdrawalService.create_request(
+        db, db_user.id, requisites
+    )
+    await state.clear()
+
+    if not request:
+        settings_obj = await ReferralWithdrawalService.get_settings(db)
+        await message.answer(
+            texts.t(
+                "REFERRAL_WITHDRAWAL_TOO_LOW",
+                "Минимальная сумма для вывода: {min_amount}. Доступно: {available}.",
+            ).format(
+                min_amount=texts.format_price(settings_obj.min_amount_kopeks),
+                available=texts.format_price(
+                    await ReferralWithdrawalService.get_available_amount(db, db_user.id)
+                ),
+            )
+        )
+        return
+
+    settings_obj = await ReferralWithdrawalService.get_settings(db)
+    fallback_success = texts.t(
+        "REFERRAL_WITHDRAWAL_SUBMITTED",
+        ReferralWithdrawalService.DEFAULT_SUCCESS,
+    )
+    success_template = settings_obj.success_text or fallback_success
+
+    await message.answer(
+        ReferralWithdrawalService.format_success_text(
+            success_template,
+            {
+                "amount": texts.format_price(request.amount_kopeks),
+                "available": texts.format_price(
+                    await ReferralWithdrawalService.get_available_amount(db, db_user.id)
+                ),
+            },
+            fallback_success,
+        )
+    )
+
+
 def register_handlers(dp: Dispatcher):
     
     dp.callback_query.register(
@@ -479,6 +607,16 @@ def register_handlers(dp: Dispatcher):
     dp.callback_query.register(
         show_referral_analytics,
         F.data == "referral_analytics"
+    )
+
+    dp.callback_query.register(
+        start_referral_withdrawal_request,
+        F.data == "referral_withdrawal_request",
+    )
+
+    dp.message.register(
+        handle_referral_withdrawal_requisites,
+        ReferralWithdrawalStates.waiting_for_requisites,
     )
     
     dp.callback_query.register(
