@@ -5615,6 +5615,18 @@
                 'topup.method.yookassa.description': 'Pay securely with a bank card',
                 'topup.method.mulenpay.title': 'Bank card (Mulen Pay)',
                 'topup.method.mulenpay.description': 'Fast payment with bank card',
+                'topup.method.platega.title': 'Platega.io',
+                'topup.method.platega.description': 'Bank cards and SBP via Platega',
+                'topup.method.platega.option.2.title': 'SBP (QR)',
+                'topup.method.platega.option.2.description': 'Pay with Faster Payments QR code.',
+                'topup.method.platega.option.10.title': 'Bank cards (RUB)',
+                'topup.method.platega.option.10.description': 'Russian bank cards through Platega.',
+                'topup.method.platega.option.11.title': 'Bank cards',
+                'topup.method.platega.option.11.description': 'Local bank cards via Platega.',
+                'topup.method.platega.option.12.title': 'International cards',
+                'topup.method.platega.option.12.description': 'International cards supported by Platega.',
+                'topup.method.platega.option.13.title': 'Cryptocurrency',
+                'topup.method.platega.option.13.description': 'Top up balance with crypto via Platega.',
                 'topup.method.wata.title': 'Bank card (Wata)',
                 'topup.method.wata.description': 'Pay with a bank card via Wata',
                 'topup.method.pal24.title': 'SBP (PayPalych)',
@@ -6021,6 +6033,18 @@
                 'topup.method.yookassa.description': 'Безопасная оплата банковской картой',
                 'topup.method.mulenpay.title': 'Банковская карта (Mulen Pay)',
                 'topup.method.mulenpay.description': 'Мгновенное списание с карты',
+                'topup.method.platega.title': 'Platega.io',
+                'topup.method.platega.description': 'Карта или СБП через Platega',
+                'topup.method.platega.option.2.title': 'СБП (QR)',
+                'topup.method.platega.option.2.description': 'Оплата по QR-коду через СБП.',
+                'topup.method.platega.option.10.title': 'Банковские карты (RUB)',
+                'topup.method.platega.option.10.description': 'Российские карты через Platega.',
+                'topup.method.platega.option.11.title': 'Банковские карты',
+                'topup.method.platega.option.11.description': 'Оплата картами через Platega.',
+                'topup.method.platega.option.12.title': 'Международные карты',
+                'topup.method.platega.option.12.description': 'Оплата международными картами.',
+                'topup.method.platega.option.13.title': 'Криптовалюта',
+                'topup.method.platega.option.13.description': 'Пополнение через криптовалюту в Platega.',
                 'topup.method.wata.title': 'Банковская карта (Wata)',
                 'topup.method.wata.description': 'Оплата банковской картой через Wata',
                 'topup.method.pal24.title': 'СБП (PayPalych)',
@@ -6841,13 +6865,18 @@
                 return;
             }
 
-            if (monitor.method.id === 'pal24') {
-                const option = (monitor.option || 'sbp').toLowerCase();
-                const optionKey = option === 'card' ? 'card' : 'sbp';
-                const fallback = optionKey === 'card'
-                    ? 'Bank card payment'
-                    : 'Faster Payments (SBP)';
-                setTopupModalSubtitle(`topup.method.pal24.option.${optionKey}.title`, fallback);
+            const optionsMap = (Array.isArray(monitor.method.options) ? monitor.method.options : []).reduce((map, item) => {
+                map[String(item.id)] = item;
+                return map;
+            }, {});
+
+            if (monitor.method.id === 'pal24' || monitor.method.id === 'platega') {
+                const option = (monitor.option || monitor.extra?.selected_option || 'sbp').toString();
+                const optionKey = ['card', 'sbp'].includes(option) ? option : option;
+                const optionConfig = optionsMap[optionKey];
+                const fallback = optionConfig?.title || (optionKey === 'card' ? 'Bank card payment' : 'Faster Payments (SBP)');
+                const titleKey = optionConfig?.titleKey || optionConfig?.title_key || `topup.method.${monitor.method.id}.option.${optionKey}.title`;
+                setTopupModalSubtitle(titleKey, fallback || monitor.method.id);
                 return;
             }
 
@@ -6876,6 +6905,11 @@
             if (extra.payment_id) {
                 query.paymentId = extra.payment_id;
                 identifiers.paymentId = extra.payment_id;
+            }
+
+            if (extra.correlation_id && !query.payload) {
+                query.payload = extra.correlation_id;
+                identifiers.payload = extra.correlation_id;
             }
 
             const payloadValue = extra.payload || extra.invoice_payload;
@@ -11503,32 +11537,44 @@
                 form.appendChild(hint);
             }
 
-            if (method.id === 'pal24') {
-                const optionsConfig = [
+            const providedOptions = Array.isArray(method.options) ? method.options : [];
+            const fallbackOptions = method.id === 'pal24'
+                ? [
                     {
                         id: 'sbp',
                         icon: '🏦',
                         titleKey: 'topup.method.pal24.option.sbp.title',
                         descriptionKey: 'topup.method.pal24.option.sbp.description',
-                        fallbackTitle: 'Faster Payments (SBP)',
-                        fallbackDescription: 'Instant SBP transfer with no fees.',
+                        title: 'Faster Payments (SBP)',
+                        description: 'Instant SBP transfer with no fees.',
                     },
                     {
                         id: 'card',
                         icon: '💳',
                         titleKey: 'topup.method.pal24.option.card.title',
                         descriptionKey: 'topup.method.pal24.option.card.description',
-                        fallbackTitle: 'Bank card',
-                        fallbackDescription: 'Pay with a bank card via PayPalych.',
+                        title: 'Bank card',
+                        description: 'Pay with a bank card via PayPalych.',
                     },
-                ];
+                ]
+                : [];
 
-                const selectedDefault = options.selectedOption
+            const optionsConfig = (providedOptions.length ? providedOptions : fallbackOptions).map(option => ({
+                id: String(option.id),
+                icon: option.icon || '💳',
+                titleKey: option.titleKey || option.title_key || option.titlekey,
+                descriptionKey: option.descriptionKey || option.description_key || option.descriptionkey,
+                fallbackTitle: option.title || option.name || String(option.id),
+                fallbackDescription: option.description || '',
+            }));
+
+            if (optionsConfig.length) {
+                const defaultSelection = options.selectedOption
                     || paymentMethodSelections[method.id]
-                    || 'sbp';
-                let currentOption = optionsConfig.some(option => option.id === selectedDefault)
-                    ? selectedDefault
-                    : 'sbp';
+                    || optionsConfig[0]?.id;
+                let currentOption = optionsConfig.some(option => option.id === defaultSelection)
+                    ? defaultSelection
+                    : optionsConfig[0]?.id;
                 paymentMethodSelections[method.id] = currentOption;
                 form.dataset.paymentOption = currentOption;
 
@@ -11537,7 +11583,7 @@
 
                 const optionTitle = document.createElement('div');
                 optionTitle.className = 'payment-option-title';
-                const titleKey = 'topup.method.pal24.title';
+                const titleKey = `topup.method.${method.id}.title`;
                 const titleValue = t(titleKey);
                 optionTitle.textContent = titleValue === titleKey ? 'Choose payment type' : titleValue;
                 optionGroup.appendChild(optionTitle);
@@ -11563,22 +11609,23 @@
 
                     const label = document.createElement('div');
                     label.className = 'payment-option-label';
-                    const labelValue = t(config.titleKey);
-                    label.textContent = labelValue === config.titleKey ? config.fallbackTitle : labelValue;
+                    const labelValue = config.titleKey ? t(config.titleKey) : config.fallbackTitle;
+                    label.textContent = labelValue && labelValue !== config.titleKey
+                        ? labelValue
+                        : config.fallbackTitle;
 
                     const description = document.createElement('div');
                     description.className = 'payment-option-description';
-                    const descriptionValue = t(config.descriptionKey);
-                    const finalDescription = descriptionValue === config.descriptionKey
-                        ? config.fallbackDescription
-                        : descriptionValue;
-                    description.textContent = finalDescription;
-
-                    text.appendChild(label);
+                    const descriptionValue = config.descriptionKey ? t(config.descriptionKey) : config.fallbackDescription;
+                    const finalDescription = descriptionValue && descriptionValue !== config.descriptionKey
+                        ? descriptionValue
+                        : config.fallbackDescription;
                     if (finalDescription) {
+                        description.textContent = finalDescription;
                         text.appendChild(description);
                     }
 
+                    text.appendChild(label);
                     button.appendChild(icon);
                     button.appendChild(text);
 
@@ -11816,8 +11863,19 @@
             const normalizedAmount = Number.isFinite(amountKopeks) ? Number(amountKopeks) : null;
             const monitorExtra = { ...extra };
 
+            const methodOptions = Array.isArray(method.options) ? method.options : [];
+            const optionsMap = methodOptions.reduce((map, item) => {
+                const key = String(item.id);
+                map[key] = item;
+                return map;
+            }, {});
+
             let option = null;
-            if (method.id === 'pal24') {
+            if (methodOptions.length) {
+                option = (options.providerOption || monitorExtra.selected_option || paymentMethodSelections[method.id] || methodOptions[0]?.id || '').toString();
+                paymentMethodSelections[method.id] = option;
+                monitorExtra.selected_option = option;
+            } else if (method.id === 'pal24') {
                 option = (options.providerOption || monitorExtra.selected_option || paymentMethodSelections[method.id] || 'sbp').toLowerCase();
                 if (!['card', 'sbp'].includes(option)) {
                     option = 'sbp';
@@ -11826,12 +11884,19 @@
                 monitorExtra.selected_option = option;
             }
 
-            const titleKey = method.id === 'pal24' && option
-                ? `topup.method.pal24.option.${option}.title`
-                : `topup.method.${method.id}.title`;
-            const titleFallback = method.id === 'pal24'
-                ? (option === 'card' ? 'Bank card payment' : 'Faster Payments (SBP)')
-                : method.id;
+            const selectedOption = option && (optionsMap[option] || optionsMap[String(option)]);
+            const optionTitleKey = selectedOption?.titleKey || selectedOption?.title_key;
+            const optionTitleFallback = selectedOption?.title || selectedOption?.name || option || method.id;
+            const titleKey = selectedOption && optionTitleKey
+                ? optionTitleKey
+                : option
+                    ? `topup.method.${method.id}.option.${option}.title`
+                    : `topup.method.${method.id}.title`;
+            const titleFallback = selectedOption
+                ? optionTitleFallback
+                : method.id === 'pal24'
+                    ? (option === 'card' ? 'Bank card payment' : 'Faster Payments (SBP)')
+                    : method.id;
             setTopupModalSubtitle(titleKey, titleFallback);
 
             body.innerHTML = '';
@@ -11902,8 +11967,8 @@
                 summary.appendChild(usdAmount);
             }
 
-            const descriptionKey = method.id === 'pal24' && option
-                ? `topup.method.pal24.option.${option}.description`
+            const descriptionKey = option
+                ? `topup.method.${method.id}.option.${option}.description`
                 : `topup.method.${method.id}.description`;
             const descriptionValue = t(descriptionKey);
             if (descriptionValue && descriptionValue !== descriptionKey) {

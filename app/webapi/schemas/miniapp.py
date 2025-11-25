@@ -373,6 +373,17 @@ class MiniAppPaymentIntegrationType(str, Enum):
     REDIRECT = "redirect"
 
 
+class MiniAppPaymentOption(BaseModel):
+    id: str
+    icon: Optional[str] = None
+    title: Optional[str] = None
+    description: Optional[str] = None
+    title_key: Optional[str] = Field(default=None, alias="titleKey")
+    description_key: Optional[str] = Field(default=None, alias="descriptionKey")
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
 class MiniAppPaymentIframeConfig(BaseModel):
     expected_origin: str
 
@@ -402,6 +413,7 @@ class MiniAppPaymentMethod(BaseModel):
     max_amount_kopeks: Optional[int] = None
     amount_step_kopeks: Optional[int] = None
     integration_type: MiniAppPaymentIntegrationType
+    options: List[MiniAppPaymentOption] = Field(default_factory=list)
     iframe_config: Optional[MiniAppPaymentIframeConfig] = None
 
     @model_validator(mode="after")
